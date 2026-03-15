@@ -195,10 +195,10 @@ def skip_to_menu(pyboy):
     """Spam A and Start through logos and title screen,
     stop when the New Game / Continue menu appears."""
     while True:
-        if pyboy.memory[ADDR_MAP_N] != 0:
-            break
         if is_main_menu(pyboy):
-            break
+            options = get_menu_options(pyboy)
+            if any("NEW GAME" in opt for opt in options):
+                break
 
         pyboy.button("a")
         pyboy.tick(10)
