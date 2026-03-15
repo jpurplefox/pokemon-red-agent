@@ -6,7 +6,11 @@ Dependencies are injected via constructor (DIP).
 """
 
 from pyboy import PyBoy
-from constants import ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD
+from constants import (
+    ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD,
+    ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, ADDR_OVERWORLD_MAP,
+    ADDR_TILESET, MAP_BORDER,
+)
 from screen import ScreenReader
 from menu import MenuReader
 from dialogue import DialogueAdvancer
@@ -118,23 +122,21 @@ class Game:
         mem = self._pyboy.memory
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
-        W = mem[0xD369]   # wCurMapWidth (blocks)
-        H = mem[0xD368]   # wCurMapHeight (blocks)
-        B = 3             # MAP_BORDER (blocks)
-        base = 0xC6E8     # wOverworldMap
+        W = mem[ADDR_MAP_WIDTH]
+        H = mem[ADDR_MAP_HEIGHT]
 
         player_block_y = py // 2
         player_block_x = px // 2
-        row_width = W + 2 * B
+        row_width = W + 2 * MAP_BORDER
 
-        tileset = mem[0xD367]
+        tileset = mem[ADDR_TILESET]
         print(f"\nTileset {tileset} | Map {W}x{H} blocks | Player tile ({py},{px}) = block ({player_block_y},{player_block_x})")
         header = "     " + "".join(f" {c:<3}" for c in range(W))
         print(header)
         for row in range(H):
             cells = []
             for col in range(W):
-                addr = base + (row + B) * row_width + (col + B)
+                addr = ADDR_OVERWORLD_MAP + (row + MAP_BORDER) * row_width + (col + MAP_BORDER)
                 bid = mem[addr]
                 if row == player_block_y and col == player_block_x:
                     cells.append(f"[{bid:02X}]")
