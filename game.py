@@ -108,6 +108,10 @@ class Game:
             print_pois(self._scanner.get_pois())
         elif cmd == "scan":
             self._debug_scan()
+        elif cmd == "start":
+            self._pyboy.button("start", delay=8)
+            self._pyboy.tick(30)
+            self._handle_game_menu()
         elif cmd in BUTTONS:
             self._pyboy.button(cmd, delay=8)
             self._pyboy.tick(30)
@@ -116,6 +120,43 @@ class Game:
                 print_pois(self._scanner.get_pois())
 
         return True
+
+    def _handle_game_menu(self):
+        """Handle the start menu and any sub-menus/dialogues it triggers.
+
+        Distinguishes dialogue from menu overlay by checking the LEFT side
+        of the text box area: dialogue fills the full width, menus only
+        appear on the right side of the screen.
+        """
+        while True:
+            # Dialogue fills full screen width; menus only cover the right side.
+            # Text on the left half (cols 1-8) means a real text box is open.
+            is_dialogue = any(
+                self._screen.decode_tiles(row, 1, 8).strip()
+                for row in range(13, 17)
+            )
+            if is_dialogue:
+                full = self._dialogue.advance_until(
+                    lambda d, u: d and u > 15
+                )
+                if full:
+                    print(f"\n{full}")
+                self._pyboy.tick(30)
+                continue
+
+            # Read menu options (filter empty trailing entries)
+            raw_options = self._menu.get_options()
+            valid = [opt for opt in raw_options if opt.strip()]
+            if not valid:
+                break
+
+            choice = prompt_menu(valid + ["BACK"])
+            if choice == "BACK":
+                self._pyboy.button("b", delay=8)
+                self._pyboy.tick(30)
+            else:
+                self._menu.select(choice, raw_options)
+                self._pyboy.tick(30)
 
     def _debug_scan(self):
         """[DEBUG] Dump the block map for the current room."""
