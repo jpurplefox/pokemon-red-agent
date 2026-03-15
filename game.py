@@ -34,6 +34,11 @@ class Game:
         self._in_overworld = False
         self._running = True
 
+    def _map_loaded(self):
+        """Check if a valid map is loaded (works for all maps including map 0)."""
+        mem = self._pyboy.memory
+        return mem[ADDR_MAP_WIDTH] > 0 and mem[ADDR_MAP_HEIGHT] > 0
+
     def run(self):
         """Start the game: skip intro, handle main menu, enter game loop."""
         print("Skipping intro...")
@@ -49,6 +54,17 @@ class Game:
         choice = prompt_menu(options)
         self._menu.select(choice, options)
         self._pyboy.tick(30)
+
+        if "CONTINUE" in choice:
+            for _ in range(600):
+                self._pyboy.tick(1)
+                if self._screen.read_text_box():
+                    self._pyboy.button("a", delay=8)
+                    self._pyboy.tick(10)
+                if self._map_loaded():
+                    self._in_overworld = True
+                    print_pois(self._scanner.get_pois())
+                    break
 
     def _game_loop(self):
         """Main game loop — detect state and dispatch to handlers."""
@@ -95,7 +111,7 @@ class Game:
 
         # After dialogue ends, check if we reached the overworld
         self._pyboy.tick(30)
-        if self._pyboy.memory[ADDR_MAP_N] != 0:
+        if self._map_loaded():
             if not self._in_overworld:
                 self._in_overworld = True
                 print_pois(self._scanner.get_pois())
