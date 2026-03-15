@@ -37,6 +37,13 @@ POKEMON_CHARMAP = {
     0xFB: "5", 0xFC: "6", 0xFD: "7", 0xFE: "8", 0xFF: "9",
 }
 
+# Name entry keyboard layout (uppercase, Pokemon Red)
+NAME_KEYBOARD = [
+    "ABCDEFGHI",
+    "JKLMNOPQR",
+    "STUVWXYZ ",
+]
+
 
 def decode_tiles(pyboy, row, col, length=18):
     """Read tiles from wTileMap and decode as Pokemon text."""
@@ -199,6 +206,74 @@ def skip_to_menu(pyboy):
         pyboy.tick(10)
 
 
+def enter_name(pyboy, name):
+    """Navigate the name entry keyboard to type a name, then confirm."""
+    pyboy.tick(60)  # Wait for naming screen to load
+
+    cur_row, cur_col = 0, 0  # Cursor starts at 'A'
+
+    for char in name.upper():
+        target_row = target_col = None
+        for r, row in enumerate(NAME_KEYBOARD):
+            c = row.find(char)
+            if c != -1:
+                target_row, target_col = r, c
+                break
+        if target_row is None:
+            raise ValueError(f"'{char}' not in keyboard layout")
+
+        # Move vertically
+        while cur_row != target_row:
+            pyboy.button("down" if cur_row < target_row else "up")
+            cur_row += 1 if cur_row < target_row else -1
+            pyboy.tick(8)
+
+        # Move horizontally
+        while cur_col != target_col:
+            pyboy.button("right" if cur_col < target_col else "left")
+            cur_col += 1 if cur_col < target_col else -1
+            pyboy.tick(8)
+
+        # Select character
+        pyboy.button("a")
+        pyboy.tick(10)
+
+    # Confirm name with START
+    pyboy.button("start")
+    pyboy.tick(30)
+
+
+def advance_to_overworld(pyboy):
+    """Press A through dialogue until Oak finishes and the overworld loads."""
+    dialogue = []
+    last_captured = ""
+    no_new_text = 0
+
+    while True:
+        prev = ""
+        current = read_text_box(pyboy)
+        while current != prev:
+            prev = current
+            pyboy.tick(10)
+            current = read_text_box(pyboy)
+
+        if current and current != last_captured:
+            dialogue.append(current)
+            last_captured = current
+            no_new_text = 0
+        else:
+            no_new_text += 1
+
+        # Stop after prolonged silence (animation + transition done)
+        if dialogue and no_new_text > 30:
+            break
+
+        pyboy.button("a")
+        pyboy.tick(10)
+
+    return _deduplicate_dialogue(dialogue)
+
+
 pyboy = PyBoy("rom.gb")
 
 # Skip intro and select New Game
@@ -211,10 +286,32 @@ dialogue = advance_dialogue(pyboy)
 print("=== Oak's Speech ===")
 print(dialogue)
 
-# Show name menu options
+# Select NEW NAME and enter "JESS"
 pyboy.tick(30)
 options = get_menu_options(pyboy)
 print("\nName options:", options)
+select_menu_option(pyboy, "NEW NAME", options)
+enter_name(pyboy, "JESS")
+print("Name entered: JESS")
+
+# Advance Oak's dialogue about the rival
+rival_dialogue = advance_dialogue(pyboy)
+print("\n=== Oak's Speech (Rival) ===")
+print(rival_dialogue)
+
+# Select NEW NAME and enter "FOLAGOR"
+pyboy.tick(30)
+rival_options = get_menu_options(pyboy)
+print("\nRival name options:", rival_options)
+select_menu_option(pyboy, "NEW NAME", rival_options)
+enter_name(pyboy, "FOLAGOR")
+print("Rival name entered: FOLAGOR")
+
+# Advance remaining dialogue until player appears in bedroom
+final_dialogue = advance_to_overworld(pyboy)
+print("\n=== Oak's Final Speech ===")
+print(final_dialogue)
+print("\nPlayer is now in their bedroom!")
 
 while pyboy.tick():
     pass
