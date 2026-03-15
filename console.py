@@ -1,7 +1,7 @@
 """Console UI for interacting with the game (SRP: user input/output only)."""
 
 BUTTONS = {"up", "down", "left", "right", "a", "b", "start", "select"}
-COMMANDS = BUTTONS | {"quit", "look", "scan"}
+COMMANDS = BUTTONS | {"quit", "look", "scan", "go"}
 
 
 def prompt_menu(options):
@@ -32,9 +32,32 @@ def prompt_command():
     """Prompt for an overworld command. Returns the command string."""
     cmd = input("> ").strip().lower()
     if cmd and cmd not in COMMANDS:
-        print("Commands: up, down, left, right, a, b, start, select, look, quit")
+        print("Commands: up, down, left, right, a, b, start, select, look, go, quit")
         return None
     return cmd
+
+
+def prompt_poi_selection(pois):
+    """Show numbered POI list and return the selected POI dict, or None."""
+    if not pois:
+        print("Nothing nearby to go to.")
+        return None
+
+    print("\n--- Go to ---")
+    for i, poi in enumerate(pois, 1):
+        print(f"  {i}. {poi['label']} \u2014 {poi['dir']}")
+    print(f"  0. Cancel")
+
+    while True:
+        try:
+            choice = int(input("Go to: "))
+            if choice == 0:
+                return None
+            if 1 <= choice <= len(pois):
+                return pois[choice - 1]
+        except (ValueError, EOFError):
+            pass
+        print(f"Enter 0-{len(pois)}")
 
 
 def print_pois(pois):

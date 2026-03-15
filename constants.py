@@ -33,9 +33,62 @@ ADDR_OVERWORLD_MAP = 0xC6E8    # wOverworldMap: block data with border
 MAP_BORDER = 3                 # border width in blocks
 
 # Interactable block IDs per tileset (discovered via `scan` command)
-# {tileset_id: {block_id: "label", ...}}
+# Format: {tileset_id: {block_id: ("label", dy, dx)}}
+# dy, dx = tile offset within the 2x2 block (0-1 each: TL=0,0  TR=0,1  BL=1,0  BR=1,1)
 BLOCK_LABELS = {
-    4: {0x10: "PC", 0x0D: "SNES"},          # House tileset
+    4: {
+        0x10: ("PC", 1, 0),     # compu is at bottom-left tile
+        0x0D: ("SNES", 1, 1),   # snes is at bottom-right tile
+    },
+}
+
+# Per-tile walkability within each map block (2x2 tiles per block).
+# Format: {tileset_id: {block_id: (top_left, top_right, bottom_left, bottom_right)}}
+# True = walkable, False = blocked.  Discovered via `scan` command.
+WALKABLE_BLOCKS = {
+    1: {  # Overworld
+        0x01: (True, False, True, False),
+        0x02: (False, True, False, True),
+        0x04: (False, False, False, False),
+        0x05: (False, False, True, True),
+        0x07: (False, False, True, True),
+        0x09: (False, False, True, False),
+        0x0B: (True, True, True, True),
+        0x0F: (True, True, True, True),
+    },
+    4: {  # House interior
+        0x08: (False, False, True, True),
+        0x0C: (False, True, False, True),
+        0x0D: (True, False, True, False),
+        0x0F: (True, True, True, True),
+        0x10: (False, False, False, False),
+        0x11: (False, False, False, True),
+        0x12: (False, True, False, True),
+    },
+}
+
+# Human-readable tile descriptions for each mapped block (2x2: TL, TR, BL, BR).
+# Used by the scan command to show what's in each block.
+BLOCK_DESCRIPTIONS = {
+    1: {
+        0x01: ("silla", "mesa", "silla", "mesa"),
+        0x02: ("mesa", "silla", "mesa", "silla"),
+        0x04: ("biblio", "biblio", "biblio", "biblio"),
+        0x05: ("pared", "ventana", "piso", "piso"),
+        0x07: ("pared", "ventana", "piso", "escalera"),
+        0x09: ("pared", "ventana", "piso", "tele"),
+        0x0B: ("piso", "piso", "alfombra", "alfombra"),
+        0x0F: ("piso", "piso", "piso", "piso"),
+    },
+    4: {
+        0x08: ("pared", "ventana", "piso", "escalera"),
+        0x0C: ("cama", "piso", "cama", "piso"),
+        0x0D: ("piso", "tele", "piso", "snes"),
+        0x0F: ("piso", "piso", "piso", "piso"),
+        0x10: ("pared", "pared", "compu", "escritorio"),
+        0x11: ("pared", "pared", "escritorio", "piso"),
+        0x12: ("planta", "piso", "planta", "piso"),
+    },
 }
 
 # Pokemon Red character encoding (from pret/pokered charmap.asm)

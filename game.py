@@ -9,14 +9,18 @@ from pyboy import PyBoy
 from constants import (
     ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD,
     ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, ADDR_OVERWORLD_MAP,
-    ADDR_TILESET, MAP_BORDER,
+    ADDR_TILESET, MAP_BORDER, BLOCK_DESCRIPTIONS, WALKABLE_BLOCKS,
 )
 from screen import ScreenReader
 from menu import MenuReader
 from dialogue import DialogueAdvancer
 from naming import NameEntry
 from overworld import OverworldScanner
-from console import prompt_menu, prompt_name, prompt_command, print_pois, BUTTONS
+from pathfinder import find_best_path
+from console import (
+    prompt_menu, prompt_name, prompt_command, print_pois,
+    prompt_poi_selection, BUTTONS,
+)
 
 
 class Game:
@@ -92,7 +96,9 @@ class Game:
         # After dialogue ends, check if we reached the overworld
         self._pyboy.tick(30)
         if self._pyboy.memory[ADDR_MAP_N] != 0:
-            self._in_overworld = True
+            if not self._in_overworld:
+                self._in_overworld = True
+                print_pois(self._scanner.get_pois())
 
         return True
 
@@ -108,6 +114,8 @@ class Game:
             print_pois(self._scanner.get_pois())
         elif cmd == "scan":
             self._debug_scan()
+        elif cmd == "go":
+            self._handle_go()
         elif cmd == "start":
             self._pyboy.button("start", delay=8)
             self._pyboy.tick(30)
@@ -120,6 +128,46 @@ class Game:
                 print_pois(self._scanner.get_pois())
 
         return True
+
+    def _handle_go(self):
+        """Select a POI, pathfind to it, walk there, and interact."""
+        pois = self._scanner.get_pois()
+        poi = prompt_poi_selection(pois)
+        if not poi:
+            return
+
+        grid, _, _ = self._scanner.get_walkable_grid()
+        blocked = self._scanner.get_npc_tiles()
+        mem = self._pyboy.memory
+        py = mem[ADDR_Y_COORD]
+        px = mem[ADDR_X_COORD]
+
+        path, face = find_best_path(grid, (py, px), poi, blocked)
+        if path is None:
+            print(f"Cannot reach {poi['label']}.")
+            return
+
+        print(f"Walking to {poi['label']} ({len(path)} steps)...")
+        for direction in path:
+            self._pyboy.button(direction, delay=8)
+            self._pyboy.tick(30)
+
+        if face is None:
+            # Warp (stairs) — walking onto the tile activates it
+            self._pyboy.tick(60)
+        elif poi["kind"] == "exit":
+            # Exit (door) — press down to walk through
+            self._pyboy.button(face, delay=8)
+            self._pyboy.tick(60)
+        else:
+            # Sign/Sprite — face the POI and press A
+            self._pyboy.button(face, delay=8)
+            self._pyboy.tick(30)
+            self._pyboy.button("a", delay=8)
+            self._pyboy.tick(30)
+
+        print(f"Arrived at {poi['label']}.")
+        print_pois(self._scanner.get_pois())
 
     def _handle_game_menu(self):
         """Handle the start menu and any sub-menus/dialogues it triggers.
@@ -171,16 +219,41 @@ class Game:
         row_width = W + 2 * MAP_BORDER
 
         tileset = mem[ADDR_TILESET]
+        descriptions = BLOCK_DESCRIPTIONS.get(tileset, {})
+        walkable = WALKABLE_BLOCKS.get(tileset, {})
+
         print(f"\nTileset {tileset} | Map {W}x{H} blocks | Player tile ({py},{px}) = block ({player_block_y},{player_block_x})")
         header = "     " + "".join(f" {c:<3}" for c in range(W))
         print(header)
+
+        seen = set()
         for row in range(H):
             cells = []
             for col in range(W):
                 addr = ADDR_OVERWORLD_MAP + (row + MAP_BORDER) * row_width + (col + MAP_BORDER)
                 bid = mem[addr]
+                seen.add(bid)
                 if row == player_block_y and col == player_block_x:
                     cells.append(f"[{bid:02X}]")
                 else:
                     cells.append(f" {bid:02X} ")
             print(f"  {row}: " + "".join(cells))
+
+        # Legend: show known/unknown blocks
+        known = []
+        unknown = []
+        for bid in sorted(seen):
+            if bid in descriptions:
+                tl, tr, bl, br = descriptions[bid]
+                wk = walkable.get(bid, (False, False, False, False))
+                tiles = f"{tl}({'✓' if wk[0] else '✗'}), {tr}({'✓' if wk[1] else '✗'}) / {bl}({'✓' if wk[2] else '✗'}), {br}({'✓' if wk[3] else '✗'})"
+                known.append(f"  {bid:02X}: {tiles}")
+            else:
+                unknown.append(f"{bid:02X}")
+
+        if known:
+            print("\nConocidos:")
+            for line in known:
+                print(line)
+        if unknown:
+            print(f"\n??? Sin mapear: {', '.join(unknown)}")
