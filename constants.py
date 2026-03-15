@@ -23,9 +23,17 @@ ADDR_SIGN_COORDS = 0xD4B1      # wSignCoords: 2 bytes each (Y, X)
 ADDR_NUM_SPRITES = 0xD4E1      # wNumSprites: count of sprites on map
 ADDR_SPRITE_DATA = 0xC100      # wSpriteStateData1: 16 bytes per sprite (screen state)
 ADDR_SPRITE_DATA2 = 0xC200     # wSpriteStateData2: 16 bytes per sprite (map state)
+ADDR_MAP_SPRITE_DATA = 0xD4E4  # wMapSpriteData: original picture IDs (2 bytes each)
+
+# Missable (event-hidden) sprites
+ADDR_MISSABLE_FLAGS = 0xD5A6   # wMissableObjectFlags: bit array (bit set = hidden)
+ADDR_MISSABLE_LIST = 0xD5CE    # wMissableObjectList: (sprite_idx, flag_bit) pairs, $FF end
 
 # Tileset
 ADDR_TILESET = 0xD367          # wCurMapTileset: current tileset ID
+ADDR_TILESET_BANK = 0xD52B     # wTilesetBank: ROM bank for tileset data
+ADDR_TILESET_BLOCKS_PTR = 0xD52C  # wTilesetBlocksPtr: pointer to block defs (4x4 tiles each)
+ADDR_TILESET_COLL_PTR = 0xD530    # wTilesetCollisionPtr: pointer to walkable tile ID list
 
 # Map structure (block map)
 ADDR_MAP_HEIGHT = 0xD368       # wCurMapHeight (in blocks)
@@ -68,7 +76,7 @@ WALKABLE_BLOCKS = {
         0x4D: (True, False, True, False),
         0x4E: (False, True, False, True),
         0x4F: (True, False, False, False),
-        0x50: (False, True, False, True),
+        0x50: (False, False, False, False),
         0x52: (True, True, False, False),
         0x56: (True, True, False, False),
         0x61: (True, True, False, False),
@@ -122,7 +130,7 @@ BLOCK_DESCRIPTIONS = {
         0x4D: ("floor", "fence", "floor", "fence"),
         0x4E: ("fence", "floor", "fence", "floor"),
         0x4F: ("floor", "fence", "fence", "fence"),
-        0x50: ("fence", "floor", "fence", "floor"),
+        0x50: ("fence", "fence", "fence", "fence"),
         0x52: ("floor", "floor", "fence", "fence"),
         0x56: ("floor", "floor", "fence", "sign"),
         0x61: ("floor", "floor", "fence", "fence"),
@@ -311,6 +319,29 @@ POKEMON_CHARMAP = {
     # Digits
     0xF6: "0", 0xF7: "1", 0xF8: "2", 0xF9: "3", 0xFA: "4",
     0xFB: "5", 0xFC: "6", 0xFD: "7", 0xFE: "8", 0xFF: "9",
+}
+
+# Sprite picture IDs → labels (from pret/pokered sprite_constants.asm).
+# Only non-"Person" sprites listed; unlisted IDs default to "Person".
+SPRITE_LABELS = {
+    # Pokémon sprites
+    0x05: "Pokémon",    # Slowbro
+    0x09: "Pokémon",    # Bird (Pidgey)
+    0x21: "Pokémon",    # Clefairy
+    0x25: "Pokémon",    # Seel
+    0x27: "Pokémon",    # Omanyte
+    0x2C: "Pokémon",    # Snorlax
+    # Object sprites (pokered standard IDs)
+    0x26: "Item",       # Poké Ball on ground
+    0x28: "Boulder",    # Pushable boulder
+    0x29: "Paper",      # Paper sheet
+    0x2A: "Book",       # Book / Map / Pokédex
+    0x2B: "Clipboard",  # Clipboard
+    0x2D: "Fossil",     # Old Amber (copy)
+    0x2E: "Fossil",     # Old Amber
+    # Object sprites (alternate ROM IDs — discovered via scan)
+    0x3D: "Poké Ball",  # Poké Ball on table (starters)
+    0x41: "Book",       # Book / Map / Pokédex (alt)
 }
 
 # Name entry keyboard layout (uppercase, Pokemon Red)

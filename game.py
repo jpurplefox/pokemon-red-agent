@@ -9,8 +9,8 @@ from pyboy import PyBoy
 from constants import (
     ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD,
     ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, ADDR_OVERWORLD_MAP,
-    ADDR_TILESET, MAP_BORDER, BLOCK_DESCRIPTIONS, WALKABLE_BLOCKS,
-    MAP_NAMES,
+    ADDR_TILESET, MAP_BORDER, MAP_NAMES,
+    ADDR_NUM_SPRITES, ADDR_SPRITE_DATA, ADDR_SPRITE_DATA2,
 )
 from screen import ScreenReader
 from menu import MenuReader
@@ -19,7 +19,7 @@ from naming import NameEntry
 from overworld import OverworldScanner
 from pathfinder import find_best_path
 from console import (
-    prompt_menu, prompt_name, prompt_command, print_pois,
+    prompt_menu, prompt_name, prompt_command, print_pois, print_map,
     prompt_poi_selection, BUTTONS,
 )
 
@@ -31,7 +31,7 @@ class Game:
         self._menu = MenuReader(self._pyboy, self._screen)
         self._dialogue = DialogueAdvancer(self._pyboy, self._screen)
         self._naming = NameEntry(self._pyboy)
-        self._scanner = OverworldScanner(self._pyboy)
+        self._scanner = OverworldScanner(self._pyboy, rom_path)
         self._in_overworld = False
         self._show_pois = False
         self._running = True
@@ -40,6 +40,16 @@ class Game:
         """Check if a valid map is loaded (works for all maps including map 0)."""
         mem = self._pyboy.memory
         return mem[ADDR_MAP_WIDTH] > 0 and mem[ADDR_MAP_HEIGHT] > 0
+
+    def _print_surroundings(self):
+        """Print map name and ASCII map of surroundings with numbered POIs."""
+        mem = self._pyboy.memory
+        map_id = mem[ADDR_MAP_N]
+        map_name = MAP_NAMES.get(map_id, f"Map {map_id}")
+        print(f"\n--- {map_name} ---")
+        pois = self._scanner.get_pois()
+        grid, _, _ = self._scanner.get_walkable_grid()
+        print_map(pois, mem[ADDR_Y_COORD], mem[ADDR_X_COORD], grid)
 
     def run(self):
         """Start the game: skip intro, handle main menu, enter game loop."""
@@ -127,16 +137,13 @@ class Game:
 
         if self._show_pois:
             self._show_pois = False
-            map_id = self._pyboy.memory[ADDR_MAP_N]
-            map_name = MAP_NAMES.get(map_id, f"Map {map_id}")
-            print(f"\n--- {map_name} ---")
-            print_pois(self._scanner.get_pois())
+            self._print_surroundings()
 
         cmd = prompt_command()
         if cmd == "quit":
             self._running = False
         elif cmd == "look":
-            print_pois(self._scanner.get_pois())
+            self._print_surroundings()
         elif cmd == "scan":
             self._debug_scan()
         elif cmd == "go":
@@ -148,9 +155,9 @@ class Game:
         elif cmd in BUTTONS:
             self._pyboy.button(cmd, delay=8)
             self._pyboy.tick(30)
-            # Show POIs automatically after movement
+            # Show map automatically after movement
             if cmd in {"up", "down", "left", "right"}:
-                print_pois(self._scanner.get_pois())
+                self._print_surroundings()
 
         return True
 
@@ -192,7 +199,7 @@ class Game:
             self._pyboy.tick(30)
 
         print(f"Arrived at {poi['label']}.")
-        print_pois(self._scanner.get_pois())
+        self._print_surroundings()
 
     def _handle_game_menu(self):
         """Handle the start menu and any sub-menus/dialogues it triggers.
@@ -232,7 +239,7 @@ class Game:
                 self._pyboy.tick(30)
 
     def _debug_scan(self):
-        """[DEBUG] Dump the block map for the current room."""
+        """[DEBUG] Dump the block map with auto-detected walkability."""
         mem = self._pyboy.memory
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
@@ -242,12 +249,9 @@ class Game:
         player_block_y = py // 2
         player_block_x = px // 2
         row_width = W + 2 * MAP_BORDER
-
         tileset = mem[ADDR_TILESET]
-        descriptions = BLOCK_DESCRIPTIONS.get(tileset, {})
-        walkable = WALKABLE_BLOCKS.get(tileset, {})
 
-        print(f"\nTileset {tileset} | Map {W}x{H} blocks | Player tile ({py},{px}) = block ({player_block_y},{player_block_x})")
+        print(f"\nTileset {tileset} | Map {W}x{H} blocks | Player tile ({py},{px})")
         header = "     " + "".join(f" {c:<3}" for c in range(W))
         print(header)
 
@@ -264,21 +268,45 @@ class Game:
                     cells.append(f" {bid:02X} ")
             print(f"  {row}: " + "".join(cells))
 
-        # Legend: show known/unknown blocks
-        known = []
-        unknown = []
-        for bid in sorted(seen):
-            if bid in descriptions:
-                tl, tr, bl, br = descriptions[bid]
-                wk = walkable.get(bid, (False, False, False, False))
-                tiles = f"{tl}({'✓' if wk[0] else '✗'}), {tr}({'✓' if wk[1] else '✗'}) / {bl}({'✓' if wk[2] else '✗'}), {br}({'✓' if wk[3] else '✗'})"
-                known.append(f"  {bid:02X}: {tiles}")
-            else:
-                unknown.append(f"{bid:02X}")
+        # Auto-detect walkability from ROM
+        coll = self._scanner.get_collision_tiles()
+        if coll:
+            print(f"\nCollision tiles: {', '.join(f'${t:02X}' for t in sorted(coll))}")
+            print("\nBlocks:")
+            for bid in sorted(seen):
+                bt = self._scanner.get_block_tiles(bid)
+                if bt is None:
+                    print(f"  {bid:02X}: ???")
+                    continue
+                tl, tr, bl, br = self._scanner.block_walkability(bt, coll)
+                w = lambda v: '✓' if v else '✗'
+                print(f"  {bid:02X}: [{w(tl)}{w(tr)}/{w(bl)}{w(br)}]")
+        else:
+            print("\n(No ROM data — cannot auto-detect walkability)")
 
-        if known:
-            print("\nKnown:")
-            for line in known:
-                print(line)
-        if unknown:
-            print(f"\n??? Unmapped: {', '.join(unknown)}")
+        # Sprite data dump
+        from constants import SPRITE_LABELS
+        count = mem[ADDR_NUM_SPRITES]
+        print(f"\nSprites ({count}):")
+        for i in range(1, count + 1):
+            base1 = ADDR_SPRITE_DATA + i * 0x10
+            base2 = ADDR_SPRITE_DATA2 + i * 0x10
+            pic_id = mem[base1]
+            label = SPRITE_LABELS.get(pic_id, "Person")
+            sy = mem[base2 + 4] - 4
+            sx = mem[base2 + 5] - 4
+            d1 = " ".join(f"{mem[base1+b]:02X}" for b in range(16))
+            print(f"  #{i}: ({label}) pos=({sy},{sx})")
+            print(f"       d1: {d1}")
+
+        # Missable object flags — search likely WRAM locations
+        print("\nMissable flags hunt:")
+        for label, addr in [("$D5A6", 0xD5A6), ("$D728", 0xD728),
+                            ("$D747", 0xD747)]:
+            data = " ".join(f"{mem[addr+b]:02X}" for b in range(8))
+            print(f"  {label}: {data}")
+        # Missable object list (sprite_id, flag_bit pairs, $FF terminated)
+        print("  wMissableObjectList candidates:")
+        for label, addr in [("$D5CE", 0xD5CE), ("$D5B3", 0xD5B3)]:
+            data = " ".join(f"{mem[addr+b]:02X}" for b in range(24))
+            print(f"    {label}: {data}")

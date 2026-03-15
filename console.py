@@ -68,3 +68,62 @@ def print_pois(pois):
     print("Nearby:")
     for poi in pois:
         print(f"  {poi['label']} \u2014 {poi['dir']}")
+
+
+# Icon characters for each POI kind/label on the ASCII map.
+_POI_ICONS = {
+    "House": "🏠", "Lab": "🔬", "Door": "🚪",
+    "Stairs": "🪜", "Exit": "🚪", "Warp": "🌀",
+    "Sign": "🪧", "TV": "📺", "PC": "💻", "SNES": "🎮",
+    "Bookshelf": "📚", "Desk": "🗄️", "Plant": "🌿",
+    "Bed": "🛏️", "Person": "🧑", "Object": "❓",
+    "Pokémon": "🐾", "Item": "🔴", "Poké Ball": "🔴", "Boulder": "🪨",
+    "Paper": "📄", "Book": "📖", "Clipboard": "📋",
+    "Fossil": "🦴",
+}
+
+
+def print_map(pois, py, px, grid):
+    """Display an ASCII map with numbered POI icons and a legend.
+
+    Each POI shows its reference number on the map; the legend below
+    maps each number to its icon, label, and relative direction.
+    """
+    if not pois:
+        print("Nothing nearby.")
+        return
+
+    h = len(grid)
+    w = len(grid[0]) if h else 0
+
+    # Show the full map grid
+    min_y, max_y = 0, h - 1
+    min_x, max_x = 0, w - 1
+
+    # Build POI lookup: (ty, tx) → reference number string
+    poi_at = {}
+    for i, poi in enumerate(pois):
+        key = (poi["ty"], poi["tx"])
+        if key not in poi_at and 0 <= poi["ty"] < h and 0 <= poi["tx"] < w:
+            poi_at[key] = str(i + 1)
+
+    # Render map rows
+    for y in range(min_y, max_y + 1):
+        row = ""
+        for x in range(min_x, max_x + 1):
+            if y == py and x == px:
+                row += " @"
+            elif (y, x) in poi_at:
+                ref = poi_at[(y, x)]
+                row += f"{ref:>2}"
+            elif grid[y][x]:
+                row += " ·"
+            else:
+                row += " #"
+        print(row)
+
+    # Legend: number + icon + label + direction
+    print()
+    for i, poi in enumerate(pois):
+        icon = _POI_ICONS.get(poi["label"], "?")
+        print(f"  {i + 1:>2}. {icon} {poi['label']} \u2014 {poi['dir']}")
