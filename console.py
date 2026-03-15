@@ -1,6 +1,7 @@
 """Console UI for interacting with the game (SRP: user input/output only)."""
 
 BUTTONS = {"up", "down", "left", "right", "a", "b", "start", "select"}
+COMMANDS = BUTTONS | {"quit", "look", "scan"}
 
 
 def prompt_menu(options):
@@ -30,7 +31,17 @@ def prompt_name():
 def prompt_command():
     """Prompt for an overworld command. Returns the command string."""
     cmd = input("> ").strip().lower()
-    if cmd and cmd not in BUTTONS and cmd != "quit":
-        print("Commands: up, down, left, right, a, b, start, select, quit")
+    if cmd and cmd not in COMMANDS:
+        print("Commands: up, down, left, right, a, b, start, select, look, quit")
         return None
     return cmd
+
+
+def print_pois(pois):
+    """Display nearby points of interest."""
+    if not pois:
+        print("Nothing nearby.")
+        return
+    print("Nearby:")
+    for poi in pois:
+        print(f"  {poi['label']} \u2014 {poi['dir']}")

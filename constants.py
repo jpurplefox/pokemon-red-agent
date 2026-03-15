@@ -7,6 +7,37 @@ ADDR_MAX_MENU = 0xCC28         # wMaxMenuItem: index of last item
 
 ADDR_TILEMAP = 0xC3A0          # wTileMap: WRAM copy of screen (20 tiles per row)
 
+# Player position
+ADDR_Y_COORD = 0xD361          # wYCoord: player Y on current map
+ADDR_X_COORD = 0xD362          # wXCoord: player X on current map
+
+# Warp data (stairs, doors, map transitions)
+ADDR_NUM_WARPS = 0xD3AE        # wNumberOfWarps: count of warps on map
+ADDR_WARP_ENTRIES = 0xD3AF     # wWarpEntries: 4 bytes each (Y, X, warpTo, destMap)
+
+# Sign data (interactable objects: TV, PC, bookshelf, etc.)
+ADDR_NUM_SIGNS = 0xD4B0        # wNumSigns: count of signs on map
+ADDR_SIGN_COORDS = 0xD4B1      # wSignCoords: 2 bytes each (Y, X)
+
+# Sprite / NPC data
+ADDR_NUM_SPRITES = 0xD4E1      # wNumSprites: count of sprites on map
+ADDR_SPRITE_DATA = 0xC100      # wSpriteStateData1: 16 bytes per sprite
+
+# Tileset
+ADDR_TILESET = 0xD367          # wCurMapTileset: current tileset ID
+
+# Map structure (block map)
+ADDR_MAP_HEIGHT = 0xD368       # wCurMapHeight (in blocks)
+ADDR_MAP_WIDTH = 0xD369        # wCurMapWidth (in blocks)
+ADDR_OVERWORLD_MAP = 0xC6E8    # wOverworldMap: block data with border
+MAP_BORDER = 3                 # border width in blocks
+
+# Interactable block IDs per tileset (discovered via `scan` command)
+# {tileset_id: {block_id: "label", ...}}
+BLOCK_LABELS = {
+    4: {0x10: "PC", 0x0D: "SNES"},          # House tileset
+}
+
 # Pokemon Red character encoding (from pret/pokered charmap.asm)
 POKEMON_CHARMAP = {
     0x7F: " ",
