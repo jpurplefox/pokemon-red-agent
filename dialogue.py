@@ -40,6 +40,12 @@ class DialogueAdvancer:
                 dialogue.append(current)
                 last_captured = current
                 unchanged_count = 0
+            elif not current and dialogue:
+                # Text box closed — keep waiting but don't press A
+                # (pressing A could re-trigger nearby interactables)
+                unchanged_count += 1
+                self._pyboy.tick(10)
+                continue
             else:
                 unchanged_count += 1
 
