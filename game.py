@@ -32,6 +32,7 @@ class Game:
         self._naming = NameEntry(self._pyboy)
         self._scanner = OverworldScanner(self._pyboy)
         self._in_overworld = False
+        self._show_pois = False
         self._running = True
 
     def _map_loaded(self):
@@ -63,7 +64,7 @@ class Game:
                     self._pyboy.tick(10)
                 if self._map_loaded():
                     self._in_overworld = True
-                    print_pois(self._scanner.get_pois())
+                    self._show_pois = True
                     break
 
     def _game_loop(self):
@@ -114,7 +115,7 @@ class Game:
         if self._map_loaded():
             if not self._in_overworld:
                 self._in_overworld = True
-                print_pois(self._scanner.get_pois())
+                self._show_pois = True
 
         return True
 
@@ -122,6 +123,10 @@ class Game:
         """Prompt for movement/action commands in the overworld."""
         if not self._in_overworld:
             return False
+
+        if self._show_pois:
+            self._show_pois = False
+            print_pois(self._scanner.get_pois())
 
         cmd = prompt_command()
         if cmd == "quit":
@@ -268,8 +273,8 @@ class Game:
                 unknown.append(f"{bid:02X}")
 
         if known:
-            print("\nConocidos:")
+            print("\nKnown:")
             for line in known:
                 print(line)
         if unknown:
-            print(f"\n??? Sin mapear: {', '.join(unknown)}")
+            print(f"\n??? Unmapped: {', '.join(unknown)}")
