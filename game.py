@@ -10,6 +10,7 @@ from constants import (
     ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD,
     ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, ADDR_OVERWORLD_MAP,
     ADDR_TILESET, MAP_BORDER, BLOCK_DESCRIPTIONS, WALKABLE_BLOCKS,
+    MAP_NAMES,
 )
 from screen import ScreenReader
 from menu import MenuReader
@@ -126,6 +127,9 @@ class Game:
 
         if self._show_pois:
             self._show_pois = False
+            map_id = self._pyboy.memory[ADDR_MAP_N]
+            map_name = MAP_NAMES.get(map_id, f"Map {map_id}")
+            print(f"\n--- {map_name} ---")
             print_pois(self._scanner.get_pois())
 
         cmd = prompt_command()
