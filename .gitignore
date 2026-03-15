@@ -1,0 +1,4 @@
+rom.gb
+venv/
+__pycache__/
+*.pyc
