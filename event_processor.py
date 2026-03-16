@@ -43,11 +43,15 @@ class EventProcessor:
                 continue
 
             # Detect naming keyboard (max_item > 4 = letter grid)
+            # Verify by checking for "lower case" / "UPPER CASE" on screen
             if mem[ADDR_MAX_MENU] > 4:
-                self._handle_naming_keyboard()
-                idle = 0
-                last_text = None
-                continue
+                text_check = self._screen.read_text_box()
+                if text_check and ("lower case" in text_check
+                                   or "UPPER CASE" in text_check):
+                    self._handle_naming_keyboard()
+                    idle = 0
+                    last_text = None
+                    continue
 
             # Wait for text to stabilise (letter-by-letter animation)
             text = self._screen.read_text_box()
