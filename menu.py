@@ -87,17 +87,44 @@ class MenuReader:
         tile = mem[ADDR_TILEMAP + cursor_row * 20 + cursor_col]
         return tile == TILE_CURSOR
 
-    def has_yes_no_on_screen(self):
-        """Check if YES/NO options are actually drawn on the tilemap.
+    def find_cursor_on_screen(self):
+        """Scan the entire tilemap for a menu cursor tile (▶).
 
-        More reliable than WRAM checks because it verifies the text is
-        actually visible, not just that menu WRAM has stale values.
+        Returns (row, col) of the cursor if found, or None.
+        Unlike has_cursor_on_screen(), this does NOT rely on WRAM menu
+        addresses — it finds the cursor wherever it's drawn.
+        Only searches rows 0-11 (above the text box area) to avoid
+        false positives from dialogue text.
         """
-        if not self.is_visible():
-            return False
-        options = self.get_options()
-        valid = [o.strip() for o in options if o.strip()]
-        return "YES" in valid and "NO" in valid
+        mem = self._pyboy.memory
+        for row in range(0, 12):
+            for col in range(20):
+                tile = mem[ADDR_TILEMAP + row * 20 + col]
+                if tile == TILE_CURSOR:
+                    return (row, col)
+        return None
+
+    def read_choice_menu(self):
+        """Read options from a choice menu found by scanning for the cursor.
+
+        Returns list of option strings, or empty list if no menu found.
+        Reads text to the right of the cursor, then checks rows below
+        for more options (spaced 2 rows apart, standard Pokemon menu).
+        """
+        pos = self.find_cursor_on_screen()
+        if pos is None:
+            return []
+
+        cursor_row, cursor_col = pos
+        options = []
+        row = cursor_row
+        while row < 12:
+            text = self._screen.decode_tiles(row, cursor_col + 1, 18 - cursor_col)
+            if not text.strip():
+                break
+            options.append(text.strip())
+            row += 2  # Pokemon menus space options 2 rows apart
+        return options
 
     def is_name_menu(self):
         """Detect the name selection menu (4 options).

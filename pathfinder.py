@@ -143,6 +143,28 @@ def find_interaction_targets(poi, grid, blocked=None):
                     if (ny, nx) not in poi_tiles:
                         targets.append((ny, nx, face))
 
+    # Across-counter: for sprites, also try 2 tiles away when there's
+    # a non-walkable tile in between (counter/ledge).  Pokemon Red
+    # allows interaction across counter tiles with A button.
+    if kind == "sprite":
+        for pty, ptx in poi_tiles:
+            for (dy, dx), face in _FACE_DIR.items():
+                # Only if intermediate tile is NOT walkable (= counter)
+                mid_y, mid_x = pty + dy, ptx + dx
+                if 0 <= mid_y < h and 0 <= mid_x < w:
+                    if grid[mid_y][mid_x]:
+                        continue  # no counter here, skip
+
+                ny, nx = pty + 2 * dy, ptx + 2 * dx
+                if (ny, nx) in seen:
+                    continue
+                seen.add((ny, nx))
+
+                if 0 <= ny < h and 0 <= nx < w:
+                    if grid[ny][nx] and (ny, nx) not in blocked:
+                        if (ny, nx) not in poi_tiles:
+                            targets.append((ny, nx, face))
+
     return targets
 
 

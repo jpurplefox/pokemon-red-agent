@@ -99,7 +99,11 @@ class Navigator:
         print_surroundings()
 
     def _is_npc_adjacent(self, poi):
-        """Check if the target NPC is adjacent to the player."""
+        """Check if the target NPC is close enough to interact.
+
+        Accepts Manhattan distance <= 2 to support across-counter
+        interactions (e.g. Pokecenter nurse behind a counter).
+        """
         mem = self._pyboy.memory
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
@@ -111,8 +115,8 @@ class Navigator:
                     and p.get("sprite_index") == poi.get("sprite_index")):
                 dy = abs(p["ty"] - py)
                 dx = abs(p["tx"] - px)
-                # Adjacent = Manhattan distance 1
-                return (dy + dx) == 1
+                # Distance 1 = adjacent, 2 = across counter
+                return (dy + dx) <= 2
         return False
 
     def _find_same_npc(self, poi):

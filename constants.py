@@ -341,7 +341,7 @@ SPRITE_LABELS = {
     # Object sprites (pokered standard IDs)
     0x26: "Item",       # Poké Ball on ground
     0x28: "Boulder",    # Pushable boulder
-    0x29: "Paper",      # Paper sheet
+    0x29: "Nurse",      # SPRITE_NURSE (Pokecenter nurse)
     0x2A: "Book",       # Book / Map / Pokédex
     0x2B: "Clipboard",  # Clipboard
     0x2D: "Fossil",     # Old Amber (copy)

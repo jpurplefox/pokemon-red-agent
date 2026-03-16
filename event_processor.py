@@ -75,11 +75,17 @@ class EventProcessor:
                     last_text = text
                     pending_lines.append(text)
 
-                # Check if YES/NO menu is drawn on screen
-                if self._menu.has_yes_no_on_screen():
+                # Brief wait for choice menu to appear after text
+                self._pyboy.tick(30)
+
+                # Check if a choice menu (HEAL/CANCEL, YES/NO, etc.)
+                # appeared alongside the dialogue text — scan tilemap
+                # for cursor tile, no WRAM dependency
+                choice_options = self._menu.read_choice_menu()
+                if choice_options:
                     self._flush_dialogue(pending_lines)
                     pending_lines = []
-                    self._handle_yes_no_menu()
+                    self._handle_choice_menu(choice_options)
                     idle = 0
                     last_text = None
                     continue
@@ -114,12 +120,15 @@ class EventProcessor:
         for _ in range(10):
             self._pyboy.tick(10)
 
-    def _handle_yes_no_menu(self):
-        """Prompt the user for a YES/NO choice detected on screen."""
-        options = self._menu.get_options()
-        valid = [o.strip() for o in options if o.strip()]
-        choice = prompt_menu(valid)
-        self._menu.select(choice, options)
+    def _handle_choice_menu(self, options):
+        """Prompt the user for a choice menu detected on screen."""
+        choice = prompt_menu(options)
+        # Navigate: cursor starts at top (index 0), press down to target
+        target_idx = options.index(choice)
+        for _ in range(target_idx):
+            self._pyboy.button("down")
+            self._pyboy.tick(10)
+        self._pyboy.button("a")
         self._pyboy.tick(30)
 
     def _flush_dialogue(self, lines):
