@@ -34,7 +34,7 @@ ACTION: RUN"""
 
 
 class BattleAI:
-    def __init__(self, base_url="http://localhost:11434", model="qwen2.5:7b"):
+    def __init__(self, base_url="http://localhost:11434", model="qwen2.5:3b"):
         self._llm = ChatOllama(
             base_url=base_url,
             model=model,
