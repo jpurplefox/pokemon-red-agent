@@ -49,6 +49,11 @@ class DialogueAdvancer:
             else:
                 unchanged_count += 1
 
+            # Re-check stop condition BEFORE pressing A
+            # (a menu cursor may have appeared with the new text)
+            if stop_condition(len(dialogue) > 0, unchanged_count):
+                break
+
             self._pyboy.button("a")
             self._pyboy.tick(10)
 

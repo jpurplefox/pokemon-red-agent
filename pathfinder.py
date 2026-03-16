@@ -105,6 +105,23 @@ def find_interaction_targets(poi, grid, blocked=None):
     if kind == "exit":
         return [(ty, tx, "down")]
 
+    if kind == "connection":
+        # Walk to any walkable edge tile, then step off the map
+        conn = poi["conn_dir"]
+        if conn == "up":
+            return [(0, x, "up") for x in range(w)
+                    if grid[0][x] and (0, x) not in blocked]
+        if conn == "down":
+            return [(h - 1, x, "down") for x in range(w)
+                    if grid[h - 1][x] and (h - 1, x) not in blocked]
+        if conn == "left":
+            return [(y, 0, "left") for y in range(h)
+                    if grid[y][0] and (y, 0) not in blocked]
+        if conn == "right":
+            return [(y, w - 1, "right") for y in range(h)
+                    if grid[y][w - 1] and (y, w - 1) not in blocked]
+        return []
+
     # Determine which tiles the POI occupies
     if kind == "block":
         poi_tiles = {(ty, tx), (ty + 1, tx), (ty, tx + 1), (ty + 1, tx + 1)}

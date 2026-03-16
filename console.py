@@ -82,6 +82,17 @@ _POI_ICONS = {
     "Fossil": "🦴",
 }
 
+# Fallback icons by POI kind (for labels not in _POI_ICONS, e.g. map names)
+_POI_KIND_ICONS = {
+    "connection": "🛤️",
+}
+
+
+def _poi_icon(poi):
+    """Return the display icon for a POI."""
+    return _POI_ICONS.get(poi["label"],
+                          _POI_KIND_ICONS.get(poi.get("kind"), "?"))
+
 
 def print_map(pois, py, px, grid):
     """Display an ASCII map with numbered POI icons and a legend.
@@ -125,5 +136,5 @@ def print_map(pois, py, px, grid):
     # Legend: number + icon + label + direction
     print()
     for i, poi in enumerate(pois):
-        icon = _POI_ICONS.get(poi["label"], "?")
+        icon = _poi_icon(poi)
         print(f"  {i + 1:>2}. {icon} {poi['label']} \u2014 {poi['dir']}")

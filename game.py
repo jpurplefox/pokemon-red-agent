@@ -11,6 +11,7 @@ from constants import (
     ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, ADDR_OVERWORLD_MAP,
     ADDR_TILESET, MAP_BORDER, MAP_NAMES,
     ADDR_NUM_SPRITES, ADDR_SPRITE_DATA, ADDR_SPRITE_DATA2,
+    ADDR_MENU_Y, ADDR_MENU_X, ADDR_CURRENT_MENU, ADDR_MAX_MENU,
 )
 from screen import ScreenReader
 from menu import MenuReader
@@ -130,6 +131,88 @@ class Game:
 
         return True
 
+    def _process_event(self):
+        """Tick through a cutscene/event, handling dialogues and menus inline.
+
+        Keeps ticking until the game state is fully stable: no dialogue,
+        no menu activity, player position and map not changing.  Used when
+        walking is interrupted by an event (e.g. Oak, trainer battle).
+        """
+        mem = self._pyboy.memory
+        idle = 0
+        last_state = None
+        last_text = None
+        while idle < 20:  # ~200 frames of total stability → event over
+            self._pyboy.tick(10)
+
+            if self._handle_name_menu():
+                idle = 0
+                last_text = None
+                continue
+
+            # Detect naming keyboard (max_item > 4 = letter grid)
+            if mem[ADDR_MAX_MENU] > 4:
+                name = prompt_name()
+                if name:
+                    self._naming.enter(name)
+                    print(f"Nickname: {name}")
+                else:
+                    # Empty = use default name, press Start to confirm
+                    self._pyboy.button("start", delay=8)
+                    print("Using default name.")
+                # Wait for naming screen to fully close
+                for _ in range(10):
+                    self._pyboy.tick(10)
+                idle = 0
+                last_text = None
+                continue
+
+            # Wait for text to stabilize (letter-by-letter animation)
+            text = self._screen.read_text_box()
+            if text:
+                prev_t = ""
+                while text != prev_t:
+                    prev_t = text
+                    self._pyboy.tick(10)
+                    text = self._screen.read_text_box()
+
+            state = (mem[ADDR_MAP_N], mem[ADDR_Y_COORD], mem[ADDR_X_COORD])
+
+            if text:
+                if text != last_text:
+                    print(f"\n{text}")
+                    last_text = text
+
+                # Check if YES/NO menu is drawn on screen
+                if self._menu.has_yes_no_on_screen():
+                    options = self._menu.get_options()
+                    valid = [o.strip() for o in options if o.strip()]
+                    choice = prompt_menu(valid)
+                    self._menu.select(choice, options)
+                    self._pyboy.tick(30)
+                    idle = 0
+                    last_text = None
+                    continue
+
+                # Not a menu — press A to advance dialogue
+                self._pyboy.button("a", delay=8)
+                self._pyboy.tick(20)
+
+                idle = 0
+                continue
+
+            # No text on screen
+            last_text = None
+
+            if state != last_state:
+                last_state = state
+                idle = 0
+                continue
+
+            idle += 1
+
+        self._in_overworld = True
+
     def _handle_overworld(self):
         """Prompt for movement/action commands in the overworld."""
         if not self._in_overworld:
@@ -180,13 +263,34 @@ class Game:
             return
 
         print(f"Walking to {poi['label']} ({len(path)} steps)...")
+        start_map = mem[ADDR_MAP_N]
         for direction in path:
             self._pyboy.button(direction, delay=8)
             self._pyboy.tick(30)
 
+            # Detect interruptions: dialogue/cutscene or unexpected map change
+            if self._screen.read_text_box():
+                print("Interrupted!")
+                self._process_event()
+                self._print_surroundings()
+                return
+            if mem[ADDR_MAP_N] != start_map:
+                self._in_overworld = True
+                self._show_pois = True
+                return
+
         if face is None:
             # Warp (stairs) — walking onto the tile activates it
             self._pyboy.tick(60)
+        elif poi["kind"] == "connection":
+            # Map connection — step off the edge to transition
+            old_map = mem[ADDR_MAP_N]
+            self._pyboy.button(face, delay=8)
+            self._pyboy.tick(60)
+            if mem[ADDR_MAP_N] == old_map:
+                print(f"Cannot cross to {poi['label']} (blocked).")
+                self._print_surroundings()
+                return
         elif poi["kind"] == "exit":
             # Exit (door) — press down to walk through
             self._pyboy.button(face, delay=8)
@@ -197,6 +301,20 @@ class Game:
             self._pyboy.tick(30)
             self._pyboy.button("a", delay=8)
             self._pyboy.tick(30)
+
+        # Wait for the game to respond — poll for text/event
+        event_detected = False
+        for _ in range(20):
+            self._pyboy.tick(10)
+            if self._screen.read_text_box():
+                event_detected = True
+                break
+
+        if event_detected:
+            print(f"Event at {poi['label']}!")
+            self._process_event()
+            self._print_surroundings()
+            return
 
         print(f"Arrived at {poi['label']}.")
         self._print_surroundings()

@@ -1,4 +1,9 @@
-from constants import ADDR_MENU_Y, ADDR_MENU_X, ADDR_CURRENT_MENU, ADDR_MAX_MENU
+from constants import (
+    ADDR_MENU_Y, ADDR_MENU_X, ADDR_CURRENT_MENU, ADDR_MAX_MENU,
+    ADDR_TILEMAP,
+)
+
+TILE_CURSOR = 0xED  # ▶ menu cursor tile
 
 
 class MenuReader:
@@ -57,6 +62,42 @@ class MenuReader:
         if current > max_item:
             return False
         return True
+
+    def has_cursor_on_screen(self):
+        """Check if a menu cursor (▶) is actually drawn on screen.
+
+        More reliable than is_visible() since WRAM values persist after
+        menus close, but the cursor tile does not.
+        """
+        mem = self._pyboy.memory
+        menu_y = mem[ADDR_MENU_Y]
+        menu_x = mem[ADDR_MENU_X]
+        current = mem[ADDR_CURRENT_MENU]
+        max_item = mem[ADDR_MAX_MENU]
+
+        if menu_y == 0 or menu_x == 0:
+            return False
+        if max_item > 2 or current > max_item:
+            return False
+
+        cursor_row = menu_y + current * 2
+        cursor_col = menu_x - 1
+        if cursor_row >= 18 or cursor_col < 0 or cursor_col >= 20:
+            return False
+        tile = mem[ADDR_TILEMAP + cursor_row * 20 + cursor_col]
+        return tile == TILE_CURSOR
+
+    def has_yes_no_on_screen(self):
+        """Check if YES/NO options are actually drawn on the tilemap.
+
+        More reliable than WRAM checks because it verifies the text is
+        actually visible, not just that menu WRAM has stale values.
+        """
+        if not self.is_visible():
+            return False
+        options = self.get_options()
+        valid = [o.strip() for o in options if o.strip()]
+        return "YES" in valid and "NO" in valid
 
     def is_name_menu(self):
         """Detect the name selection menu (4 options)."""

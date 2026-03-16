@@ -13,7 +13,7 @@ from constants import (
     ADDR_TILESET, ADDR_TILESET_BANK, ADDR_TILESET_BLOCKS_PTR,
     ADDR_TILESET_COLL_PTR, ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH,
     ADDR_OVERWORLD_MAP, MAP_BORDER, BLOCK_LABELS, WALKABLE_BLOCKS,
-    BLOCK_DESCRIPTIONS, SPRITE_LABELS,
+    BLOCK_DESCRIPTIONS, SPRITE_LABELS, MAP_NAMES,
 )
 
 
@@ -48,6 +48,7 @@ class OverworldScanner:
         pois.extend(self._scan_blocks(py, px))
         pois.extend(self._scan_signs(py, px))
         pois.extend(self._scan_sprites(py, px))
+        pois.extend(self._scan_connections(py, px))
         return pois
 
     # ------------------------------------------------------------------
@@ -503,6 +504,59 @@ class OverworldScanner:
                 "ty": sy,
                 "tx": sx,
                 "kind": "sprite",
+            })
+        return results
+
+    # ------------------------------------------------------------------
+    # Map connection scanning (adjacent maps via edge walking)
+    # ------------------------------------------------------------------
+
+    # Connection flag bits in ROM header byte 9 (order matters for parsing)
+    _CONN_FLAGS = [(0x08, "up"), (0x04, "down"), (0x02, "left"), (0x01, "right")]
+
+    def _scan_connections(self, py, px):
+        """Read map connections from the ROM header.
+
+        Returns POIs for adjacent maps reachable by walking off the edge.
+        Each connection has 11 bytes in the ROM: dest_map_id(1) + strip data(10).
+        """
+        header = self._find_map_header()
+        if header is None:
+            return []
+
+        rom = self._rom
+        mem = self._pyboy.memory
+        conn_flags = rom[header + 9]
+        W = mem[ADDR_MAP_WIDTH]
+        H = mem[ADDR_MAP_HEIGHT]
+
+        pos = header + 10  # connection data starts after the 10-byte header
+        results = []
+        for flag, btn in self._CONN_FLAGS:
+            if not (conn_flags & flag):
+                continue
+            dest_map_id = rom[pos]
+            pos += 11  # skip remaining 10 bytes of this connection
+
+            map_name = MAP_NAMES.get(dest_map_id, f"Map {dest_map_id}")
+
+            # Place POI at the center of the corresponding edge
+            if btn == "up":
+                ey, ex = 0, W - 1
+            elif btn == "down":
+                ey, ex = H * 2 - 1, W - 1
+            elif btn == "left":
+                ey, ex = H - 1, 0
+            else:  # right
+                ey, ex = H - 1, W * 2 - 1
+
+            results.append({
+                "label": map_name,
+                "dir": self._relative_dir(py, px, ey, ex),
+                "ty": ey,
+                "tx": ex,
+                "kind": "connection",
+                "conn_dir": btn,
             })
         return results
 
