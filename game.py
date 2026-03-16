@@ -142,6 +142,7 @@ class Game:
         idle = 0
         last_state = None
         last_text = None
+        pending_lines = []     # accumulate text captures for deduplication
         while idle < 20:  # ~200 frames of total stability → event over
             self._pyboy.tick(10)
 
@@ -180,11 +181,17 @@ class Game:
 
             if text:
                 if text != last_text:
-                    print(f"\n{text}")
                     last_text = text
+                    pending_lines.append(text)
 
                 # Check if YES/NO menu is drawn on screen
                 if self._menu.has_yes_no_on_screen():
+                    # Flush accumulated dialogue before showing menu
+                    if pending_lines:
+                        line = self._dialogue._deduplicate(pending_lines)
+                        if line:
+                            print(f"\n{line}")
+                        pending_lines = []
                     options = self._menu.get_options()
                     valid = [o.strip() for o in options if o.strip()]
                     choice = prompt_menu(valid)
@@ -201,7 +208,12 @@ class Game:
                 idle = 0
                 continue
 
-            # No text on screen
+            # No text on screen — flush accumulated dialogue
+            if pending_lines:
+                line = self._dialogue._deduplicate(pending_lines)
+                if line:
+                    print(f"\n{line}")
+                pending_lines = []
             last_text = None
 
             if state != last_state:
