@@ -57,10 +57,10 @@ class DialogueAdvancer:
             self._pyboy.button("a")
             self._pyboy.tick(10)
 
-        return self._deduplicate(dialogue)
+        return self.deduplicate(dialogue)
 
     @staticmethod
-    def _deduplicate(lines):
+    def deduplicate(lines):
         """Remove overlapping text between consecutive captures.
         The text box shows 2 lines at a time, so when it scrolls,
         the next capture starts with text from the previous one."""
