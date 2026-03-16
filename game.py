@@ -215,8 +215,9 @@ class Game:
             self._debug.dump()
         elif cmd == "go":
             result = self._navigator.go(self._print_surroundings)
-            if result.get("map_changed"):
-                self._in_overworld = True
+            # Always restore overworld state after navigation — handlers
+            # like _handle_name_menu may have cleared it during events.
+            self._in_overworld = True
             if result.get("show_pois"):
                 self._show_pois = True
         elif cmd == "start":

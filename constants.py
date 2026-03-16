@@ -4,6 +4,7 @@ ADDR_MENU_Y = 0xCC24           # wTopMenuItemY: Y position of first menu item
 ADDR_MENU_X = 0xCC25           # wTopMenuItemX: X position of first menu item
 ADDR_CURRENT_MENU = 0xCC26     # wCurrentMenuItem: selected item (0 = first)
 ADDR_MAX_MENU = 0xCC28         # wMaxMenuItem: index of last item
+ADDR_MENU_WATCHED_KEYS = 0xCC29  # wMenuWatchedKeys: non-zero when menu awaits input
 
 ADDR_TILEMAP = 0xC3A0          # wTileMap: WRAM copy of screen (20 tiles per row)
 
