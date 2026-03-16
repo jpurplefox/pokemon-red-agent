@@ -142,11 +142,17 @@ class Game:
         """Detect and manage Pokemon battles."""
         if not self._battle.is_in_battle():
             if self._in_battle:
-                # Battle just ended — return to overworld
+                # Battle just ended — consume post-battle dialogue
+                # (rival speech, exp/level messages) before returning
                 self._in_battle = False
+                print("\nBattle ended!")
+                full = self._dialogue.advance_until(
+                    lambda d, u: d and u > 15
+                )
+                if full:
+                    print(full)
                 self._in_overworld = True
                 self._show_pois = True
-                print("\nBattle ended!")
             return False
 
         if not self._in_battle:
