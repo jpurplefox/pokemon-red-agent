@@ -504,6 +504,7 @@ class OverworldScanner:
                 "ty": sy,
                 "tx": sx,
                 "kind": "sprite",
+                "sprite_index": i,
             })
         return results
 

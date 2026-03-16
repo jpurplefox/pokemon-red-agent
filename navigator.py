@@ -8,6 +8,8 @@ from constants import ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD
 from pathfinder import find_best_path
 from console import prompt_poi_selection
 
+MAX_NPC_RETRIES = 3
+
 
 class Navigator:
     def __init__(self, pyboy, screen, scanner, event_processor):
@@ -31,19 +33,27 @@ class Navigator:
         if not poi:
             return result
 
+        self._go_to_poi(poi, print_surroundings, result)
+        return result
+
+    def _go_to_poi(self, poi, print_surroundings, result, attempt=1):
+        """Walk to a POI and interact. Retries if NPC moved."""
+        mem = self._pyboy.memory
         grid, _, _ = self._scanner.get_walkable_grid()
         blocked = self._scanner.get_npc_tiles()
-        mem = self._pyboy.memory
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
 
         path, face = find_best_path(grid, (py, px), poi, blocked)
         if path is None:
             print(f"Cannot reach {poi['label']}.")
-            return result
+            return
 
         # Walk step by step, checking for interrupts
-        print(f"Walking to {poi['label']} ({len(path)} steps)...")
+        if attempt == 1:
+            print(f"Walking to {poi['label']} ({len(path)} steps)...")
+        else:
+            print(f"Retrying... ({len(path)} steps)")
         start_map = mem[ADDR_MAP_N]
         for direction in path:
             self._pyboy.button(direction, delay=8)
@@ -53,14 +63,27 @@ class Navigator:
                 print("Interrupted!")
                 self._event_processor.process()
                 print_surroundings()
-                return result
+                return
             if mem[ADDR_MAP_N] != start_map:
-                # Map changed (warp/connection) — wait for transition
-                # (fade out → load → fade in) before reading new map data
                 self._pyboy.tick(300)
                 result["map_changed"] = True
                 result["show_pois"] = True
-                return result
+                return
+
+        # For sprites (NPCs), verify they're still adjacent
+        if poi["kind"] == "sprite" and face is not None:
+            if not self._is_npc_adjacent(poi):
+                if attempt < MAX_NPC_RETRIES:
+                    # Re-scan to find NPC's new position
+                    new_poi = self._find_same_npc(poi)
+                    if new_poi:
+                        print(f"{poi['label']} moved!")
+                        self._go_to_poi(new_poi, print_surroundings,
+                                        result, attempt + 1)
+                        return
+                print(f"{poi['label']} moved away. Try again.")
+                print_surroundings()
+                return
 
         # Interact with the POI based on its kind
         self._interact(poi, face)
@@ -70,11 +93,36 @@ class Navigator:
             print(f"Event at {poi['label']}!")
             self._event_processor.process()
             print_surroundings()
-            return result
+            return
 
         print(f"Arrived at {poi['label']}.")
         print_surroundings()
-        return result
+
+    def _is_npc_adjacent(self, poi):
+        """Check if the target NPC is adjacent to the player."""
+        mem = self._pyboy.memory
+        py = mem[ADDR_Y_COORD]
+        px = mem[ADDR_X_COORD]
+
+        # Re-scan sprites to find current positions
+        pois = self._scanner.get_pois()
+        for p in pois:
+            if (p["kind"] == "sprite"
+                    and p.get("sprite_index") == poi.get("sprite_index")):
+                dy = abs(p["ty"] - py)
+                dx = abs(p["tx"] - px)
+                # Adjacent = Manhattan distance 1
+                return (dy + dx) == 1
+        return False
+
+    def _find_same_npc(self, poi):
+        """Find the same NPC in a fresh scan (may have moved)."""
+        pois = self._scanner.get_pois()
+        for p in pois:
+            if (p["kind"] == "sprite"
+                    and p.get("sprite_index") == poi.get("sprite_index")):
+                return p
+        return None
 
     def _interact(self, poi, face):
         """Perform the appropriate interaction for a POI kind."""
