@@ -17,6 +17,7 @@ from naming import NameEntry
 from overworld import OverworldScanner
 from event_processor import EventProcessor
 from navigator import Navigator
+from battle import BattleHandler
 from debug_scanner import DebugScanner
 from console import (
     prompt_menu, prompt_name, prompt_command, print_map, BUTTONS,
@@ -39,9 +40,13 @@ class Game:
         self._navigator = Navigator(
             self._pyboy, self._screen, self._scanner, self._event_processor,
         )
+        self._battle = BattleHandler(
+            self._pyboy, self._screen, self._menu, self._dialogue,
+        )
         self._debug = DebugScanner(self._pyboy, self._scanner)
 
         self._in_overworld = False
+        self._in_battle = False
         self._show_pois = False
         self._running = True
 
@@ -100,6 +105,8 @@ class Game:
         while self._running:
             self._pyboy.tick(10)
 
+            if self._handle_battle():
+                continue
             if self._handle_name_menu():
                 continue
             if self._handle_dialogue():
@@ -113,6 +120,8 @@ class Game:
 
     def _handle_name_menu(self):
         """Handle name selection menus (player/rival name)."""
+        if self._battle.is_in_battle():
+            return False
         if not self._menu.is_name_menu():
             return False
 
@@ -129,6 +138,37 @@ class Game:
 
         return True
 
+    def _handle_battle(self):
+        """Detect and manage Pokemon battles."""
+        if not self._battle.is_in_battle():
+            if self._in_battle:
+                # Battle just ended — return to overworld
+                self._in_battle = False
+                self._in_overworld = True
+                self._show_pois = True
+                print("\nBattle ended!")
+            return False
+
+        if not self._in_battle:
+            # Just entered a battle — advance intro and show summary
+            self._in_battle = True
+            self._in_overworld = False
+            self._battle._last_move_idx = 0  # cursor starts at 0
+            self._battle.process_intro()
+            self._battle.print_summary()
+
+        # Prompt for battle action
+        self._battle.prompt_action()
+
+        # Process the turn result (attack messages, etc.)
+        self._battle.process_turn()
+
+        # Show updated state if still in battle
+        if self._battle.is_in_battle():
+            self._battle.print_summary()
+
+        return True
+
     def _handle_dialogue(self):
         """Auto-advance dialogue, print text, detect overworld transition."""
         text = self._screen.read_text_box()
@@ -136,7 +176,9 @@ class Game:
             return False
 
         full = self._dialogue.advance_until(
-            lambda d, u: self._menu.is_name_menu() or (d and u > 15)
+            lambda d, u: (self._battle.is_in_battle()
+                          or self._menu.is_name_menu()
+                          or (d and u > 15))
         )
         if full:
             print(f"\n{full}")

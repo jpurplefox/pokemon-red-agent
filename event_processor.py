@@ -6,7 +6,7 @@ YES/NO menus, naming keyboards — until the game state stabilises.
 
 from constants import (
     ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD,
-    ADDR_MAX_MENU,
+    ADDR_MAX_MENU, ADDR_IS_IN_BATTLE,
 )
 from dialogue import DialogueAdvancer
 from console import prompt_menu, prompt_name
@@ -36,6 +36,12 @@ class EventProcessor:
 
         while idle < 20:
             self._pyboy.tick(10)
+
+            # Battle started — stop processing, let battle handler take over
+            if mem[ADDR_IS_IN_BATTLE] != 0:
+                self._flush_dialogue(pending_lines)
+                pending_lines = []
+                break
 
             if self._handle_name_menu():
                 idle = 0

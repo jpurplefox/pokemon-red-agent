@@ -7,7 +7,8 @@ object flags for development and troubleshooting.
 from constants import (
     ADDR_Y_COORD, ADDR_X_COORD,
     ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, ADDR_OVERWORLD_MAP,
-    ADDR_TILESET, MAP_BORDER,
+    ADDR_TILESET, ADDR_TILESET_BANK, ADDR_TILESET_COLL_PTR,
+    ADDR_TILESET_BLOCKS_PTR, MAP_BORDER, WALKABLE_BLOCKS,
     ADDR_NUM_SPRITES, ADDR_SPRITE_DATA, ADDR_SPRITE_DATA2,
     SPRITE_LABELS,
 )
@@ -56,22 +57,66 @@ class DebugScanner:
             print(f"  {row}: " + "".join(cells))
 
     def _dump_walkability(self, mem, W, H):
-        """Print collision tiles and per-block walkability from ROM."""
+        """Print collision tiles, per-block walkability, and ROM vs manual comparison."""
+        tileset = mem[ADDR_TILESET]
+        bank = mem[ADDR_TILESET_BANK]
+        coll_ptr = mem[ADDR_TILESET_COLL_PTR] | (mem[ADDR_TILESET_COLL_PTR + 1] << 8)
+        blocks_ptr = mem[ADDR_TILESET_BLOCKS_PTR] | (mem[ADDR_TILESET_BLOCKS_PTR + 1] << 8)
+
+        print(f"\nTileset {tileset} | Bank ${bank:02X} | CollPtr ${coll_ptr:04X} | BlocksPtr ${blocks_ptr:04X}")
+
         coll = self._scanner.get_collision_tiles()
         if not coll:
-            print("\n(No ROM data -- cannot auto-detect walkability)")
+            print("(No ROM data -- cannot auto-detect walkability)")
             return
 
-        print(f"\nCollision tiles: {', '.join(f'${t:02X}' for t in sorted(coll))}")
-        print("\nBlocks:")
+        print(f"Collision tiles ({len(coll)}): {', '.join(f'${t:02X}' for t in sorted(coll))}")
+
+        manual = WALKABLE_BLOCKS.get(tileset, {})
+        w = lambda v: '\u2713' if v else '\u2717'
+
+        print("\nBlocks (ROM vs Manual):")
+        mismatches = []
         for bid in sorted(self._seen_blocks):
             bt = self._scanner.get_block_tiles(bid)
             if bt is None:
-                print(f"  {bid:02X}: ???")
+                print(f"  {bid:02X}: ??? (no ROM block data)")
                 continue
-            tl, tr, bl, br = self._scanner.block_walkability(bt, coll)
-            w = lambda v: '\u2713' if v else '\u2717'
-            print(f"  {bid:02X}: [{w(tl)}{w(tr)}/{w(bl)}{w(br)}]")
+            rom_walk = self._scanner.block_walkability(bt, coll)
+            rom_str = f"[{w(rom_walk[0])}{w(rom_walk[1])}/{w(rom_walk[2])}{w(rom_walk[3])}]"
+
+            if bid in manual:
+                man_walk = manual[bid]
+                man_str = f"[{w(man_walk[0])}{w(man_walk[1])}/{w(man_walk[2])}{w(man_walk[3])}]"
+                match = "==" if rom_walk == man_walk else "!!"
+                print(f"  {bid:02X}: ROM {rom_str}  Manual {man_str}  {match}")
+                if rom_walk != man_walk:
+                    mismatches.append((bid, bt, rom_walk, man_walk))
+            else:
+                any_walkable = any(rom_walk)
+                flag = " <-- ROM says walkable, no manual entry" if any_walkable else ""
+                print(f"  {bid:02X}: ROM {rom_str}  Manual (none){flag}")
+
+        if mismatches:
+            print("\nMISMATCH DETAILS:")
+            for bid, bt, rom_walk, man_walk in mismatches:
+                tiles_hex = " ".join(f"${t:02X}" for t in bt)
+                print(f"  Block ${bid:02X} tiles: {tiles_hex}")
+                for qi, (label, indices) in enumerate(
+                    zip(["TL", "TR", "BL", "BR"],
+                        self._scanner._QUAD_INDICES)):
+                    rep = self._scanner._QUAD_REP_TILE[qi]
+                    rep_tile = bt[rep]
+                    rep_walk = rep_tile in coll
+                    quad_tiles = [bt[i] for i in indices]
+                    in_coll = [t in coll for t in quad_tiles]
+                    quad_hex = " ".join(f"${t:02X}({'W' if c else 'X'})"
+                                       for t, c in zip(quad_tiles, in_coll))
+                    rom_v = rom_walk[qi]
+                    man_v = man_walk[qi]
+                    flag = " <-- MISMATCH" if rom_v != man_v else ""
+                    print(f"    {label}: rep[{rep}]=${rep_tile:02X}({'W' if rep_walk else 'X'}) "
+                          f"all={quad_hex} → ROM={w(rom_v)} Manual={w(man_v)}{flag}")
 
     def _dump_sprites(self, mem):
         """Print raw sprite data for debugging."""

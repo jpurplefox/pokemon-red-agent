@@ -28,6 +28,11 @@ class OverworldScanner:
         (10, 11, 14, 15),  # BR: rows 2-3, cols 2-3
     )
 
+    # Representative tile index per quadrant — the bottom-left tile of
+    # each 2x2 step area (where the player's feet land).  Pokemon Red
+    # checks a single tile per step for collision, not all four.
+    _QUAD_REP_TILE = (4, 6, 12, 14)
+
     def __init__(self, pyboy, rom_path=None):
         self._pyboy = pyboy
         self._rom = None
@@ -90,11 +95,13 @@ class OverworldScanner:
     def block_walkability(self, block_tiles, collision_tiles):
         """Return (TL, TR, BL, BR) walkability from block tile data.
 
-        A quadrant is walkable when ALL its 4 tiles are in the collision list.
+        Checks the representative tile per quadrant (bottom-left of each
+        2x2 step area, where the player's feet land).  This matches how
+        the Pokemon Red engine performs collision detection.
         """
         return tuple(
-            all(block_tiles[i] in collision_tiles for i in quad)
-            for quad in self._QUAD_INDICES
+            block_tiles[rep] in collision_tiles
+            for rep in self._QUAD_REP_TILE
         )
 
     # ------------------------------------------------------------------

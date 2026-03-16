@@ -351,6 +351,28 @@ SPRITE_LABELS = {
     0x41: "Book",       # Book / Map / Pokédex (alt)
 }
 
+# Battle state
+ADDR_IS_IN_BATTLE = 0xD057     # wIsInBattle: 0=no, 1=wild, 2=trainer
+
+# Battle mon structures (battle struct is shorter than party struct:
+# no EVs, no OT ID, no experience — just DVs between moves and PP)
+ADDR_BATTLE_MON = 0xD014       # wBattleMon: player's active pokemon
+ADDR_ENEMY_MON = 0xCFE5        # wEnemyMon: enemy's active pokemon
+
+# Offsets within the BATTLE mon struct (verified via hex dump)
+# +00 Species  +01 HP(2)  +03 BoxLvl  +04 Status  +05 Type1  +06 Type2
+# +07 CatchRate  +08 Moves(4)  +0C DVs(2)  +0E Level  +0F MaxHP(2)
+# +11 Atk(2)  +13 Def(2)  +15 Spd(2)  +17 Spc(2)  +19 PP(4)
+BMON_SPECIES = 0x00            # 1 byte: internal species ID
+BMON_HP = 0x01                 # 2 bytes big-endian: current HP
+BMON_STATUS = 0x04             # 1 byte: status condition
+BMON_TYPE1 = 0x05              # 1 byte
+BMON_TYPE2 = 0x06              # 1 byte
+BMON_MOVES = 0x08              # 4 bytes: move IDs (0 = empty slot)
+BMON_LEVEL = 0x0E              # 1 byte
+BMON_MAX_HP = 0x0F             # 2 bytes big-endian
+BMON_PP = 0x19                 # 4 bytes: PP remaining (lower 6 bits)
+
 # Name entry keyboard layout (uppercase, Pokemon Red)
 NAME_KEYBOARD = [
     "ABCDEFGHI",
