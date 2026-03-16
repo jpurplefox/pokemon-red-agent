@@ -100,12 +100,21 @@ class MenuReader:
         return "YES" in valid and "NO" in valid
 
     def is_name_menu(self):
-        """Detect the name selection menu (4 options)."""
+        """Detect the name selection menu (4 options).
+
+        Checks WRAM values AND verifies that real menu text is on screen,
+        to avoid false positives from stale WRAM after menu closes.
+        """
         max_item = self._pyboy.memory[ADDR_MAX_MENU]
         menu_y = self._pyboy.memory[ADDR_MENU_Y]
         menu_x = self._pyboy.memory[ADDR_MENU_X]
         current = self._pyboy.memory[ADDR_CURRENT_MENU]
-        return max_item == 3 and menu_y > 0 and menu_x > 0 and current <= max_item
+        if not (max_item == 3 and menu_y > 0 and menu_x > 0
+                and current <= max_item):
+            return False
+        # Verify first option has real text on screen
+        options = self.get_options()
+        return any(o.strip() for o in options)
 
     def wait_for_main_menu(self):
         """Spam A and Start through logos and title screen,
