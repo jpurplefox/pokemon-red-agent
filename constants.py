@@ -49,6 +49,9 @@ BLOCK_LABELS = {
         0x10: ("PC", 1, 0),     # compu is at bottom-left tile
         0x0D: ("SNES", 1, 1),   # snes is at bottom-right tile
     },
+    6: {  # Pokecenter
+        0x23: ("PC", 1, 1),     # PC terminal at BR of block (far right)
+    },
 }
 
 # Per-tile walkability within each map block (2x2 tiles per block).

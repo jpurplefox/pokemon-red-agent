@@ -101,6 +101,14 @@ class EventProcessor:
             pending_lines = []
             last_text = None
 
+            # Check for standalone menus (e.g. PC menu) that appear
+            # without text box content — just a cursor + options
+            choice_options = self._menu.read_choice_menu()
+            if choice_options:
+                self._handle_choice_menu(choice_options)
+                idle = 0
+                continue
+
             if state != last_state:
                 last_state = state
                 idle = 0
