@@ -147,7 +147,7 @@ class Game:
                 self._in_battle = False
                 print("\nBattle ended!")
                 full = self._dialogue.advance_until(
-                    lambda d, u: d and u > 15
+                    lambda d, u: u > 15
                 )
                 if full:
                     print(full)
