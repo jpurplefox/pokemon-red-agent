@@ -78,8 +78,11 @@ _POI_ICONS = {
     "Bookshelf": "📚", "Desk": "🗄️", "Plant": "🌿",
     "Bed": "🛏️", "Person": "🧑", "Object": "❓",
     "Pokémon": "🐾", "Item": "🔴", "Poké Ball": "🔴", "Boulder": "🪨",
-    "Nurse": "💊", "Cable Club": "🔌", "Book": "📖", "Clipboard": "📋",
-    "Fossil": "🦴",
+    "Nurse": "💊", "Clerk": "🧑‍💼", "Cable Club": "🔌", "Book": "📖", "Clipboard": "📋",
+    "Fossil": "🦴", "Note": "📝",
+    # Building types (from destination map names)
+    "Pokecenter": "🏥", "Mart": "🛒", "Gym": "🏟️", "Museum": "🏛️",
+    "School": "🏫",
 }
 
 # Fallback icons by POI kind (for labels not in _POI_ICONS, e.g. map names)
@@ -90,8 +93,14 @@ _POI_KIND_ICONS = {
 
 def _poi_icon(poi):
     """Return the display icon for a POI."""
-    return _POI_ICONS.get(poi["label"],
-                          _POI_KIND_ICONS.get(poi.get("kind"), "?"))
+    label = poi["label"]
+    if label in _POI_ICONS:
+        return _POI_ICONS[label]
+    # Keyword match: "Nickname House" → "House", "Viridian Gym" → "Gym"
+    for keyword, icon in _POI_ICONS.items():
+        if keyword in label:
+            return icon
+    return _POI_KIND_ICONS.get(poi.get("kind"), "🚪")
 
 
 def print_map(pois, py, px, grid):

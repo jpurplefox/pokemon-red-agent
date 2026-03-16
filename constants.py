@@ -50,6 +50,7 @@ BLOCK_LABELS = {
         0x0D: ("SNES", 1, 1),   # snes is at bottom-right tile
     },
     6: {  # Pokecenter
+        0x08: ("Person", 0, 0),  # Sitting person on bench (TL tile)
         0x23: ("PC", 1, 1),     # PC terminal at BR of block (far right)
     },
 }
@@ -342,7 +343,7 @@ SPRITE_LABELS = {
     0x27: "Pokémon",    # Omanyte
     0x2C: "Pokémon",    # Snorlax
     # Object sprites (pokered standard IDs)
-    0x26: "Item",       # Poké Ball on ground
+    0x26: "Clerk",      # SPRITE_MART_GUY (shop cashier)
     0x28: "Boulder",    # Pushable boulder
     0x29: "Nurse",      # SPRITE_NURSE (Pokecenter nurse)
     0x2A: "Cable Club",  # SPRITE_LINK_RECEPTIONIST
@@ -352,6 +353,7 @@ SPRITE_LABELS = {
     # Object sprites (alternate ROM IDs — discovered via scan)
     0x3D: "Poké Ball",  # Poké Ball on table (starters)
     0x41: "Book",       # Book / Map / Pokédex (alt)
+    0x42: "Note",       # Note/poster on wall
 }
 
 # Battle state

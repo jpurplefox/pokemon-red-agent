@@ -270,7 +270,10 @@ class OverworldScanner:
             base = ADDR_WARP_ENTRIES + i * 4
             wy = mem[base]
             wx = mem[base + 1]
-            label, kind = self._warp_label(wy, wx, descriptions, mem, row_width)
+            dest_map = mem[base + 3]
+            label, kind = self._warp_label(
+                wy, wx, dest_map, descriptions, mem, row_width
+            )
             results.append({
                 "label": label,
                 "dir": self._relative_dir(py, px, wy, wx),
@@ -301,15 +304,47 @@ class OverworldScanner:
         "bed": "Bed",
     }
 
+    # Keywords in MAP_NAMES that identify building types for icons.
+    _DEST_BUILDING_MAP = {
+        "pokecenter": "Pokecenter",
+        "mart": "Mart",
+        "gym": "Gym",
+        "lab": "Lab",
+        "museum": "Museum",
+    }
+
     @staticmethod
-    def _warp_label(wy, wx, descriptions, mem, row_width):
-        """Determine warp label and kind from the block it sits on.
+    def _warp_label(wy, wx, dest_map, descriptions, mem, row_width):
+        """Determine warp label and kind from destination map or block.
 
         Priority:
-        1. BLOCK_DESCRIPTIONS lookup (stairs / doormat / door).
-        2. Position heuristic: warps in the bottom 2 tile-rows of the
-           map are building exits; everything else is a generic warp.
+        1. Destination map name from MAP_NAMES (most reliable).
+        2. BLOCK_DESCRIPTIONS lookup (stairs / doormat / door).
+        3. Position heuristic: bottom-edge warps are exits.
         """
+        # Use destination map name when available
+        dest_name = MAP_NAMES.get(dest_map)
+        if dest_name:
+            # Determine kind: interior warps (stairs) vs building entries
+            block_row = wy // 2
+            block_col = wx // 2
+            addr = ADDR_OVERWORLD_MAP + (block_row + MAP_BORDER) * row_width + (block_col + MAP_BORDER)
+            block_id = mem[addr]
+            if block_id in descriptions:
+                tile_names = {t.lower() for t in descriptions[block_id]}
+                if "stairs" in tile_names:
+                    return dest_name, "warp"
+            # Strip city/town prefix if dest name starts with current map area
+            # e.g. "Viridian Pokecenter" → "Pokecenter" when in Viridian City
+            cur_map = mem[ADDR_MAP_N]
+            cur_name = MAP_NAMES.get(cur_map, "")
+            # Extract city prefix (first word of current map name)
+            city = cur_name.split()[0] if cur_name else ""
+            short = dest_name
+            if city and dest_name.startswith(city + " "):
+                short = dest_name[len(city) + 1:]
+            return short, "exit"
+
         block_row = wy // 2
         block_col = wx // 2
         addr = ADDR_OVERWORLD_MAP + (block_row + MAP_BORDER) * row_width + (block_col + MAP_BORDER)
@@ -433,12 +468,12 @@ class OverworldScanner:
         addr = ADDR_OVERWORLD_MAP + (block_row + MAP_BORDER) * row_width + (block_col + MAP_BORDER)
         block_id = mem[addr]
         if block_id not in descriptions:
-            return "Object"
+            return "Sign"
         tiles = descriptions[block_id]
         # Which tile within the 2x2 block: TL=0, TR=1, BL=2, BR=3
         idx = (sy % 2) * 2 + (sx % 2)
         tile_name = tiles[idx].lower()
-        return OverworldScanner._SIGN_MAP.get(tile_name, "Object")
+        return OverworldScanner._SIGN_MAP.get(tile_name, "Sign")
 
     # ------------------------------------------------------------------
     # Sprite / NPC scanning
