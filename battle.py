@@ -12,6 +12,7 @@ from constants import (
 )
 from pokemon_data import POKEMON_NAMES, MOVE_NAMES, MOVE_BASE_PP, status_text
 from console import prompt_menu
+from battle_ai import BattleAI
 
 
 class BattleHandler:
@@ -21,6 +22,7 @@ class BattleHandler:
         self._menu = menu
         self._dialogue = dialogue
         self._last_move_idx = 0  # move menu cursor starts at 0
+        self._ai = BattleAI()
 
     # ------------------------------------------------------------------
     # State detection
@@ -136,26 +138,23 @@ class BattleHandler:
     # ------------------------------------------------------------------
 
     def prompt_action(self):
-        """Prompt the user for a battle action and execute it."""
+        """Use AI to decide and execute a battle action."""
         player = self._read_mon(ADDR_BATTLE_MON)
+        enemy = self._read_mon(ADDR_ENEMY_MON)
 
-        # Build action list: moves + RUN (for wild battles)
-        actions = []
-        for name, pp, max_pp in player['moves']:
-            actions.append(f"{name} ({pp}/{max_pp} PP)")
-        if self.is_wild():
-            actions.append("RUN")
+        action_type, move_name = self._ai.decide(
+            player, enemy, self.is_wild()
+        )
 
-        choice = prompt_menu(actions)
-
-        if "RUN" in choice:
+        if action_type == "run":
+            print("  AI chose: RUN")
             self._select_battle_option("RUN")
         else:
-            # User picked a move — select FIGHT then the move
-            move_name = choice.split(" (")[0]
+            print(f"  AI chose: {move_name}")
             move_idx = next(
-                i for i, (n, _, _) in enumerate(player['moves'])
-                if n == move_name
+                (i for i, (n, _, _) in enumerate(player['moves'])
+                 if n == move_name),
+                0,
             )
             self._select_battle_option("FIGHT")
             self._wait_for_move_menu(player['moves'])
