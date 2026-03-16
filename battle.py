@@ -12,17 +12,16 @@ from constants import (
 )
 from pokemon_data import POKEMON_NAMES, MOVE_NAMES, MOVE_BASE_PP, status_text
 from console import prompt_menu
-from battle_ai import BattleAI
 
 
 class BattleHandler:
-    def __init__(self, pyboy, screen, menu, dialogue):
+    def __init__(self, pyboy, screen, menu, dialogue, strategy=None):
         self._pyboy = pyboy
         self._screen = screen
         self._menu = menu
         self._dialogue = dialogue
         self._last_move_idx = 0  # move menu cursor starts at 0
-        self._ai = BattleAI()
+        self._strategy = strategy or ManualStrategy()
 
     # ------------------------------------------------------------------
     # State detection
@@ -138,19 +137,17 @@ class BattleHandler:
     # ------------------------------------------------------------------
 
     def prompt_action(self):
-        """Use AI to decide and execute a battle action."""
+        """Decide and execute a battle action using the injected strategy."""
         player = self._read_mon(ADDR_BATTLE_MON)
         enemy = self._read_mon(ADDR_ENEMY_MON)
 
-        action_type, move_name = self._ai.decide(
+        action_type, move_name = self._strategy.decide(
             player, enemy, self.is_wild()
         )
 
         if action_type == "run":
-            print("  AI chose: RUN")
             self._select_battle_option("RUN")
         else:
-            print(f"  AI chose: {move_name}")
             move_idx = next(
                 (i for i, (n, _, _) in enumerate(player['moves'])
                  if n == move_name),
@@ -246,3 +243,21 @@ class BattleHandler:
         )
         if full:
             print(f"\n{full}")
+
+
+class ManualStrategy:
+    """Console-based battle strategy — prompts the player for input."""
+
+    def decide(self, player, enemy, is_wild):
+        actions = []
+        for name, pp, max_pp in player['moves']:
+            actions.append(f"{name} ({pp}/{max_pp} PP)")
+        if is_wild:
+            actions.append("RUN")
+
+        choice = prompt_menu(actions)
+
+        if "RUN" in choice:
+            return ("run", None)
+        move_name = choice.split(" (")[0]
+        return ("move", move_name)

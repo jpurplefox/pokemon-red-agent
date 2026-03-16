@@ -9,6 +9,13 @@ from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 from pokemon_data import POKEMON_TYPES, MOVE_TYPES
 
+_PURPLE = "\033[35m"
+_RESET = "\033[0m"
+
+
+def _ai_print(msg):
+    print(f"{_PURPLE}  AI: {msg}{_RESET}")
+
 SYSTEM_PROMPT = """\
 You are a Pokemon Red battle strategist. You receive the current battle state \
 and must decide the best action.
@@ -65,8 +72,13 @@ class BattleAI:
         if not is_wild and action[0] == "run":
             available = [m[0] for m in player['moves'] if m[1] > 0]
             if available:
-                print("  AI: (can't run from trainer, forcing attack)")
-                return ("move", available[0])
+                _ai_print("(can't run from trainer, forcing attack)")
+                action = ("move", available[0])
+
+        if action[0] == "run":
+            _ai_print("chose: RUN")
+        else:
+            _ai_print(f"chose: {action[1]}")
 
         return action
 
@@ -107,7 +119,7 @@ class BattleAI:
         for line in text.strip().split("\n"):
             if line.strip().startswith("THINK:"):
                 reasoning = line.strip()[6:].strip()
-                print(f"  AI: {reasoning}")
+                _ai_print(reasoning)
 
         # Find the ACTION line
         for line in text.strip().split("\n"):
@@ -130,12 +142,12 @@ class BattleAI:
                             return ("move", m)
                     # Fallback: first available move
                     if available:
-                        print(f"  AI: (couldn't match '{move_name}', using {available[0]})")
+                        _ai_print(f"(couldn't match '{move_name}', using {available[0]})")
                         return ("move", available[0])
 
         # Fallback: use first move with PP
         available = [m[0] for m in player['moves'] if m[1] > 0]
         if available:
-            print("  AI: (couldn't parse response, using first move)")
+            _ai_print("(couldn't parse response, using first move)")
             return ("move", available[0])
         return ("run", None)
