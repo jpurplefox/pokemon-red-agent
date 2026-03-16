@@ -26,7 +26,7 @@ from console import (
 
 class Game:
     def __init__(self, rom_path):
-        self._pyboy = PyBoy(rom_path)
+        self._pyboy = PyBoy(rom_path, sound_emulated=False)
         self._screen = ScreenReader(self._pyboy)
         self._menu = MenuReader(self._pyboy, self._screen)
         self._dialogue = DialogueAdvancer(self._pyboy, self._screen)

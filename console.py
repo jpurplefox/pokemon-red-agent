@@ -78,7 +78,7 @@ _POI_ICONS = {
     "Bookshelf": "📚", "Desk": "🗄️", "Plant": "🌿",
     "Bed": "🛏️", "Person": "🧑", "Object": "❓",
     "Pokémon": "🐾", "Item": "🔴", "Poké Ball": "🔴", "Boulder": "🪨",
-    "Nurse": "💊", "Book": "📖", "Clipboard": "📋",
+    "Nurse": "💊", "Cable Club": "🔌", "Book": "📖", "Clipboard": "📋",
     "Fossil": "🦴",
 }
 

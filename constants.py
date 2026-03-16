@@ -342,7 +342,7 @@ SPRITE_LABELS = {
     0x26: "Item",       # Poké Ball on ground
     0x28: "Boulder",    # Pushable boulder
     0x29: "Nurse",      # SPRITE_NURSE (Pokecenter nurse)
-    0x2A: "Book",       # Book / Map / Pokédex
+    0x2A: "Cable Club",  # SPRITE_LINK_RECEPTIONIST
     0x2B: "Clipboard",  # Clipboard
     0x2D: "Fossil",     # Old Amber (copy)
     0x2E: "Fossil",     # Old Amber
