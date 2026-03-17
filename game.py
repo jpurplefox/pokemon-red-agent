@@ -224,6 +224,8 @@ class Game:
             self._in_overworld = True
             if result.get("show_pois"):
                 self._show_pois = True
+        elif cmd == "lead":
+            self._change_lead()
         elif cmd == "start":
             self._pyboy.button("start", delay=8)
             self._pyboy.tick(30)
@@ -235,6 +237,112 @@ class Game:
                 self._print_surroundings()
 
         return True
+
+    def _change_lead(self):
+        """Let the player choose a new lead Pokemon via the in-game party menu."""
+        from constants import ADDR_CURRENT_MENU
+
+        party = self._battle._read_party()
+        if len(party) <= 1:
+            print("Only one Pokemon in party.")
+            return
+
+        # Show party and ask who should lead
+        print("\n--- Choose Lead ---")
+        options = []
+        for i, mon in enumerate(party):
+            label = mon['nickname']
+            if mon['nickname'] != mon['name']:
+                label = f"{mon['name']} ({mon['nickname']})"
+            lead = " ⭐" if i == 0 else ""
+            fainted = " 💀" if mon['hp'] <= 0 else ""
+            options.append(
+                f"{label} Lv{mon['level']}"
+                f"  {mon['hp']}/{mon['max_hp']} HP{lead}{fainted}"
+            )
+        options.append("Cancel")
+        choice = prompt_menu(options)
+
+        if choice == "Cancel":
+            return
+
+        # Find the selected party index
+        selected_idx = options.index(choice)
+        if selected_idx == 0:
+            print("Already the lead!")
+            return
+
+        # Open START menu
+        self._pyboy.button("start", delay=8)
+        self._pyboy.tick(30)
+
+        # Select POKéMON from start menu using menu reader
+        start_opts = self._menu.get_options()
+        pokemon_opt = next(
+            (o for o in start_opts
+             if "POK" in o.upper() and "DEX" not in o.upper()),
+            None,
+        )
+        if not pokemon_opt:
+            print(f"Could not find POKéMON in start menu: {start_opts}")
+            self._pyboy.button("b", delay=8)
+            self._pyboy.tick(15)
+            return
+        self._menu.select(pokemon_opt, start_opts)
+        self._pyboy.tick(40)
+
+        # Navigate party list to the target pokemon
+        current = self._pyboy.memory[ADDR_CURRENT_MENU]
+        diff = selected_idx - current
+        if diff > 0:
+            for _ in range(diff):
+                self._pyboy.button("down")
+                self._pyboy.tick(10)
+        elif diff < 0:
+            for _ in range(-diff):
+                self._pyboy.button("up")
+                self._pyboy.tick(10)
+
+        # Press A to open the sub-menu for this pokemon
+        self._pyboy.button("a")
+        self._pyboy.tick(40)
+
+        # Read sub-menu and select SWITCH
+        sub_opts = self._menu.get_options()
+        switch_opt = next(
+            (o for o in sub_opts if "SWITCH" in o.upper()),
+            None,
+        )
+        if not switch_opt:
+            print(f"Could not find SWITCH in sub-menu: {sub_opts}")
+            for _ in range(5):
+                self._pyboy.button("b", delay=8)
+                self._pyboy.tick(30)
+            return
+        self._menu.select(switch_opt, sub_opts)
+        self._pyboy.tick(40)
+
+        # Pick the swap target: navigate to position 0 (the lead)
+        current = self._pyboy.memory[ADDR_CURRENT_MENU]
+        for _ in range(current):
+            self._pyboy.button("up")
+            self._pyboy.tick(10)
+        self._pyboy.button("a")
+        self._pyboy.tick(30)
+
+        # Close remaining menus: party list → START menu → overworld
+        for _ in range(5):
+            self._pyboy.button("b", delay=8)
+            self._pyboy.tick(30)
+
+        # Verify the swap
+        new_party = self._battle._read_party()
+        new_lead = new_party[0]
+        label = new_lead['nickname']
+        if new_lead['nickname'] != new_lead['name']:
+            label = f"{new_lead['name']} ({new_lead['nickname']})"
+        print(f"New lead: {label} Lv{new_lead['level']}!")
+        self._show_pois = True
 
     def _handle_game_menu(self):
         """Handle the start menu and any sub-menus/dialogues it triggers."""

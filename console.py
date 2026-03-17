@@ -1,7 +1,7 @@
 """Console UI for interacting with the game (SRP: user input/output only)."""
 
 BUTTONS = {"up", "down", "left", "right", "a", "b", "start", "select"}
-COMMANDS = BUTTONS | {"quit", "look", "scan", "go"}
+COMMANDS = BUTTONS | {"quit", "look", "scan", "go", "lead"}
 
 
 def prompt_menu(options):
