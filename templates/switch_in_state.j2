@@ -1,0 +1,9 @@
+Your {{ fainted_name }} fainted!
+Battle type: {{ battle_type }}
+
+--- Enemy ---
+{{ enemy.name }}{% if enemy.types %} ({{ enemy.types }}){% endif %} Lv{{ enemy.level }}  HP: {{ enemy.hp }}/{{ enemy.max_hp }} ({{ enemy.hp_pct }}%){% if enemy.status %} [{{ enemy.status }}]{% endif %}
+
+--- Available Pokemon ---
+{% for mon in candidates %}- {{ mon.label }}{% if mon.types %} ({{ mon.types }}){% endif %} Lv{{ mon.level }} HP: {{ mon.hp }}/{{ mon.max_hp }}
+{% endfor %}

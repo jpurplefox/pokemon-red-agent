@@ -1,0 +1,8 @@
+The trainer is about to send their next pokemon.
+
+--- Your active pokemon ---
+{{ active.name }}{% if active.types %} ({{ active.types }}){% endif %} Lv{{ active.level }}  HP: {{ active.hp }}/{{ active.max_hp }} ({{ active.hp_pct }}%)
+
+--- Available to switch ---
+{% for mon in candidates %}- {{ mon.label }}{% if mon.types %} ({{ mon.types }}){% endif %} Lv{{ mon.level }} HP: {{ mon.hp }}/{{ mon.max_hp }}
+{% endfor %}

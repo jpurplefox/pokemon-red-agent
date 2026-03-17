@@ -469,8 +469,9 @@ class BattleHandler:
             options.append("RUN")
 
         if hasattr(self._strategy, 'choose_switch_in'):
+            enemy = self._read_mon(ADDR_ENEMY_MON)
             choice_idx = self._strategy.choose_switch_in(
-                party, indices, self.is_wild()
+                party, indices, self.is_wild(), enemy
             )
         else:
             print("\n--- Send out which POKéMON? ---")
@@ -488,12 +489,17 @@ class BattleHandler:
             self._pyboy.tick(30)
             return self.is_in_battle()
 
-        # Select YES from YES/NO menu
-        for _ in range(10):
-            self._pyboy.button("up")
-            self._pyboy.tick(5)
-        self._pyboy.button("a")
-        self._pyboy.tick(40)
+        # In wild battles there's a YES/NO menu ("Use next POKéMON?")
+        # In trainer battles the party screen opens directly after faint
+        if self.is_wild():
+            for _ in range(10):
+                self._pyboy.button("up")
+                self._pyboy.tick(5)
+            self._pyboy.button("a")
+            self._pyboy.tick(40)
+        else:
+            # Trainer: party screen is already open, just wait for it
+            self._pyboy.tick(40)
 
         # Navigate the party select screen to the chosen pokemon
         current = self._pyboy.memory[ADDR_CURRENT_MENU]
@@ -513,6 +519,86 @@ class BattleHandler:
         self._last_move_idx = 0
 
         return self.is_in_battle()
+
+    def _handle_trainer_switch_offer(self):
+        """Handle the 'Will X change POKéMON?' YES/NO prompt.
+
+        Appears after defeating a trainer's pokemon before they send
+        the next one.  Asks the strategy (AI or manual) whether to
+        switch, then selects YES/NO accordingly.
+
+        Returns True to keep processing.
+        """
+        from constants import ADDR_CURRENT_MENU
+
+        party = self._read_party()
+        active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
+
+        # Build switchable list
+        indices = []
+        options = []
+        for i, mon in enumerate(party):
+            if i == active_idx:
+                continue
+            if mon['hp'] <= 0:
+                continue
+            label = mon['nickname']
+            if mon['nickname'] != mon['name']:
+                label = f"{mon['name']} ({mon['nickname']})"
+            options.append(
+                f"{label} Lv{mon['level']}"
+                f"  {mon['hp']}/{mon['max_hp']} HP"
+            )
+            indices.append(i)
+
+        choice_idx = None
+
+        if not indices:
+            # No one to switch to — select NO
+            pass
+        elif hasattr(self._strategy, 'choose_switch_offer'):
+            choice_idx = self._strategy.choose_switch_offer(
+                party, active_idx, indices
+            )
+        else:
+            # Manual: ask the player
+            print("\n--- Switch POKéMON before next opponent? ---")
+            options.append("NO")
+            choice = prompt_menu(options)
+            if choice != "NO":
+                choice_idx = indices[options.index(choice)]
+
+        if choice_idx is None:
+            # Select NO
+            self._pyboy.button("down")
+            self._pyboy.tick(10)
+            self._pyboy.button("a")
+            self._pyboy.tick(30)
+        else:
+            # Select YES
+            for _ in range(10):
+                self._pyboy.button("up")
+                self._pyboy.tick(5)
+            self._pyboy.button("a")
+            self._pyboy.tick(40)
+
+            # Navigate party screen to chosen pokemon
+            current = self._pyboy.memory[ADDR_CURRENT_MENU]
+            diff = choice_idx - current
+            if diff > 0:
+                for _ in range(diff):
+                    self._pyboy.button("down")
+                    self._pyboy.tick(10)
+            elif diff < 0:
+                for _ in range(-diff):
+                    self._pyboy.button("up")
+                    self._pyboy.tick(10)
+            self._pyboy.button("a")
+            self._pyboy.tick(30)
+
+            self._last_move_idx = 0
+
+        return True
 
     def process_turn(self):
         """Advance through turn messages until the battle menu reappears,
@@ -607,9 +693,14 @@ class BattleHandler:
                     self._type_on_naming_keyboard(name.upper()[:10])
             return not self.is_in_battle()
 
-        # Detect fainted pokemon — "Use next POKéMON?" YES/NO menu
-        if "fainted" in turn_context.lower():
+        # Detect fainted pokemon
+        ctx = turn_context.lower()
+        if "fainted" in ctx and "is about to use" not in ctx:
+            # Our pokemon fainted — need to send replacement
             return self._handle_fainted_switch()
+        if "is about to use" in ctx:
+            # Enemy pokemon fainted, trainer sending next — offer switch
+            return self._handle_trainer_switch_offer()
 
         # Check for other choice menus
         options = self._menu.read_choice_menu()

@@ -100,12 +100,104 @@ class BattleAI:
             else:
                 _ai_print("No Poke Balls — going for the win!")
 
-    def choose_switch_in(self, party, alive_indices, is_wild):
+    def choose_switch_in(self, party, alive_indices, is_wild, enemy=None):
         """Choose which pokemon to send after one fainted.
 
-        Picks the highest-level alive pokemon. In wild battles, could
-        return -1 to run, but AI always fights.
+        Uses the LLM to pick the best pokemon considering type advantages
+        against the enemy. Falls back to highest-level if LLM fails or
+        no enemy data is available. Returns -1 to run (wild only).
         """
+        if not enemy or len(alive_indices) == 1:
+            # Only one option or no enemy data — skip LLM
+            idx = alive_indices[0]
+            label = party[idx]['nickname']
+            if party[idx]['nickname'] != party[idx]['name']:
+                label = f"{party[idx]['name']} ({party[idx]['nickname']})"
+            _ai_print(f"Sending out {label} Lv{party[idx]['level']}!")
+            return idx
+
+        # Build candidate list
+        candidates = []
+        for i in alive_indices:
+            mon = party[i]
+            nick = mon['nickname']
+            label = (f"{mon['name']} ({nick})"
+                     if nick != mon['name'] else nick)
+            m_types = POKEMON_TYPES.get(mon['name'].upper(), "")
+            candidates.append({
+                "label": label, "types": m_types,
+                "level": mon['level'],
+                "hp": mon['hp'], "max_hp": mon['max_hp'],
+            })
+
+        # Enemy data
+        e_types = POKEMON_TYPES.get(enemy['name'].upper(), "")
+        hp_pct = round(enemy['hp'] / enemy['max_hp'] * 100) if enemy['max_hp'] else 0
+        enemy_data = {
+            "name": enemy['name'], "types": e_types,
+            "level": enemy['level'],
+            "hp": enemy['hp'], "max_hp": enemy['max_hp'],
+            "hp_pct": hp_pct,
+            "status": enemy.get('status', ''),
+        }
+
+        # Find fainted pokemon name
+        fainted_name = "your pokemon"
+        active = self._active_idx
+        if active is not None and active < len(party):
+            fainted_name = party[active]['name']
+
+        battle_type = "Wild" if is_wild else "Trainer"
+
+        system_prompt = _render("switch_in.j2", is_wild=is_wild)
+        user_prompt = _render("switch_in_state.j2",
+                              fainted_name=fainted_name,
+                              battle_type=battle_type,
+                              enemy=enemy_data,
+                              candidates=candidates)
+
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+
+        response = self._llm.invoke(messages)
+        choice_idx = self._parse_switch_response(
+            response.content, party, alive_indices, is_wild
+        )
+        return choice_idx
+
+    def _parse_switch_response(self, text, party, alive_indices, is_wild):
+        """Parse LLM response for switch-in decision."""
+        # Print reasoning
+        for line in text.strip().split("\n"):
+            if line.strip().startswith("THINK:"):
+                reasoning = line.strip()[6:].strip()
+                _ai_print(reasoning)
+
+        # Find ACTION line
+        for line in text.strip().split("\n"):
+            line = line.strip()
+            if line.startswith("ACTION:"):
+                action = line[7:].strip()
+
+                if action == "RUN" and is_wild:
+                    _ai_print("chose: RUN!")
+                    return -1
+
+                if action.startswith("SWITCH:"):
+                    target = action[7:].strip()
+                    for i in alive_indices:
+                        mon = party[i]
+                        if (target.upper() in mon['nickname'].upper()
+                                or target.upper() in mon['name'].upper()):
+                            label = mon['nickname']
+                            if mon['nickname'] != mon['name']:
+                                label = f"{mon['name']} ({mon['nickname']})"
+                            _ai_print(f"Sending out {label} Lv{mon['level']}!")
+                            return i
+
+        # Fallback: highest level
         best_idx = alive_indices[0]
         best_level = 0
         for i in alive_indices:
@@ -115,8 +207,73 @@ class BattleAI:
         label = party[best_idx]['nickname']
         if party[best_idx]['nickname'] != party[best_idx]['name']:
             label = f"{party[best_idx]['name']} ({party[best_idx]['nickname']})"
-        _ai_print(f"Sending out {label} Lv{best_level}!")
+        _ai_print(f"(fallback) Sending out {label} Lv{best_level}!")
         return best_idx
+
+    def choose_switch_offer(self, party, active_idx, alive_indices):
+        """Decide whether to switch when given the chance between trainer mons.
+
+        Uses the LLM to decide. Returns a party index to switch to,
+        or None to stay.
+        """
+        current = party[active_idx]
+        hp_pct = round(current['hp'] / current['max_hp'] * 100) if current['max_hp'] else 100
+        p_types = POKEMON_TYPES.get(current['name'].upper(), "")
+        active_data = {
+            "name": current['name'], "types": p_types,
+            "level": current['level'],
+            "hp": current['hp'], "max_hp": current['max_hp'],
+            "hp_pct": hp_pct,
+        }
+
+        candidates = []
+        for i in alive_indices:
+            mon = party[i]
+            nick = mon['nickname']
+            label = (f"{mon['name']} ({nick})"
+                     if nick != mon['name'] else nick)
+            m_types = POKEMON_TYPES.get(mon['name'].upper(), "")
+            candidates.append({
+                "label": label, "types": m_types,
+                "level": mon['level'],
+                "hp": mon['hp'], "max_hp": mon['max_hp'],
+            })
+
+        system_prompt = _render("switch_offer.j2")
+        user_prompt = _render("switch_offer_state.j2",
+                              active=active_data, candidates=candidates)
+
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+        response = self._llm.invoke(messages)
+        text = response.content
+
+        for line in text.strip().split("\n"):
+            if line.strip().startswith("THINK:"):
+                _ai_print(line.strip()[6:].strip())
+
+        for line in text.strip().split("\n"):
+            line = line.strip()
+            if line.startswith("ACTION:"):
+                action = line[7:].strip()
+                if action == "STAY":
+                    return None
+                if action.startswith("SWITCH:"):
+                    target = action[7:].strip()
+                    for i in alive_indices:
+                        mon = party[i]
+                        if (target.upper() in mon['nickname'].upper()
+                                or target.upper() in mon['name'].upper()):
+                            label = mon['nickname']
+                            if mon['nickname'] != mon['name']:
+                                label = f"{mon['name']} ({mon['nickname']})"
+                            _ai_print(f"Switching to {label} Lv{mon['level']}!")
+                            return i
+
+        # Couldn't parse — stay
+        return None
 
     # ------------------------------------------------------------------
     # Decision
@@ -142,8 +299,29 @@ class BattleAI:
             HumanMessage(content=user_prompt),
         ]
 
-        response = self._llm.invoke(messages)
-        action = self._parse_response(response.content, player, balls)
+        max_retries = 2
+        for attempt in range(max_retries + 1):
+            response = self._llm.invoke(messages)
+            action, error = self._parse_response(
+                response.content, player, balls,
+            )
+            if action is not None:
+                break
+            _ai_print(f"(retry {attempt + 1}/{max_retries}: {error})")
+            if attempt < max_retries:
+                messages.append(response)
+                messages.append(HumanMessage(
+                    content=f"ERROR: {error}\nTry again."
+                ))
+
+        # Final fallback if all retries failed
+        if action is None:
+            available = [m[0] for m in player['moves'] if m[1] > 0]
+            if available:
+                _ai_print("(all retries failed, using first move)")
+                action = ("move", available[0])
+            else:
+                action = ("run", None)
 
         # Hard override: never RUN in trainer battles
         if not is_wild and action[0] == "run":
@@ -247,7 +425,12 @@ class BattleAI:
     # ------------------------------------------------------------------
 
     def _parse_response(self, text, player, balls=None):
-        """Parse the LLM response into an action tuple."""
+        """Parse the LLM response into an action tuple.
+
+        Returns (action_tuple, error_str | None).
+        error_str is set when the action couldn't be resolved so the
+        caller can retry with the error added to the prompt.
+        """
         # Print the AI's reasoning
         for line in text.strip().split("\n"):
             if line.strip().startswith("THINK:"):
@@ -260,44 +443,42 @@ class BattleAI:
             if line.startswith("ACTION:"):
                 action = line[7:].strip()
                 if action == "RUN":
-                    return ("run", None)
+                    return ("run", None), None
                 if action == "BALL":
                     if balls:
                         for name, count, bag_idx in balls:
                             if count > 0:
-                                return ("ball", bag_idx)
-                    _ai_print("(no balls available, attacking instead)")
+                                return ("ball", bag_idx), None
+                    return None, "No Poke Balls available. Choose a different action."
                 if action.startswith("SWITCH:"):
                     target = action[7:].strip()
                     for i, mon in enumerate(self._team):
-                        if (mon['name'] == player['name']
-                                and mon['hp'] == player['hp']):
+                        if i == self._active_idx:
                             continue
                         if mon['hp'] <= 0:
                             continue
                         if (target.upper() in mon['nickname'].upper()
                                 or target.upper() in mon['name'].upper()):
-                            return ("switch", i)
-                    _ai_print(f"(couldn't match '{target}' in party, attacking)")
+                            return ("switch", i), None
+                    return None, (
+                        f"'{target}' doesn't match any switchable party member. "
+                        f"Available: {[m['nickname'] for m in self._team if m['hp'] > 0 and self._team.index(m) != self._active_idx]}"
+                    )
                 if action.startswith("MOVE:"):
-                    move_name = action[5:].strip()
+                    move_name = action[5:].strip().replace("_", " ")
                     available = [m[0] for m in player['moves'] if m[1] > 0]
                     for m in available:
                         if m.upper() == move_name.upper():
-                            return ("move", m)
+                            return ("move", m), None
                     for m in available:
                         if move_name.upper() in m.upper():
-                            return ("move", m)
-                    if available:
-                        _ai_print(f"(couldn't match '{move_name}', using {available[0]})")
-                        return ("move", available[0])
+                            return ("move", m), None
+                    return None, (
+                        f"'{move_name}' doesn't match any available move. "
+                        f"Available moves: {available}"
+                    )
 
-        # Fallback: use first move with PP
-        available = [m[0] for m in player['moves'] if m[1] > 0]
-        if available:
-            _ai_print("(couldn't parse response, using first move)")
-            return ("move", available[0])
-        return ("run", None)
+        return None, f"Could not find ACTION: in your response. Use the exact format."
 
     # ------------------------------------------------------------------
     # Logging
