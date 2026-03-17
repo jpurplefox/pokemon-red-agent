@@ -16,13 +16,16 @@ from console import prompt_menu
 
 
 class BattleHandler:
-    def __init__(self, pyboy, screen, menu, dialogue, strategy=None):
+    def __init__(self, pyboy, screen, menu, dialogue, strategy=None,
+                 naming_ai=None):
         self._pyboy = pyboy
         self._screen = screen
         self._menu = menu
         self._dialogue = dialogue
         self._last_move_idx = 0  # move menu cursor starts at 0
         self._strategy = strategy or ManualStrategy()
+        self._naming_ai = naming_ai
+        self._team_names = []  # [(species, nickname), ...]
 
     # ------------------------------------------------------------------
     # State detection
@@ -83,6 +86,12 @@ class BattleHandler:
     # ------------------------------------------------------------------
     # Battle summary
     # ------------------------------------------------------------------
+
+    def _read_enemy_species(self):
+        """Read the enemy Pokemon's species name."""
+        mem = self._pyboy.memory
+        species = mem[ADDR_ENEMY_MON + BMON_SPECIES]
+        return POKEMON_NAMES.get(species, f"POKEMON#{species:02X}")
 
     def _read_mon(self, base):
         """Read a battle mon's stats from WRAM."""
@@ -340,7 +349,20 @@ class BattleHandler:
         is_naming_keyboard = "lower case" in lower_text or "upper case" in lower_text
 
         if is_nickname_prompt or is_naming_keyboard:
-            name = input("Enter nickname (empty to skip): ").strip()
+            # Get the species of the caught Pokemon from enemy data
+            caught_species = self._read_enemy_species()
+
+            if self._naming_ai:
+                name = self._naming_ai.suggest_name(
+                    caught_species, self._team_names
+                )
+            else:
+                name = input("Enter nickname (empty to skip): ").strip()
+
+            # Track the name for future naming decisions
+            if name:
+                self._team_names.append((caught_species, name))
+
             if is_nickname_prompt:
                 # We're at the YES/NO menu
                 options = self._menu.read_choice_menu()

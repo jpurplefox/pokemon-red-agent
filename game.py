@@ -25,7 +25,7 @@ from console import (
 
 
 class Game:
-    def __init__(self, rom_path, battle_strategy=None):
+    def __init__(self, rom_path, battle_strategy=None, naming_ai=None):
         self._pyboy = PyBoy(rom_path, sound_emulated=False)
         self._screen = ScreenReader(self._pyboy)
         self._menu = MenuReader(self._pyboy, self._screen)
@@ -42,7 +42,7 @@ class Game:
         )
         self._battle = BattleHandler(
             self._pyboy, self._screen, self._menu, self._dialogue,
-            strategy=battle_strategy,
+            strategy=battle_strategy, naming_ai=naming_ai,
         )
         self._debug = DebugScanner(self._pyboy, self._scanner)
 
