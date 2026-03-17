@@ -73,6 +73,13 @@ class BattleHandler:
             if clean.strip():
                 print(f"\n{clean.strip()}")
 
+        # Notify strategy of battle start (AI asks user for goal)
+        if hasattr(self._strategy, 'on_battle_start'):
+            player = self._read_mon(ADDR_BATTLE_MON)
+            enemy = self._read_mon(ADDR_ENEMY_MON)
+            balls = self.get_balls() if self.is_wild() else []
+            self._strategy.on_battle_start(player, enemy, self.is_wild(), balls)
+
     # ------------------------------------------------------------------
     # Battle summary
     # ------------------------------------------------------------------
