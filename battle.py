@@ -333,12 +333,50 @@ class BattleHandler:
         # Wait a bit for menu to fully render
         self._pyboy.tick(30)
 
-        # Check for choice menu (e.g. YES/NO for nickname)
+        # Detect nickname prompt: YES/NO choice or naming keyboard
+        text = self._screen.read_text_box() or ""
+        lower_text = text.lower()
+        is_nickname_prompt = "nickname" in lower_text
+        is_naming_keyboard = "lower case" in lower_text or "upper case" in lower_text
+
+        if is_nickname_prompt or is_naming_keyboard:
+            name = input("Enter nickname (empty to skip): ").strip()
+            if is_nickname_prompt:
+                # We're at the YES/NO menu
+                options = self._menu.read_choice_menu()
+                if not name:
+                    # Select NO
+                    no_idx = len(options) - 1 if options else 1
+                    for _ in range(10):
+                        self._pyboy.button("up")
+                        self._pyboy.tick(5)
+                    for _ in range(no_idx):
+                        self._pyboy.button("down")
+                        self._pyboy.tick(10)
+                    self._pyboy.button("a")
+                    self._pyboy.tick(30)
+                else:
+                    # Select YES (first option)
+                    for _ in range(10):
+                        self._pyboy.button("up")
+                        self._pyboy.tick(5)
+                    self._pyboy.button("a")
+                    self._pyboy.tick(60)
+                    # Now type the name on the keyboard
+                    self._type_on_naming_keyboard(name.upper()[:10])
+            elif is_naming_keyboard:
+                if not name:
+                    self._pyboy.button("b")
+                    self._pyboy.tick(60)
+                else:
+                    self._type_on_naming_keyboard(name.upper()[:10])
+            return not self.is_in_battle()
+
+        # Check for other choice menus
         options = self._menu.read_choice_menu()
         if options:
             choice = prompt_menu(options)
             target_idx = options.index(choice)
-            # Navigate from top
             for _ in range(10):
                 self._pyboy.button("up")
                 self._pyboy.tick(5)
@@ -348,18 +386,6 @@ class BattleHandler:
             self._pyboy.button("a")
             self._pyboy.tick(30)
             return self.is_in_battle()
-
-        # Check for naming keyboard
-        text = self._screen.read_text_box()
-        if text and ("lower case" in text.lower() or "upper case" in text.lower()):
-            name = input("Enter nickname (empty for default): ").strip()
-            if not name:
-                # Press B to keep default name
-                self._pyboy.button("b")
-                self._pyboy.tick(60)
-            else:
-                self._type_on_naming_keyboard(name.upper()[:10])
-            return not self.is_in_battle()  # battle is over after catch
 
         # Nothing detected — keep going
         return self.is_in_battle()
