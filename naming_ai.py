@@ -11,6 +11,11 @@ from langchain_core.messages import SystemMessage, HumanMessage
 _PURPLE = "\033[35m"
 _RESET = "\033[0m"
 
+
+def _ai_print(msg):
+    print(f"{_PURPLE}  AI: {msg}{_RESET}")
+
+
 # Gen 1 evolution lines (species → [stage1, stage2, stage3])
 EVOLUTION_LINES = {
     "BULBASAUR": ["BULBASAUR", "IVYSAUR", "VENUSAUR"],
@@ -186,6 +191,7 @@ class NamingAI:
             HumanMessage(content=prompt),
         ]
 
+        _ai_print(f"[Naming prompt]\n{_PURPLE}{prompt}{_RESET}")
         response = self._llm.invoke(messages)
         name = self._parse_name(response.content)
 

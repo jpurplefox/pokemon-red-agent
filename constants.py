@@ -36,6 +36,15 @@ ADDR_TILESET_BANK = 0xD52B     # wTilesetBank: ROM bank for tileset data
 ADDR_TILESET_BLOCKS_PTR = 0xD52C  # wTilesetBlocksPtr: pointer to block defs (4x4 tiles each)
 ADDR_TILESET_COLL_PTR = 0xD530    # wTilesetCollisionPtr: pointer to walkable tile ID list
 
+# Party data
+ADDR_PARTY_COUNT = 0xD163     # wPartyCount: number of pokemon in party (0-6)
+ADDR_PARTY_SPECIES = 0xD164   # wPartySpecies: 6 bytes, species IDs
+ADDR_PARTY_MONS = 0xD16B      # wPartyMon1: 44 bytes per pokemon
+PARTY_MON_SIZE = 44           # bytes per party pokemon struct
+PARTY_MON_LEVEL = 0x21        # offset to level within party mon struct
+ADDR_PARTY_NICKS = 0xD2B5     # wPartyMonNick: 11 bytes per nickname (10 chars + 0x50)
+PARTY_NICK_SIZE = 11          # bytes per nickname entry
+
 # Map structure (block map)
 ADDR_MAP_HEIGHT = 0xD368       # wCurMapHeight (in blocks)
 ADDR_MAP_WIDTH = 0xD369        # wCurMapWidth (in blocks)

@@ -10,8 +10,12 @@ from constants import (
     BMON_SPECIES, BMON_HP, BMON_STATUS, BMON_MOVES,
     BMON_PP, BMON_LEVEL, BMON_MAX_HP,
     ADDR_NUM_BAG_ITEMS, ADDR_BAG_ITEMS, BALL_ITEMS,
+    ADDR_PARTY_COUNT, ADDR_PARTY_SPECIES, ADDR_PARTY_MONS,
+    PARTY_MON_SIZE, PARTY_MON_LEVEL,
+    ADDR_PARTY_NICKS, PARTY_NICK_SIZE,
 )
 from pokemon_data import POKEMON_NAMES, MOVE_NAMES, MOVE_BASE_PP, status_text
+from constants import POKEMON_CHARMAP
 from console import prompt_menu
 
 
@@ -25,7 +29,6 @@ class BattleHandler:
         self._last_move_idx = 0  # move menu cursor starts at 0
         self._strategy = strategy or ManualStrategy()
         self._naming_ai = naming_ai
-        self._team_names = []  # [(species, nickname), ...]
 
     # ------------------------------------------------------------------
     # State detection
@@ -76,7 +79,9 @@ class BattleHandler:
             if clean.strip():
                 print(f"\n{clean.strip()}")
 
-        # Notify strategy of battle start (AI asks user for goal)
+        # Update strategy with current team roster and notify of battle start
+        if hasattr(self._strategy, 'set_team'):
+            self._strategy.set_team(self._read_party())
         if hasattr(self._strategy, 'on_battle_start'):
             player = self._read_mon(ADDR_BATTLE_MON)
             enemy = self._read_mon(ADDR_ENEMY_MON)
@@ -92,6 +97,31 @@ class BattleHandler:
         mem = self._pyboy.memory
         species = mem[ADDR_ENEMY_MON + BMON_SPECIES]
         return POKEMON_NAMES.get(species, f"POKEMON#{species:02X}")
+
+    def _read_party(self):
+        """Read the player's party: list of {name, level, nickname}."""
+        mem = self._pyboy.memory
+        count = mem[ADDR_PARTY_COUNT]
+        party = []
+        for i in range(min(count, 6)):
+            species_id = mem[ADDR_PARTY_SPECIES + i]
+            name = POKEMON_NAMES.get(species_id, f"#{species_id:02X}")
+            base = ADDR_PARTY_MONS + i * PARTY_MON_SIZE
+            level = mem[base + PARTY_MON_LEVEL]
+            # Read nickname from WRAM
+            nick_base = ADDR_PARTY_NICKS + i * PARTY_NICK_SIZE
+            nickname = ""
+            for j in range(10):
+                tile = mem[nick_base + j]
+                if tile == 0x50:
+                    break
+                nickname += POKEMON_CHARMAP.get(tile, "")
+            party.append({
+                "name": name,
+                "level": level,
+                "nickname": nickname.strip() or name,
+            })
+        return party
 
     def _read_mon(self, base):
         """Read a battle mon's stats from WRAM."""
@@ -353,15 +383,17 @@ class BattleHandler:
             caught_species = self._read_enemy_species()
 
             if self._naming_ai:
+                # Read actual party with real nicknames from WRAM
+                # Exclude last entry — it's the Pokemon we just caught
+                party = self._read_party()[:-1]
+                team_context = [
+                    (m['name'], m['nickname']) for m in party
+                ]
                 name = self._naming_ai.suggest_name(
-                    caught_species, self._team_names
+                    caught_species, team_context
                 )
             else:
                 name = input("Enter nickname (empty to skip): ").strip()
-
-            # Track the name for future naming decisions
-            if name:
-                self._team_names.append((caught_species, name))
 
             if is_nickname_prompt:
                 # We're at the YES/NO menu

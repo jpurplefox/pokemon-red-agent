@@ -66,13 +66,20 @@ ACTION: MOVE:TACKLE"""
 
 
 class BattleAI:
-    def __init__(self, base_url="http://localhost:11434", model="qwen2.5:3b"):
+    def __init__(self, base_url="http://localhost:11434", model="qwen2.5:3b",
+                 scout=None):
         self._llm = ChatOllama(
             base_url=base_url,
             model=model,
             temperature=0.3,
         )
         self._goal = None  # "defeat" or "catch"
+        self._scout = scout
+        self._team = []  # [{name, level}, ...] — updated from battle data
+
+    def set_team(self, team):
+        """Update the current team roster for scout decisions."""
+        self._team = team
 
     def on_battle_start(self, player, enemy, is_wild, balls=None):
         """Called at the start of a new battle to set the goal."""
@@ -80,11 +87,20 @@ class BattleAI:
         if is_wild:
             has_balls = balls and any(c > 0 for _, c, _ in balls)
             _ai_print(f"A wild {enemy['name']} (Lv{enemy['level']}) appeared!")
-            if has_balls:
+            if has_balls and self._scout:
+                should_catch = self._scout.should_catch(
+                    enemy['name'], enemy['level'], self._team
+                )
+                if should_catch:
+                    self._goal = "catch"
+                    _ai_print(f"Goal: CATCH {enemy['name']}!")
+                else:
+                    _ai_print(f"Goal: DEFEAT {enemy['name']}!")
+            elif has_balls:
                 choice = input(f"{_PURPLE}  AI: Fight or catch? [f/c]: {_RESET}").strip().lower()
                 if choice.startswith("c"):
                     self._goal = "catch"
-                    _ai_print(f"Goal: CATCH {enemy['name']}! Will weaken first, then throw ball.")
+                    _ai_print(f"Goal: CATCH {enemy['name']}!")
                 else:
                     _ai_print(f"Goal: DEFEAT {enemy['name']}!")
             else:
