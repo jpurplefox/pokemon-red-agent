@@ -1,0 +1,34 @@
+Battle type: {{ battle_type }}
+{% if goal %}Goal: {{ goal }} the enemy{% endif %}
+{% if history %}
+
+--- Previous Turns ---
+{% for turn in history %}
+Turn {{ loop.index }}: {{ turn.text }}
+  -> {{ turn.damage }}
+{% endfor %}
+{% endif %}
+
+--- Enemy ---
+{{ enemy.name }}{% if enemy.types %} ({{ enemy.types }}){% endif %} Lv{{ enemy.level }}  HP: {{ enemy.hp }}/{{ enemy.max_hp }} ({{ enemy.hp_pct }}%){% if enemy.status %} [{{ enemy.status }}]{% endif %}
+
+{% if goal == "CATCH" %}
+{% if enemy.hp_pct <= 50 %}>>> Enemy HP is LOW -- throw a Poke Ball NOW! <<<
+{% elif enemy.hp_pct <= 75 %}>>> Enemy is weakened, consider throwing a ball. <<<
+{% else %}>>> Enemy HP is high, weaken it with a damage move. <<<
+{% endif %}
+{% endif %}
+--- Your Pokemon ---
+{{ player.name }}{% if player.types %} ({{ player.types }}){% endif %} Lv{{ player.level }}  HP: {{ player.hp }}/{{ player.max_hp }}{% if player.status %} [{{ player.status }}]{% endif %}
+
+Moves:
+{% for move in player.moves %}  - {{ move.name }}{% if move.type %} [{{ move.type }}]{% endif %} ({{ move.pp }}/{{ move.max_pp }} PP)
+{% endfor %}
+{% if balls %}
+Poke Balls: {{ balls | join(", ") }}
+{% endif %}
+{% if switchable %}
+Party (available to switch):
+{% for mon in switchable %}  - {{ mon.label }}{% if mon.types %} ({{ mon.types }}){% endif %} Lv{{ mon.level }} HP: {{ mon.hp }}/{{ mon.max_hp }}
+{% endfor %}
+{% endif %}

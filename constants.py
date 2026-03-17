@@ -370,6 +370,7 @@ SPRITE_LABELS = {
 
 # Battle state
 ADDR_IS_IN_BATTLE = 0xD057     # wIsInBattle: 0=no, 1=wild, 2=trainer
+ADDR_PLAYER_MON_NUMBER = 0xCC2F  # wPlayerMonNumber: party index of active battle pokemon
 
 # Battle mon structures (battle struct is shorter than party struct:
 # no EVs, no OT ID, no experience — just DVs between moves and PP)

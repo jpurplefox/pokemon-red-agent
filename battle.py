@@ -7,6 +7,7 @@ Dependencies injected via constructor (DIP).
 
 from constants import (
     ADDR_IS_IN_BATTLE, ADDR_BATTLE_MON, ADDR_ENEMY_MON,
+    ADDR_PLAYER_MON_NUMBER,
     BMON_SPECIES, BMON_HP, BMON_STATUS, BMON_MOVES,
     BMON_PP, BMON_LEVEL, BMON_MAX_HP,
     ADDR_NUM_BAG_ITEMS, ADDR_BAG_ITEMS, BALL_ITEMS,
@@ -81,7 +82,8 @@ class BattleHandler:
 
         # Update strategy with current team roster and notify of battle start
         if hasattr(self._strategy, 'set_team'):
-            self._strategy.set_team(self._read_party())
+            active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
+            self._strategy.set_team(self._read_party(), active_idx)
         if hasattr(self._strategy, 'on_battle_start'):
             player = self._read_mon(ADDR_BATTLE_MON)
             enemy = self._read_mon(ADDR_ENEMY_MON)
@@ -192,19 +194,21 @@ class BattleHandler:
 
         # Show party
         party = self._read_party()
+        active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
         if len(party) > 1:
-            active_name = player['name']
             print("  Party:")
-            for mon in party:
-                is_active = (mon['name'] == active_name
-                             and mon['hp'] == player['hp'])
+            for i, mon in enumerate(party):
+                is_active = (i == active_idx)
                 flag = " ⚔️" if is_active else ""
                 fainted = " 💀" if mon['hp'] <= 0 else ""
                 label = mon['nickname']
                 if mon['nickname'] != mon['name']:
                     label = f"{mon['name']} ({mon['nickname']})"
+                # Show battle HP for active, party HP for others
+                hp = player['hp'] if is_active else mon['hp']
+                max_hp = player['max_hp'] if is_active else mon['max_hp']
                 print(f"    {label} Lv{mon['level']}"
-                      f"  {mon['hp']}/{mon['max_hp']} HP{flag}{fainted}")
+                      f"  {hp}/{max_hp} HP{flag}{fainted}")
         print(f"{'=' * 40}")
 
     # ------------------------------------------------------------------
@@ -223,6 +227,18 @@ class BattleHandler:
                 balls.append((BALL_ITEMS[item_id], count, i))
         return balls
 
+    def _record_turn(self, text):
+        """Pass turn text and current HP to the strategy for history tracking."""
+        if not hasattr(self._strategy, 'add_turn'):
+            return
+        player = self._read_mon(ADDR_BATTLE_MON)
+        enemy = self._read_mon(ADDR_ENEMY_MON)
+        self._strategy.add_turn(
+            text,
+            player['hp'], player['max_hp'],
+            enemy['hp'], enemy['max_hp'],
+        )
+
     # ------------------------------------------------------------------
     # Battle actions
     # ------------------------------------------------------------------
@@ -232,6 +248,11 @@ class BattleHandler:
         player = self._read_mon(ADDR_BATTLE_MON)
         enemy = self._read_mon(ADDR_ENEMY_MON)
         balls = self.get_balls() if self.is_wild() else []
+        active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
+
+        # Refresh party data so strategy has current info
+        if hasattr(self._strategy, 'set_team'):
+            self._strategy.set_team(self._read_party(), active_idx)
 
         action_type, detail = self._strategy.decide(
             player, enemy, self.is_wild(), balls
@@ -406,6 +427,7 @@ class BattleHandler:
         Handles mid-battle events inline (e.g. nickname prompt after catch).
         Returns True if the battle continues, False if ended.
         """
+        turn_texts = []
         while True:
             full = self._dialogue.advance_until(
                 lambda d, u: (self.has_battle_menu()
@@ -414,14 +436,18 @@ class BattleHandler:
             )
             if full:
                 print(f"\n{full}")
+                turn_texts.append(full)
 
             if self.has_battle_menu() and self.is_in_battle():
+                self._record_turn(" ".join(turn_texts))
                 return True
             if not self.is_in_battle():
+                self._record_turn(" ".join(turn_texts))
                 return False
 
             # Handle mid-battle events (choice menu or naming keyboard)
             if not self._handle_mid_battle_event():
+                self._record_turn(" ".join(turn_texts))
                 return False
 
     def _handle_mid_battle_event(self):
@@ -560,9 +586,11 @@ class ManualStrategy:
 
     def __init__(self):
         self._party = []
+        self._active_idx = None
 
-    def set_team(self, party):
+    def set_team(self, party, active_idx=None):
         self._party = party
+        self._active_idx = active_idx
 
     def decide(self, player, enemy, is_wild, balls=None):
         actions = []
@@ -573,9 +601,7 @@ class ManualStrategy:
                 actions.append(f"🔴 {ball_name} ×{count}")
         # Show switchable party members (alive, not currently active)
         for i, mon in enumerate(self._party):
-            # Skip the active Pokemon (matches species + HP of battle mon)
-            if (mon['name'] == player['name']
-                    and mon['hp'] == player['hp']):
+            if i == self._active_idx:
                 continue
             if mon['hp'] <= 0:
                 continue  # skip fainted
