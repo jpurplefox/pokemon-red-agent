@@ -49,9 +49,15 @@ _TITLE_FG = (160, 140, 220)
 # ── Main loop (runs in child process) ─────────────────────────────────
 
 def _run(q: mp.Queue):
-    import pygame
+    import os
+    os.environ["PYGAME_HIDE_SUPPORT_PROMPT"] = "1"
+    # Suppress macOS SDL/IMK warnings
+    os.environ.setdefault("SDL_LOG_PRIORITY", "quiet")
 
-    pygame.init()
+    import contextlib, io
+    with contextlib.redirect_stderr(io.StringIO()):
+        import pygame
+        pygame.init()
     screen = pygame.display.set_mode((_WIDTH, _HEIGHT), pygame.RESIZABLE)
     pygame.display.set_caption("AI Thoughts")
     clock = pygame.time.Clock()

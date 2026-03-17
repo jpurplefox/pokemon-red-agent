@@ -12,7 +12,7 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
-from pokemon_data import POKEMON_TYPES, MOVE_TYPES
+from pokemon_data import POKEMON_TYPES, MOVE_TYPES, MOVE_DATA
 
 _PURPLE = "\033[35m"
 _RESET = "\033[0m"
@@ -312,16 +312,27 @@ class BattleAI:
         system_prompt = self._render_system()
         user_prompt = self._render_state(player, enemy, is_wild, balls)
 
+        print(f"\n{'='*60}")
+        print(f"SYSTEM PROMPT:\n{system_prompt}")
+        print(f"\nUSER PROMPT:\n{user_prompt}")
+        print(f"{'='*60}\n")
+
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
 
         max_retries = 2
+        last_text = ""
         for attempt in range(max_retries + 1):
             response = self._llm.invoke(messages)
+            last_text = response.content
+            # Print reasoning to console for every attempt
+            for line in last_text.strip().split("\n"):
+                if line.strip().startswith("THINK:"):
+                    _ai_print(line.strip()[6:].strip())
             action, error = self._parse_response(
-                response.content, player, balls,
+                last_text, player, balls,
             )
             if action is not None:
                 break
@@ -331,6 +342,11 @@ class BattleAI:
                 messages.append(HumanMessage(
                     content=f"ERROR: {error}\nTry again."
                 ))
+
+        # Send only the final reasoning to the AI window
+        for line in last_text.strip().split("\n"):
+            if line.strip().startswith("THINK:"):
+                _ai_think(line.strip()[6:].strip())
 
         # Final fallback if all retries failed
         if action is None:
@@ -392,13 +408,22 @@ class BattleAI:
             "status": enemy.get('status', ''),
         }
 
-        # Player data with typed moves
+        # Player data with typed moves + power/description
         p_types = POKEMON_TYPES.get(player['name'].upper(), "")
         moves = []
         for name, pp, max_pp in player['moves']:
             m_type = MOVE_TYPES.get(name.upper(), "")
-            moves.append({"name": name, "type": m_type,
-                          "pp": pp, "max_pp": max_pp})
+            data = MOVE_DATA.get(name.upper())
+            power = data[0] if data else 0
+            accuracy = data[1] if data else 0
+            category = data[2] if data else ""
+            desc = data[3] if data else ""
+            moves.append({
+                "name": name, "type": m_type,
+                "pp": pp, "max_pp": max_pp,
+                "power": power, "accuracy": accuracy,
+                "category": category, "desc": desc,
+            })
         player_data = {
             "name": player['name'], "types": p_types,
             "level": player['level'],
@@ -449,12 +474,6 @@ class BattleAI:
         error_str is set when the action couldn't be resolved so the
         caller can retry with the error added to the prompt.
         """
-        # Print the AI's reasoning
-        for line in text.strip().split("\n"):
-            if line.strip().startswith("THINK:"):
-                reasoning = line.strip()[6:].strip()
-                _ai_think(reasoning)
-
         # Find the ACTION line
         for line in text.strip().split("\n"):
             line = line.strip()
