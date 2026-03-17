@@ -398,6 +398,9 @@ class BattleHandler:
         self._pyboy.button("a")
         self._pyboy.tick(10)
 
+        # Game resets move cursor to 0 when a new pokemon enters battle
+        self._last_move_idx = 0
+
     def _select_move(self, move_idx):
         """Select a move by index (0-3) from the move menu.
 
@@ -419,6 +422,97 @@ class BattleHandler:
         self._pyboy.button("a")
         self._pyboy.tick(10)
         self._last_move_idx = move_idx
+
+    def _handle_fainted_switch(self):
+        """Handle switching after a party pokemon fainted.
+
+        For wild battles: show party + RUN option.
+        For trainer battles: show party directly (must choose).
+        Auto-selects YES from the "Use next POKéMON?" menu, then
+        navigates the party screen to send out the chosen pokemon.
+
+        Returns True to keep processing, False if battle ended/fled.
+        """
+        from constants import ADDR_CURRENT_MENU
+
+        party = self._read_party()
+        player = self._read_mon(ADDR_BATTLE_MON)
+        active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
+
+        # Build options: alive non-active party members
+        options = []
+        indices = []
+        for i, mon in enumerate(party):
+            if i == active_idx:
+                continue
+            if mon['hp'] <= 0:
+                continue
+            label = mon['nickname']
+            if mon['nickname'] != mon['name']:
+                label = f"{mon['name']} ({mon['nickname']})"
+            options.append(
+                f"{label} Lv{mon['level']}"
+                f"  {mon['hp']}/{mon['max_hp']} HP"
+            )
+            indices.append(i)
+
+        if not options:
+            # No alive pokemon left — select NO to end
+            self._pyboy.button("down")
+            self._pyboy.tick(10)
+            self._pyboy.button("a")
+            self._pyboy.tick(30)
+            return self.is_in_battle()
+
+        # Ask strategy or player which pokemon to send
+        if self.is_wild():
+            options.append("RUN")
+
+        if hasattr(self._strategy, 'choose_switch_in'):
+            choice_idx = self._strategy.choose_switch_in(
+                party, indices, self.is_wild()
+            )
+        else:
+            print("\n--- Send out which POKéMON? ---")
+            choice = prompt_menu(options)
+            if choice == "RUN":
+                choice_idx = -1  # signal to flee
+            else:
+                choice_idx = indices[options.index(choice)]
+
+        if choice_idx == -1:
+            # Run: select NO from YES/NO menu
+            self._pyboy.button("down")
+            self._pyboy.tick(10)
+            self._pyboy.button("a")
+            self._pyboy.tick(30)
+            return self.is_in_battle()
+
+        # Select YES from YES/NO menu
+        for _ in range(10):
+            self._pyboy.button("up")
+            self._pyboy.tick(5)
+        self._pyboy.button("a")
+        self._pyboy.tick(40)
+
+        # Navigate the party select screen to the chosen pokemon
+        current = self._pyboy.memory[ADDR_CURRENT_MENU]
+        diff = choice_idx - current
+        if diff > 0:
+            for _ in range(diff):
+                self._pyboy.button("down")
+                self._pyboy.tick(10)
+        elif diff < 0:
+            for _ in range(-diff):
+                self._pyboy.button("up")
+                self._pyboy.tick(10)
+        self._pyboy.button("a")
+        self._pyboy.tick(30)
+
+        # Game resets move cursor to 0 when a new pokemon enters battle
+        self._last_move_idx = 0
+
+        return self.is_in_battle()
 
     def process_turn(self):
         """Advance through turn messages until the battle menu reappears,
@@ -446,11 +540,12 @@ class BattleHandler:
                 return False
 
             # Handle mid-battle events (choice menu or naming keyboard)
-            if not self._handle_mid_battle_event():
-                self._record_turn(" ".join(turn_texts))
+            turn_context = " ".join(turn_texts)
+            if not self._handle_mid_battle_event(turn_context):
+                self._record_turn(turn_context)
                 return False
 
-    def _handle_mid_battle_event(self):
+    def _handle_mid_battle_event(self, turn_context=""):
         """Handle a choice menu or naming keyboard that appeared mid-battle.
 
         Returns True to keep processing, False if battle ended.
@@ -511,6 +606,10 @@ class BattleHandler:
                 else:
                     self._type_on_naming_keyboard(name.upper()[:10])
             return not self.is_in_battle()
+
+        # Detect fainted pokemon — "Use next POKéMON?" YES/NO menu
+        if "fainted" in turn_context.lower():
+            return self._handle_fainted_switch()
 
         # Check for other choice menus
         options = self._menu.read_choice_menu()

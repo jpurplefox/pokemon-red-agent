@@ -100,6 +100,24 @@ class BattleAI:
             else:
                 _ai_print("No Poke Balls — going for the win!")
 
+    def choose_switch_in(self, party, alive_indices, is_wild):
+        """Choose which pokemon to send after one fainted.
+
+        Picks the highest-level alive pokemon. In wild battles, could
+        return -1 to run, but AI always fights.
+        """
+        best_idx = alive_indices[0]
+        best_level = 0
+        for i in alive_indices:
+            if party[i]['level'] > best_level:
+                best_level = party[i]['level']
+                best_idx = i
+        label = party[best_idx]['nickname']
+        if party[best_idx]['nickname'] != party[best_idx]['name']:
+            label = f"{party[best_idx]['name']} ({party[best_idx]['nickname']})"
+        _ai_print(f"Sending out {label} Lv{best_level}!")
+        return best_idx
+
     # ------------------------------------------------------------------
     # Decision
     # ------------------------------------------------------------------
