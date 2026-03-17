@@ -41,7 +41,9 @@ ADDR_PARTY_COUNT = 0xD163     # wPartyCount: number of pokemon in party (0-6)
 ADDR_PARTY_SPECIES = 0xD164   # wPartySpecies: 6 bytes, species IDs
 ADDR_PARTY_MONS = 0xD16B      # wPartyMon1: 44 bytes per pokemon
 PARTY_MON_SIZE = 44           # bytes per party pokemon struct
+PARTY_MON_HP = 0x01           # 2 bytes big-endian, current HP
 PARTY_MON_LEVEL = 0x21        # offset to level within party mon struct
+PARTY_MON_MAX_HP = 0x22       # 2 bytes big-endian, max HP
 ADDR_PARTY_NICKS = 0xD2B5     # wPartyMonNick: 11 bytes per nickname (10 chars + 0x50)
 PARTY_NICK_SIZE = 11          # bytes per nickname entry
 

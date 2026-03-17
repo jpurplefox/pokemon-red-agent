@@ -11,7 +11,7 @@ from constants import (
     BMON_PP, BMON_LEVEL, BMON_MAX_HP,
     ADDR_NUM_BAG_ITEMS, ADDR_BAG_ITEMS, BALL_ITEMS,
     ADDR_PARTY_COUNT, ADDR_PARTY_SPECIES, ADDR_PARTY_MONS,
-    PARTY_MON_SIZE, PARTY_MON_LEVEL,
+    PARTY_MON_SIZE, PARTY_MON_LEVEL, PARTY_MON_HP, PARTY_MON_MAX_HP,
     ADDR_PARTY_NICKS, PARTY_NICK_SIZE,
 )
 from pokemon_data import POKEMON_NAMES, MOVE_NAMES, MOVE_BASE_PP, status_text
@@ -108,6 +108,8 @@ class BattleHandler:
             name = POKEMON_NAMES.get(species_id, f"#{species_id:02X}")
             base = ADDR_PARTY_MONS + i * PARTY_MON_SIZE
             level = mem[base + PARTY_MON_LEVEL]
+            hp = (mem[base + PARTY_MON_HP] << 8) | mem[base + PARTY_MON_HP + 1]
+            max_hp = (mem[base + PARTY_MON_MAX_HP] << 8) | mem[base + PARTY_MON_MAX_HP + 1]
             # Read nickname from WRAM
             nick_base = ADDR_PARTY_NICKS + i * PARTY_NICK_SIZE
             nickname = ""
@@ -119,6 +121,8 @@ class BattleHandler:
             party.append({
                 "name": name,
                 "level": level,
+                "hp": hp,
+                "max_hp": max_hp,
                 "nickname": nickname.strip() or name,
             })
         return party
@@ -185,6 +189,22 @@ class BattleHandler:
                 print("  Bag:")
                 for ball_name, count, _ in balls:
                     print(f"    🔴 {ball_name} ×{count}")
+
+        # Show party
+        party = self._read_party()
+        if len(party) > 1:
+            active_name = player['name']
+            print("  Party:")
+            for mon in party:
+                is_active = (mon['name'] == active_name
+                             and mon['hp'] == player['hp'])
+                flag = " ⚔️" if is_active else ""
+                fainted = " 💀" if mon['hp'] <= 0 else ""
+                label = mon['nickname']
+                if mon['nickname'] != mon['name']:
+                    label = f"{mon['name']} ({mon['nickname']})"
+                print(f"    {label} Lv{mon['level']}"
+                      f"  {mon['hp']}/{mon['max_hp']} HP{flag}{fainted}")
         print(f"{'=' * 40}")
 
     # ------------------------------------------------------------------
@@ -225,6 +245,8 @@ class BattleHandler:
             self._select_battle_option("RUN")
         elif action_type == "ball":
             self._use_ball(detail)
+        elif action_type == "switch":
+            self._switch_pokemon(detail)
         else:
             move_idx = next(
                 (i for i, (n, _, _) in enumerate(player['moves'])
@@ -314,6 +336,44 @@ class BattleHandler:
         self._pyboy.tick(20)
 
         # If the game asks "Use this item?" just confirm
+        self._pyboy.button("a")
+        self._pyboy.tick(10)
+
+    def _switch_pokemon(self, party_idx):
+        """Switch to a different Pokemon by party index (0-based).
+
+        Reads wCurrentMenuItem from WRAM to know the cursor position
+        after the party menu opens, then navigates relative to it.
+        """
+        from constants import ADDR_CURRENT_MENU
+
+        self._select_battle_option("PKMN")
+        # Wait for party menu to appear and become interactive
+        for _ in range(30):
+            self._pyboy.tick(10)
+            if not self.has_battle_menu():
+                break
+        # Extra delay for the party menu to fully render
+        self._pyboy.tick(40)
+
+        # Read current cursor position from WRAM
+        current = self._pyboy.memory[ADDR_CURRENT_MENU]
+        diff = party_idx - current
+
+        if diff > 0:
+            for _ in range(diff):
+                self._pyboy.button("down")
+                self._pyboy.tick(10)
+        elif diff < 0:
+            for _ in range(-diff):
+                self._pyboy.button("up")
+                self._pyboy.tick(10)
+
+        # Select the Pokemon
+        self._pyboy.button("a")
+        self._pyboy.tick(20)
+
+        # The game shows a sub-menu (SWITCH/STATS) — select SWITCH (first option)
         self._pyboy.button("a")
         self._pyboy.tick(10)
 
@@ -498,6 +558,12 @@ class BattleHandler:
 class ManualStrategy:
     """Console-based battle strategy — prompts the player for input."""
 
+    def __init__(self):
+        self._party = []
+
+    def set_team(self, party):
+        self._party = party
+
     def decide(self, player, enemy, is_wild, balls=None):
         actions = []
         for name, pp, max_pp in player['moves']:
@@ -505,6 +571,21 @@ class ManualStrategy:
         if balls:
             for ball_name, count, _ in balls:
                 actions.append(f"🔴 {ball_name} ×{count}")
+        # Show switchable party members (alive, not currently active)
+        for i, mon in enumerate(self._party):
+            # Skip the active Pokemon (matches species + HP of battle mon)
+            if (mon['name'] == player['name']
+                    and mon['hp'] == player['hp']):
+                continue
+            if mon['hp'] <= 0:
+                continue  # skip fainted
+            label = mon['nickname']
+            if mon['nickname'] != mon['name']:
+                label = f"{mon['name']} ({mon['nickname']})"
+            actions.append(
+                f"🔄 {label} Lv{mon['level']}"
+                f" ({mon['hp']}/{mon['max_hp']} HP)"
+            )
         if is_wild:
             actions.append("RUN")
         actions.append("CANCEL")
@@ -513,13 +594,21 @@ class ManualStrategy:
 
         if choice == "CANCEL":
             return ("cancel", None)
-        if "RUN" in choice and "🔴" not in choice:
+        if "RUN" in choice and "🔴" not in choice and "🔄" not in choice:
             return ("run", None)
         if "🔴" in choice:
-            # Find the bag index for this ball
             ball_label = choice.split("🔴 ")[1].split(" ×")[0]
             for ball_name, _, bag_idx in balls:
                 if ball_name == ball_label:
                     return ("ball", bag_idx)
+        if "🔄" in choice:
+            # Find party index — match the full label before " Lv"
+            label = choice.split("🔄 ")[1].split(" Lv")[0]
+            for i, mon in enumerate(self._party):
+                nick = mon['nickname']
+                full = (f"{mon['name']} ({nick})"
+                        if nick != mon['name'] else nick)
+                if full == label:
+                    return ("switch", i)
         move_name = choice.split(" (")[0]
         return ("move", move_name)
