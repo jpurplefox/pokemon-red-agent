@@ -26,6 +26,16 @@ def _ai_print(msg):
     print(f"{_PURPLE}  AI: {msg}{_RESET}")
 
 
+def _ai_think(msg):
+    """Print reasoning AND send to the AI thoughts window."""
+    _ai_print(msg)
+    try:
+        from ai_log_window import ai_log
+        ai_log(msg)
+    except Exception:
+        pass
+
+
 def _render(template_name, **kwargs):
     return _env.get_template(template_name).render(**kwargs)
 
@@ -104,16 +114,18 @@ class BattleAI:
         """Choose which pokemon to send after one fainted.
 
         Uses the LLM to pick the best pokemon considering type advantages
-        against the enemy. Falls back to highest-level if LLM fails or
+        against the enemy.  Falls back to highest-level if LLM fails or
         no enemy data is available. Returns -1 to run (wild only).
         """
+        _ai_think("--- Pokemon fainted! Who to send? ---")
+
         if not enemy or len(alive_indices) == 1:
             # Only one option or no enemy data — skip LLM
             idx = alive_indices[0]
             label = party[idx]['nickname']
             if party[idx]['nickname'] != party[idx]['name']:
                 label = f"{party[idx]['name']} ({party[idx]['nickname']})"
-            _ai_print(f"Sending out {label} Lv{party[idx]['level']}!")
+            _ai_think(f"=> Sending out {label} Lv{party[idx]['level']}!")
             return idx
 
         # Build candidate list
@@ -173,7 +185,7 @@ class BattleAI:
         for line in text.strip().split("\n"):
             if line.strip().startswith("THINK:"):
                 reasoning = line.strip()[6:].strip()
-                _ai_print(reasoning)
+                _ai_think(reasoning)
 
         # Find ACTION line
         for line in text.strip().split("\n"):
@@ -194,7 +206,7 @@ class BattleAI:
                             label = mon['nickname']
                             if mon['nickname'] != mon['name']:
                                 label = f"{mon['name']} ({mon['nickname']})"
-                            _ai_print(f"Sending out {label} Lv{mon['level']}!")
+                            _ai_think(f"=> Sending out {label} Lv{mon['level']}!")
                             return i
 
         # Fallback: highest level
@@ -207,7 +219,7 @@ class BattleAI:
         label = party[best_idx]['nickname']
         if party[best_idx]['nickname'] != party[best_idx]['name']:
             label = f"{party[best_idx]['name']} ({party[best_idx]['nickname']})"
-        _ai_print(f"(fallback) Sending out {label} Lv{best_level}!")
+        _ai_think(f"=> Sending out {label} Lv{best_level}!")
         return best_idx
 
     def choose_switch_offer(self, party, active_idx, alive_indices):
@@ -216,6 +228,8 @@ class BattleAI:
         Uses the LLM to decide. Returns a party index to switch to,
         or None to stay.
         """
+        _ai_think("--- Switch before next opponent? ---")
+
         current = party[active_idx]
         hp_pct = round(current['hp'] / current['max_hp'] * 100) if current['max_hp'] else 100
         p_types = POKEMON_TYPES.get(current['name'].upper(), "")
@@ -252,13 +266,14 @@ class BattleAI:
 
         for line in text.strip().split("\n"):
             if line.strip().startswith("THINK:"):
-                _ai_print(line.strip()[6:].strip())
+                _ai_think(line.strip()[6:].strip())
 
         for line in text.strip().split("\n"):
             line = line.strip()
             if line.startswith("ACTION:"):
                 action = line[7:].strip()
                 if action == "STAY":
+                    _ai_think("=> STAY")
                     return None
                 if action.startswith("SWITCH:"):
                     target = action[7:].strip()
@@ -269,10 +284,11 @@ class BattleAI:
                             label = mon['nickname']
                             if mon['nickname'] != mon['name']:
                                 label = f"{mon['name']} ({mon['nickname']})"
-                            _ai_print(f"Switching to {label} Lv{mon['level']}!")
+                            _ai_think(f"=> SWITCH to {label} Lv{mon['level']}!")
                             return i
 
         # Couldn't parse — stay
+        _ai_think("=> STAY")
         return None
 
     # ------------------------------------------------------------------
@@ -286,6 +302,8 @@ class BattleAI:
             tuple: ("move", move_name), ("run", None),
                    ("ball", bag_index), or ("switch", party_idx)
         """
+        _ai_think(f"--- Turn: {player['name']} vs {enemy['name']} ---")
+
         # If catching and no balls left, switch to defeat
         if self._goal == "catch" and (not balls or all(c == 0 for _, c, _ in balls)):
             _ai_print("No Poke Balls left! Switching to defeat.")
@@ -435,7 +453,7 @@ class BattleAI:
         for line in text.strip().split("\n"):
             if line.strip().startswith("THINK:"):
                 reasoning = line.strip()[6:].strip()
-                _ai_print(reasoning)
+                _ai_think(reasoning)
 
         # Find the ACTION line
         for line in text.strip().split("\n"):
@@ -486,13 +504,13 @@ class BattleAI:
 
     def _log_action(self, action):
         if action[0] == "run":
-            _ai_print("chose: RUN")
+            _ai_think("=> RUN")
         elif action[0] == "ball":
-            _ai_print("chose: throw Poke Ball! \U0001f534")
+            _ai_think("=> throw Poke Ball!")
         elif action[0] == "switch":
             mon = self._team[action[1]]
             label = (mon['nickname'] if mon['nickname'] == mon['name']
                      else f"{mon['name']} ({mon['nickname']})")
-            _ai_print(f"chose: SWITCH to {label}! \U0001f504")
+            _ai_think(f"=> SWITCH to {label}!")
         else:
-            _ai_print(f"chose: {action[1]}")
+            _ai_think(f"=> {action[1]}")
