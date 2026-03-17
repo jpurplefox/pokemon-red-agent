@@ -379,6 +379,23 @@ BMON_LEVEL = 0x0E              # 1 byte
 BMON_MAX_HP = 0x0F             # 2 bytes big-endian
 BMON_PP = 0x19                 # 4 bytes: PP remaining (lower 6 bits)
 
+# Bag / inventory
+ADDR_NUM_BAG_ITEMS = 0xD31D    # wNumBagItems: count of item types in bag
+ADDR_BAG_ITEMS = 0xD31E        # wBagItems: pairs of (item_id, count), FF-terminated
+
+# Poké Ball item IDs
+ITEM_POKE_BALL = 0x04
+ITEM_GREAT_BALL = 0x03
+ITEM_ULTRA_BALL = 0x02
+ITEM_MASTER_BALL = 0x01
+
+BALL_ITEMS = {
+    ITEM_MASTER_BALL: "Master Ball",
+    ITEM_ULTRA_BALL: "Ultra Ball",
+    ITEM_GREAT_BALL: "Great Ball",
+    ITEM_POKE_BALL: "Poké Ball",
+}
+
 # Name entry keyboard layout (uppercase, Pokemon Red)
 NAME_KEYBOARD = [
     "ABCDEFGHI",

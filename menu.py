@@ -93,11 +93,11 @@ class MenuReader:
         Returns (row, col) of the cursor if found, or None.
         Unlike has_cursor_on_screen(), this does NOT rely on WRAM menu
         addresses — it finds the cursor wherever it's drawn.
-        Only searches rows 0-11 (above the text box area) to avoid
-        false positives from dialogue text.
+        Searches all 18 rows (including text box area) since WRAM
+        position checks in read_choice_menu() filter false positives.
         """
         mem = self._pyboy.memory
-        for row in range(0, 12):
+        for row in range(18):
             for col in range(20):
                 tile = mem[ADDR_TILEMAP + row * 20 + col]
                 if tile == TILE_CURSOR:
@@ -151,7 +151,7 @@ class MenuReader:
         text_col = cursor_col + 1
         for i in range(max_item + 1):
             row = menu_y + i * 2
-            text = self._screen.decode_tiles(row, text_col, 18 - text_col)
+            text = self._screen.decode_tiles(row, text_col, 19 - text_col)
             stripped = text.strip()
             if stripped:
                 options.append(stripped)

@@ -9,6 +9,7 @@ from constants import (
     ADDR_IS_IN_BATTLE, ADDR_BATTLE_MON, ADDR_ENEMY_MON,
     BMON_SPECIES, BMON_HP, BMON_STATUS, BMON_MOVES,
     BMON_PP, BMON_LEVEL, BMON_MAX_HP,
+    ADDR_NUM_BAG_ITEMS, ADDR_BAG_ITEMS, BALL_ITEMS,
 )
 from pokemon_data import POKEMON_NAMES, MOVE_NAMES, MOVE_BASE_PP, status_text
 from console import prompt_menu
@@ -130,7 +131,31 @@ class BattleHandler:
         print("  Moves:")
         for i, (name, pp, max_pp) in enumerate(player['moves'], 1):
             print(f"    {i}. {name:<14} {pp}/{max_pp} PP")
+
+        # Show balls in wild battles
+        if self.is_wild():
+            balls = self.get_balls()
+            if balls:
+                print("  Bag:")
+                for ball_name, count, _ in balls:
+                    print(f"    🔴 {ball_name} ×{count}")
         print(f"{'=' * 40}")
+
+    # ------------------------------------------------------------------
+    # Bag / Poké Balls
+    # ------------------------------------------------------------------
+
+    def get_balls(self):
+        """Return list of (item_name, count) for Poké Balls in the bag."""
+        mem = self._pyboy.memory
+        num_items = mem[ADDR_NUM_BAG_ITEMS]
+        balls = []
+        for i in range(num_items):
+            item_id = mem[ADDR_BAG_ITEMS + i * 2]
+            count = mem[ADDR_BAG_ITEMS + i * 2 + 1]
+            if item_id in BALL_ITEMS:
+                balls.append((BALL_ITEMS[item_id], count, i))
+        return balls
 
     # ------------------------------------------------------------------
     # Battle actions
@@ -140,17 +165,24 @@ class BattleHandler:
         """Decide and execute a battle action using the injected strategy."""
         player = self._read_mon(ADDR_BATTLE_MON)
         enemy = self._read_mon(ADDR_ENEMY_MON)
+        balls = self.get_balls() if self.is_wild() else []
 
-        action_type, move_name = self._strategy.decide(
-            player, enemy, self.is_wild()
+        action_type, detail = self._strategy.decide(
+            player, enemy, self.is_wild(), balls
         )
 
-        if action_type == "run":
+        if action_type == "cancel":
+            self._pyboy.button("b")
+            self._pyboy.tick(10)
+            return
+        elif action_type == "run":
             self._select_battle_option("RUN")
+        elif action_type == "ball":
+            self._use_ball(detail)
         else:
             move_idx = next(
                 (i for i, (n, _, _) in enumerate(player['moves'])
-                 if n == move_name),
+                 if n == detail),
                 0,
             )
             self._select_battle_option("FIGHT")
@@ -211,6 +243,34 @@ class BattleHandler:
         self._pyboy.button("a")
         self._pyboy.tick(10)
 
+    def _use_ball(self, bag_index):
+        """Select ITEM from battle menu, then select the ball by bag index."""
+        self._select_battle_option("ITEM")
+        # Wait for item menu to appear
+        for _ in range(30):
+            self._pyboy.tick(10)
+            if not self.has_battle_menu():
+                break
+
+        # Navigate to the ball's position in the bag list
+        # Reset cursor to top
+        for _ in range(10):
+            self._pyboy.button("up")
+            self._pyboy.tick(5)
+
+        # Move down to the item
+        for _ in range(bag_index):
+            self._pyboy.button("down")
+            self._pyboy.tick(8)
+
+        # Select the item
+        self._pyboy.button("a")
+        self._pyboy.tick(20)
+
+        # If the game asks "Use this item?" just confirm
+        self._pyboy.button("a")
+        self._pyboy.tick(10)
+
     def _select_move(self, move_idx):
         """Select a move by index (0-3) from the move menu.
 
@@ -234,30 +294,145 @@ class BattleHandler:
         self._last_move_idx = move_idx
 
     def process_turn(self):
-        """Advance through turn messages until the battle menu reappears
-        or the battle ends."""
-        full = self._dialogue.advance_until(
-            lambda d, u: (self.has_battle_menu()
-                          or not self.is_in_battle()
-                          or (d and u > 30))
-        )
-        if full:
-            print(f"\n{full}")
+        """Advance through turn messages until the battle menu reappears,
+        the battle ends, or a choice/naming event appears.
+
+        Handles mid-battle events inline (e.g. nickname prompt after catch).
+        Returns True if the battle continues, False if ended.
+        """
+        while True:
+            full = self._dialogue.advance_until(
+                lambda d, u: (self.has_battle_menu()
+                              or not self.is_in_battle()
+                              or self._has_choice_or_naming())
+            )
+            if full:
+                print(f"\n{full}")
+
+            if self.has_battle_menu() and self.is_in_battle():
+                return True
+            if not self.is_in_battle():
+                return False
+
+            # Handle mid-battle events (choice menu or naming keyboard)
+            if not self._handle_mid_battle_event():
+                return False
+
+    def _handle_mid_battle_event(self):
+        """Handle a choice menu or naming keyboard that appeared mid-battle.
+
+        Returns True to keep processing, False if battle ended.
+        """
+        # Wait a bit for menu to fully render
+        self._pyboy.tick(30)
+
+        # Check for choice menu (e.g. YES/NO for nickname)
+        options = self._menu.read_choice_menu()
+        if options:
+            choice = prompt_menu(options)
+            target_idx = options.index(choice)
+            # Navigate from top
+            for _ in range(10):
+                self._pyboy.button("up")
+                self._pyboy.tick(5)
+            for _ in range(target_idx):
+                self._pyboy.button("down")
+                self._pyboy.tick(10)
+            self._pyboy.button("a")
+            self._pyboy.tick(30)
+            return self.is_in_battle()
+
+        # Check for naming keyboard
+        text = self._screen.read_text_box()
+        if text and ("lower case" in text.lower() or "upper case" in text.lower()):
+            name = input("Enter nickname (empty for default): ").strip()
+            if not name:
+                # Press B to keep default name
+                self._pyboy.button("b")
+                self._pyboy.tick(60)
+            else:
+                self._type_on_naming_keyboard(name.upper()[:10])
+            return not self.is_in_battle()  # battle is over after catch
+
+        # Nothing detected — keep going
+        return self.is_in_battle()
+
+    # Pokemon Red naming keyboard layout (upper case)
+    # The keyboard is a 9-column × 5-row grid starting at tile (10, 2)
+    _NAMING_GRID = {
+        'A': (0, 0), 'B': (0, 1), 'C': (0, 2), 'D': (0, 3), 'E': (0, 4),
+        'F': (0, 5), 'G': (0, 6), 'H': (0, 7), 'I': (0, 8),
+        'J': (1, 0), 'K': (1, 1), 'L': (1, 2), 'M': (1, 3), 'N': (1, 4),
+        'O': (1, 5), 'P': (1, 6), 'Q': (1, 7), 'R': (1, 8),
+        'S': (2, 0), 'T': (2, 1), 'U': (2, 2), 'V': (2, 3), 'W': (2, 4),
+        'X': (2, 5), 'Y': (2, 6), 'Z': (2, 7), ' ': (2, 8),
+    }
+
+    def _type_on_naming_keyboard(self, name):
+        """Type a name on the Pokemon Red naming keyboard."""
+        cur_row, cur_col = 0, 0  # cursor starts at A
+        for ch in name:
+            if ch not in self._NAMING_GRID:
+                continue
+            target_row, target_col = self._NAMING_GRID[ch]
+            # Navigate vertically
+            dy = target_row - cur_row
+            btn = "down" if dy > 0 else "up"
+            for _ in range(abs(dy)):
+                self._pyboy.button(btn)
+                self._pyboy.tick(5)
+            # Navigate horizontally
+            dx = target_col - cur_col
+            btn = "right" if dx > 0 else "left"
+            for _ in range(abs(dx)):
+                self._pyboy.button(btn)
+                self._pyboy.tick(5)
+            # Select character
+            self._pyboy.button("a")
+            self._pyboy.tick(8)
+            cur_row, cur_col = target_row, target_col
+
+        # Navigate to END button and confirm
+        # END is below the grid — press Start as shortcut to confirm
+        self._pyboy.button("start")
+        self._pyboy.tick(30)
+
+    def _has_choice_or_naming(self):
+        """Check if a choice menu or naming keyboard is on screen."""
+        text = self._screen.read_text_box()
+        if not text:
+            return False
+        lower = text.lower()
+        if "lower case" in lower or "upper case" in lower:
+            return True
+        return bool(self._menu.read_choice_menu())
 
 
 class ManualStrategy:
     """Console-based battle strategy — prompts the player for input."""
 
-    def decide(self, player, enemy, is_wild):
+    def decide(self, player, enemy, is_wild, balls=None):
         actions = []
         for name, pp, max_pp in player['moves']:
             actions.append(f"{name} ({pp}/{max_pp} PP)")
+        if balls:
+            for ball_name, count, _ in balls:
+                actions.append(f"🔴 {ball_name} ×{count}")
         if is_wild:
             actions.append("RUN")
+        actions.append("CANCEL")
 
         choice = prompt_menu(actions)
 
-        if "RUN" in choice:
+        if choice == "CANCEL":
+            return ("cancel", None)
+        if "RUN" in choice and "🔴" not in choice:
             return ("run", None)
+        if "🔴" in choice:
+            # Find the bag index for this ball
+            ball_label = choice.split("🔴 ")[1].split(" ×")[0]
+            for ball_name, _, bag_idx in balls:
+                if ball_name == ball_label:
+                    return ("ball", bag_idx)
         move_name = choice.split(" (")[0]
         return ("move", move_name)

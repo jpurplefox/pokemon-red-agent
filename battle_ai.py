@@ -48,16 +48,17 @@ class BattleAI:
             temperature=0.3,
         )
 
-    def decide(self, player, enemy, is_wild):
+    def decide(self, player, enemy, is_wild, balls=None):
         """Decide a battle action given both pokemon's stats.
 
         Args:
             player: dict with name, level, hp, max_hp, status, moves
             enemy:  dict with name, level, hp, max_hp, status, moves
             is_wild: bool
+            balls: list of (name, count, bag_index) or None
 
         Returns:
-            tuple: ("move", move_name) or ("run", None)
+            tuple: ("move", move_name), ("run", None), or ("ball", bag_index)
         """
         prompt = self._build_prompt(player, enemy, is_wild)
         messages = [

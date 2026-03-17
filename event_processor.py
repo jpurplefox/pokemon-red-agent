@@ -130,7 +130,12 @@ class EventProcessor:
 
     def _handle_choice_menu(self, options):
         """Prompt the user for a choice menu detected on screen."""
-        choice = prompt_menu(options)
+        options_with_cancel = options + ["CANCEL"]
+        choice = prompt_menu(options_with_cancel)
+        if choice == "CANCEL":
+            self._pyboy.button("b")
+            self._pyboy.tick(30)
+            return
         # Navigate: cursor starts at top (index 0), press down to target
         target_idx = options.index(choice)
         for _ in range(target_idx):
