@@ -110,6 +110,48 @@ class BattleAI:
             else:
                 _ai_print("No Poke Balls — going for the win!")
 
+    def on_battle_end(self, is_wild, result="unknown"):
+        """Called when a battle ends. Analyzes history for lessons learned."""
+        if not self._history:
+            return
+
+        battle_type = "Wild" if is_wild else "Trainer"
+        system_prompt = _render("battle_recap.j2")
+        user_prompt = _render("battle_recap_state.j2",
+                              battle_type=battle_type,
+                              result=result,
+                              history=self._history)
+
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+        response = self._llm.invoke(messages)
+        text = response.content.strip()
+
+        # Parse LESSONS
+        _ai_think("--- Lessons Learned ---")
+        in_lessons = False
+        has_lessons = False
+        for line in text.split("\n"):
+            stripped = line.strip()
+            if stripped.startswith("LESSONS:"):
+                rest = stripped[8:].strip()
+                if rest.lower() == "none":
+                    _ai_think("Nothing new learned.")
+                    return
+                in_lessons = True
+                if rest.startswith("-"):
+                    _ai_think(rest)
+                    has_lessons = True
+                continue
+            if in_lessons and stripped.startswith("-"):
+                _ai_think(stripped)
+                has_lessons = True
+
+        if not has_lessons:
+            _ai_think("Nothing new learned.")
+
     def choose_switch_in(self, party, alive_indices, is_wild, enemy=None):
         """Choose which pokemon to send after one fainted.
 
@@ -408,8 +450,9 @@ class BattleAI:
             "status": enemy.get('status', ''),
         }
 
-        # Player data with typed moves + power/description
+        # Player data with typed moves + power/description + STAB
         p_types = POKEMON_TYPES.get(player['name'].upper(), "")
+        p_type_list = [t.strip() for t in p_types.split("/")] if p_types else []
         moves = []
         for name, pp, max_pp in player['moves']:
             m_type = MOVE_TYPES.get(name.upper(), "")
@@ -418,11 +461,13 @@ class BattleAI:
             accuracy = data[1] if data else 0
             category = data[2] if data else ""
             desc = data[3] if data else ""
+            stab = m_type != "" and m_type in p_type_list
             moves.append({
                 "name": name, "type": m_type,
                 "pp": pp, "max_pp": max_pp,
                 "power": power, "accuracy": accuracy,
                 "category": category, "desc": desc,
+                "stab": stab,
             })
         player_data = {
             "name": player['name'], "types": p_types,

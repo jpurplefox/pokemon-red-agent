@@ -1,0 +1,8 @@
+Battle type: {{ battle_type }}
+Result: {{ result }}
+
+--- Battle Log ---
+{% for turn in history %}
+Turn {{ loop.index }}: {{ turn.text }}
+  -> {{ turn.damage }}
+{% endfor %}

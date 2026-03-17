@@ -143,10 +143,11 @@ class Game:
         """Detect and manage Pokemon battles."""
         if not self._battle.is_in_battle():
             if self._in_battle:
-                # Battle just ended — use event_processor to handle
+                # Battle just ended — let AI recap, then handle
                 # post-battle dialogue, nickname prompts, menus, etc.
                 self._in_battle = False
                 print("\nBattle ended!")
+                self._battle.notify_battle_end()
                 self._event_processor.process()
                 self._in_overworld = True
                 self._show_pois = True
