@@ -7,6 +7,9 @@ YES/NO menus, naming keyboards — until the game state stabilises.
 from constants import (
     ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD,
     ADDR_MAX_MENU, ADDR_IS_IN_BATTLE,
+    ADDR_PLAYER_MONEY, ADDR_MART_NUM_ITEMS, ADDR_MART_ITEMS,
+    ADDR_NUM_BAG_ITEMS, ADDR_BAG_ITEMS, BALL_ITEMS,
+    ITEM_CATALOGUE,
 )
 from dialogue import DialogueAdvancer
 from console import prompt_menu, prompt_name
@@ -20,6 +23,10 @@ class EventProcessor:
         self._naming = naming
         self._handle_name_menu = name_menu_handler
         self._dialogue = DialogueAdvancer(pyboy, screen)
+        self.auto_accept = False
+        self.auto_name_fn = None
+        self.auto_buy_fn = None   # callback(items, money, pokeballs) → [(idx, qty)]
+        self._exiting_mart = False
 
     def process(self):
         """Tick through a cutscene/event, handling dialogues and menus.
@@ -27,12 +34,15 @@ class EventProcessor:
         Keeps ticking until the game state is fully stable: no dialogue,
         no menu activity, player position and map not changing.
         Returns when ~200 frames pass with no state change.
+
+        Returns a list of all dialogue lines collected during the event.
         """
         mem = self._pyboy.memory
         idle = 0
         last_state = None
         last_text = None
         pending_lines = []
+        all_dialogue = []
 
         while idle < 20:
             self._pyboy.tick(10)
@@ -83,7 +93,7 @@ class EventProcessor:
                 # for cursor tile, no WRAM dependency
                 choice_options = self._menu.read_choice_menu()
                 if choice_options:
-                    self._flush_dialogue(pending_lines)
+                    self._flush_dialogue(pending_lines, all_dialogue)
                     pending_lines = []
                     self._handle_choice_menu(choice_options)
                     idle = 0
@@ -97,7 +107,7 @@ class EventProcessor:
                 continue
 
             # No text on screen — flush accumulated dialogue
-            self._flush_dialogue(pending_lines)
+            self._flush_dialogue(pending_lines, all_dialogue)
             pending_lines = []
             last_text = None
 
@@ -116,9 +126,14 @@ class EventProcessor:
 
             idle += 1
 
+        return all_dialogue
+
     def _handle_naming_keyboard(self):
         """Handle the in-game naming keyboard."""
-        name = prompt_name()
+        if self.auto_accept and self.auto_name_fn:
+            name = self.auto_name_fn()
+        else:
+            name = prompt_name()
         if name:
             self._naming.enter(name)
             print(f"Nickname: {name}")
@@ -130,12 +145,40 @@ class EventProcessor:
 
     def _handle_choice_menu(self, options):
         """Prompt the user for a choice menu detected on screen."""
-        options_with_cancel = options + ["CANCEL"]
-        choice = prompt_menu(options_with_cancel)
-        if choice == "CANCEL":
+        # Exiting mart — dismiss any remaining menus (item list or BUY/SELL)
+        if self._exiting_mart:
             self._pyboy.button("b")
             self._pyboy.tick(30)
+            # Check if we fully exited (no more BUY in options = item list)
+            if any("BUY" in opt for opt in options):
+                # Back at BUY/SELL/QUIT — select QUIT (last option)
+                self._exiting_mart = False
+                quit_idx = len(options) - 1
+                for _ in range(quit_idx):
+                    self._pyboy.button("down")
+                    self._pyboy.tick(10)
+                self._pyboy.button("a")
+                self._pyboy.tick(30)
             return
+
+        # Intercept mart BUY/SELL menu with custom shop interface
+        if any("BUY" in opt for opt in options):
+            self._handle_mart_menu(options)
+            return
+
+        if self.auto_accept and "YES" in options:
+            choice = "YES"
+            print("  [AUTO] Selecting YES")
+        elif self.auto_accept and "HEAL" in options:
+            choice = "HEAL"
+            print("  [AUTO] Selecting HEAL")
+        else:
+            options_with_cancel = options + ["CANCEL"]
+            choice = prompt_menu(options_with_cancel)
+            if choice == "CANCEL":
+                self._pyboy.button("b")
+                self._pyboy.tick(30)
+                return
         # Navigate: cursor starts at top (index 0), press down to target
         target_idx = options.index(choice)
         for _ in range(target_idx):
@@ -144,11 +187,167 @@ class EventProcessor:
         self._pyboy.button("a")
         self._pyboy.tick(30)
 
-    def _flush_dialogue(self, lines):
+    def _read_money(self):
+        """Read player money from BCD-encoded 3 bytes."""
+        mem = self._pyboy.memory
+        b0 = mem[ADDR_PLAYER_MONEY]
+        b1 = mem[ADDR_PLAYER_MONEY + 1]
+        b2 = mem[ADDR_PLAYER_MONEY + 2]
+        # BCD: each byte = two decimal digits
+        return (
+            (b0 >> 4) * 100000 + (b0 & 0xF) * 10000
+            + (b1 >> 4) * 1000 + (b1 & 0xF) * 100
+            + (b2 >> 4) * 10 + (b2 & 0xF)
+        )
+
+    def _count_pokeballs(self):
+        """Count total Poké Balls of all types in the bag."""
+        mem = self._pyboy.memory
+        total = 0
+        for i in range(mem[ADDR_NUM_BAG_ITEMS]):
+            item_id = mem[ADDR_BAG_ITEMS + i * 2]
+            count = mem[ADDR_BAG_ITEMS + i * 2 + 1]
+            if item_id in BALL_ITEMS:
+                total += count
+        return total
+
+    def _get_mart_items(self):
+        """Read the mart's item list with names and prices."""
+        mem = self._pyboy.memory
+        num = mem[ADDR_MART_NUM_ITEMS]
+        if num == 0 or num > 10:
+            return []
+        items = []
+        for i in range(num):
+            item_id = mem[ADDR_MART_ITEMS + i]
+            name, price = ITEM_CATALOGUE.get(item_id, (f"Item 0x{item_id:02X}", 0))
+            items.append({"name": name, "price": price, "index": i})
+        return items
+
+    def _print_mart_inventory(self, items, money):
+        """Print the mart's item list with prices and affordability."""
+        print(f"\n  💰 Your money: ¥{money:,}")
+        print("  ┌─────────────────────────────────────┐")
+        for i, item in enumerate(items):
+            max_qty = money // item["price"] if item["price"] > 0 else 0
+            qty_str = f"(max {max_qty})" if max_qty > 0 else "(can't afford)"
+            print(f"  │ {i+1:>2}. {item['name']:<16} ¥{item['price']:>6,}  {qty_str:<15}│")
+        print(f"  │  0. Leave shop                       │")
+        print("  └─────────────────────────────────────┘")
+
+    def _handle_mart_menu(self, options):
+        """Custom shop interface: show items, pick, buy, repeat."""
+        items = self._get_mart_items()
+        if not items:
+            # Fallback to normal menu
+            self._select_option(options, options[-1])
+            return
+
+        # Select BUY in the game menu first
+        buy_idx = next(i for i, o in enumerate(options) if "BUY" in o)
+        for _ in range(buy_idx):
+            self._pyboy.button("down")
+            self._pyboy.tick(10)
+        self._pyboy.button("a")
+        self._pyboy.tick(60)
+
+        # Auto-buy or manual buy loop
+        if self.auto_buy_fn:
+            money = self._read_money()
+            self._print_mart_inventory(items, money)
+            purchases = self.auto_buy_fn(items, money, self._count_pokeballs())
+            for idx, qty in purchases:
+                if 0 <= idx < len(items) and qty > 0:
+                    item = items[idx]
+                    self._buy_item_in_game(idx, qty, len(items))
+                    print(f"  ✓ Bought {qty}x {item['name']} for ¥{item['price'] * qty:,}")
+        else:
+            # Manual buy loop
+            while True:
+                money = self._read_money()
+                self._print_mart_inventory(items, money)
+
+                try:
+                    choice = int(input("  Buy item #: "))
+                except (ValueError, EOFError):
+                    choice = -1
+
+                if choice == 0 or choice < 0 or choice > len(items):
+                    break
+
+                item = items[choice - 1]
+                if item["price"] <= 0 or money < item["price"]:
+                    print("  Can't afford that!")
+                    continue
+
+                max_qty = money // item["price"]
+                try:
+                    qty = int(input(f"  Quantity (1-{max_qty}): "))
+                except (ValueError, EOFError):
+                    qty = 0
+
+                if qty <= 0 or qty > max_qty or qty > 99:
+                    print("  Cancelled.")
+                    continue
+
+                self._buy_item_in_game(choice - 1, qty, len(items))
+                print(f"  ✓ Bought {qty}x {item['name']} for ¥{item['price'] * qty:,}")
+
+        # Exit item list: first B dismisses any dialogue, second B exits list
+        self._pyboy.button("b")
+        self._pyboy.tick(60)
+        self._pyboy.button("b")
+        self._pyboy.tick(60)
+        # Flag so next BUY/SELL detection auto-selects QUIT
+        self._exiting_mart = True
+
+    def _buy_item_in_game(self, item_index, quantity, total_items):
+        """Navigate the game's mart buy menu to purchase an item.
+
+        The buy list cursor starts at item 0. We navigate down to item_index,
+        press A, set quantity, then confirm YES.
+        """
+        # Reset cursor to top
+        for _ in range(total_items):
+            self._pyboy.button("up")
+            self._pyboy.tick(5)
+
+        # Navigate to desired item
+        for _ in range(item_index):
+            self._pyboy.button("down")
+            self._pyboy.tick(10)
+
+        # Select item
+        self._pyboy.button("a")
+        self._pyboy.tick(30)
+
+        # Quantity screen: starts at ×01, press up to increase
+        for _ in range(quantity - 1):
+            self._pyboy.button("up")
+            self._pyboy.tick(5)
+
+        # Confirm quantity
+        self._pyboy.button("a")
+        self._pyboy.tick(30)
+
+        # YES/NO confirmation — YES is at top
+        self._pyboy.button("a")
+        self._pyboy.tick(60)
+
+        # Process purchase dialogue ("Here you are! Thank you!")
+        for _ in range(5):
+            self._pyboy.tick(10)
+            if self._screen.read_text_box():
+                self._pyboy.button("a", delay=8)
+                self._pyboy.tick(20)
+
+    def _flush_dialogue(self, lines, all_dialogue=None):
         """Deduplicate and print accumulated dialogue lines."""
         if not lines:
             return
         line = DialogueAdvancer.deduplicate(lines)
         if line:
             print(f"\n{line}")
+            if all_dialogue is not None:
+                all_dialogue.append(line)
         lines.clear()

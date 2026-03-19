@@ -13,27 +13,13 @@ from jinja2 import Environment, FileSystemLoader
 from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
 from pokemon_data import POKEMON_TYPES, MOVE_TYPES, MOVE_DATA
-
-_PURPLE = "\033[35m"
-_RESET = "\033[0m"
+from ai_logger import AILogger
 
 _TEMPLATES = Path(__file__).parent / "templates"
 _env = Environment(loader=FileSystemLoader(_TEMPLATES), trim_blocks=True,
                    lstrip_blocks=True)
 
-
-def _ai_print(msg):
-    print(f"{_PURPLE}  AI: {msg}{_RESET}")
-
-
-def _ai_think(msg):
-    """Print reasoning AND send to the AI thoughts window."""
-    _ai_print(msg)
-    try:
-        from ai_log_window import ai_log
-        ai_log(msg)
-    except Exception:
-        pass
+_log = AILogger("AI")
 
 
 def _render(template_name, **kwargs):
@@ -41,7 +27,7 @@ def _render(template_name, **kwargs):
 
 
 class BattleAI:
-    def __init__(self, base_url="http://localhost:11434", model="qwen2.5:3b",
+    def __init__(self, base_url="http://localhost:11434", model="qwen2.5:14b",
                  scout=None):
         self._llm = ChatOllama(
             base_url=base_url,
@@ -90,25 +76,25 @@ class BattleAI:
         self._goal = "defeat"
         if is_wild:
             has_balls = balls and any(c > 0 for _, c, _ in balls)
-            _ai_print(f"A wild {enemy['name']} (Lv{enemy['level']}) appeared!")
+            _log.log_think(f"A wild {enemy['name']} (Lv{enemy['level']}) appeared!")
             if has_balls and self._scout:
                 should_catch = self._scout.should_catch(
                     enemy['name'], enemy['level'], self._team
                 )
                 if should_catch:
                     self._goal = "catch"
-                    _ai_print(f"Goal: CATCH {enemy['name']}!")
+                    _log.log_think(f"Goal: CATCH {enemy['name']}!")
                 else:
-                    _ai_print(f"Goal: DEFEAT {enemy['name']}!")
+                    _log.log_think(f"Goal: DEFEAT {enemy['name']}!")
             elif has_balls:
-                choice = input(f"{_PURPLE}  AI: Fight or catch? [f/c]: {_RESET}").strip().lower()
+                choice = input(f"\033[35m  AI: Fight or catch? [f/c]: \033[0m").strip().lower()
                 if choice.startswith("c"):
                     self._goal = "catch"
-                    _ai_print(f"Goal: CATCH {enemy['name']}!")
+                    _log.log_think(f"Goal: CATCH {enemy['name']}!")
                 else:
-                    _ai_print(f"Goal: DEFEAT {enemy['name']}!")
+                    _log.log_think(f"Goal: DEFEAT {enemy['name']}!")
             else:
-                _ai_print("No Poke Balls — going for the win!")
+                _log.log_think("No Poke Balls — going for the win!")
 
     def on_battle_end(self, is_wild, result="unknown"):
         """Called when a battle ends. Analyzes history for lessons learned."""
@@ -130,7 +116,7 @@ class BattleAI:
         text = response.content.strip()
 
         # Parse LESSONS
-        _ai_think("--- Lessons Learned ---")
+        _log.log_think("--- Lessons Learned ---")
         in_lessons = False
         has_lessons = False
         for line in text.split("\n"):
@@ -138,19 +124,19 @@ class BattleAI:
             if stripped.startswith("LESSONS:"):
                 rest = stripped[8:].strip()
                 if rest.lower() == "none":
-                    _ai_think("Nothing new learned.")
+                    _log.log_think("Nothing new learned.")
                     return
                 in_lessons = True
                 if rest.startswith("-"):
-                    _ai_think(rest)
+                    _log.log_think(rest)
                     has_lessons = True
                 continue
             if in_lessons and stripped.startswith("-"):
-                _ai_think(stripped)
+                _log.log_think(stripped)
                 has_lessons = True
 
         if not has_lessons:
-            _ai_think("Nothing new learned.")
+            _log.log_think("Nothing new learned.")
 
     def choose_switch_in(self, party, alive_indices, is_wild, enemy=None):
         """Choose which pokemon to send after one fainted.
@@ -159,7 +145,7 @@ class BattleAI:
         against the enemy.  Falls back to highest-level if LLM fails or
         no enemy data is available. Returns -1 to run (wild only).
         """
-        _ai_think("--- Pokemon fainted! Who to send? ---")
+        _log.log_think("--- Pokemon fainted! Who to send? ---")
 
         if not enemy or len(alive_indices) == 1:
             # Only one option or no enemy data — skip LLM
@@ -167,7 +153,7 @@ class BattleAI:
             label = party[idx]['nickname']
             if party[idx]['nickname'] != party[idx]['name']:
                 label = f"{party[idx]['name']} ({party[idx]['nickname']})"
-            _ai_think(f"=> Sending out {label} Lv{party[idx]['level']}!")
+            _log.log_think(f"=> Sending out {label} Lv{party[idx]['level']}!")
             return idx
 
         # Build candidate list
@@ -227,7 +213,7 @@ class BattleAI:
         for line in text.strip().split("\n"):
             if line.strip().startswith("THINK:"):
                 reasoning = line.strip()[6:].strip()
-                _ai_think(reasoning)
+                _log.log_think(reasoning)
 
         # Find ACTION line
         for line in text.strip().split("\n"):
@@ -236,7 +222,7 @@ class BattleAI:
                 action = line[7:].strip()
 
                 if action == "RUN" and is_wild:
-                    _ai_print("chose: RUN!")
+                    _log.log_think("chose: RUN!")
                     return -1
 
                 if action.startswith("SWITCH:"):
@@ -248,7 +234,7 @@ class BattleAI:
                             label = mon['nickname']
                             if mon['nickname'] != mon['name']:
                                 label = f"{mon['name']} ({mon['nickname']})"
-                            _ai_think(f"=> Sending out {label} Lv{mon['level']}!")
+                            _log.log_think(f"=> Sending out {label} Lv{mon['level']}!")
                             return i
 
         # Fallback: highest level
@@ -261,7 +247,7 @@ class BattleAI:
         label = party[best_idx]['nickname']
         if party[best_idx]['nickname'] != party[best_idx]['name']:
             label = f"{party[best_idx]['name']} ({party[best_idx]['nickname']})"
-        _ai_think(f"=> Sending out {label} Lv{best_level}!")
+        _log.log_think(f"=> Sending out {label} Lv{best_level}!")
         return best_idx
 
     def choose_switch_offer(self, party, active_idx, alive_indices):
@@ -270,7 +256,7 @@ class BattleAI:
         Uses the LLM to decide. Returns a party index to switch to,
         or None to stay.
         """
-        _ai_think("--- Switch before next opponent? ---")
+        _log.log_think("--- Switch before next opponent? ---")
 
         current = party[active_idx]
         hp_pct = round(current['hp'] / current['max_hp'] * 100) if current['max_hp'] else 100
@@ -308,14 +294,14 @@ class BattleAI:
 
         for line in text.strip().split("\n"):
             if line.strip().startswith("THINK:"):
-                _ai_think(line.strip()[6:].strip())
+                _log.log_think(line.strip()[6:].strip())
 
         for line in text.strip().split("\n"):
             line = line.strip()
             if line.startswith("ACTION:"):
                 action = line[7:].strip()
                 if action == "STAY":
-                    _ai_think("=> STAY")
+                    _log.log_think("=> STAY")
                     return None
                 if action.startswith("SWITCH:"):
                     target = action[7:].strip()
@@ -326,11 +312,11 @@ class BattleAI:
                             label = mon['nickname']
                             if mon['nickname'] != mon['name']:
                                 label = f"{mon['name']} ({mon['nickname']})"
-                            _ai_think(f"=> SWITCH to {label} Lv{mon['level']}!")
+                            _log.log_think(f"=> SWITCH to {label} Lv{mon['level']}!")
                             return i
 
         # Couldn't parse — stay
-        _ai_think("=> STAY")
+        _log.log_think("=> STAY")
         return None
 
     # ------------------------------------------------------------------
@@ -344,20 +330,17 @@ class BattleAI:
             tuple: ("move", move_name), ("run", None),
                    ("ball", bag_index), or ("switch", party_idx)
         """
-        _ai_think(f"--- Turn: {player['name']} vs {enemy['name']} ---")
+        _log.log_think(f"--- Turn: {player['name']} vs {enemy['name']} ---")
 
         # If catching and no balls left, switch to defeat
         if self._goal == "catch" and (not balls or all(c == 0 for _, c, _ in balls)):
-            _ai_print("No Poke Balls left! Switching to defeat.")
+            _log.log_think("No Poke Balls left! Switching to defeat.")
             self._goal = "defeat"
 
         system_prompt = self._render_system()
         user_prompt = self._render_state(player, enemy, is_wild, balls)
 
-        print(f"\n{'='*60}")
-        print(f"SYSTEM PROMPT:\n{system_prompt}")
-        print(f"\nUSER PROMPT:\n{user_prompt}")
-        print(f"{'='*60}\n")
+        _log.log_prompt("BATTLE", system_prompt, user_prompt)
 
         messages = [
             SystemMessage(content=system_prompt),
@@ -372,29 +355,24 @@ class BattleAI:
             # Print reasoning to console for every attempt
             for line in last_text.strip().split("\n"):
                 if line.strip().startswith("THINK:"):
-                    _ai_print(line.strip()[6:].strip())
+                    _log.log_think(line.strip()[6:].strip())
             action, error = self._parse_response(
                 last_text, player, balls,
             )
             if action is not None:
                 break
-            _ai_print(f"(retry {attempt + 1}/{max_retries}: {error})")
+            _log.log_think(f"(retry {attempt + 1}/{max_retries}: {error})")
             if attempt < max_retries:
                 messages.append(response)
                 messages.append(HumanMessage(
                     content=f"ERROR: {error}\nTry again."
                 ))
 
-        # Send only the final reasoning to the AI window
-        for line in last_text.strip().split("\n"):
-            if line.strip().startswith("THINK:"):
-                _ai_think(line.strip()[6:].strip())
-
         # Final fallback if all retries failed
         if action is None:
             available = [m[0] for m in player['moves'] if m[1] > 0]
             if available:
-                _ai_print("(all retries failed, using first move)")
+                _log.log_think("(all retries failed, using first move)")
                 action = ("move", available[0])
             else:
                 action = ("run", None)
@@ -403,7 +381,7 @@ class BattleAI:
         if not is_wild and action[0] == "run":
             available = [m[0] for m in player['moves'] if m[1] > 0]
             if available:
-                _ai_print("(can't run from trainer, forcing attack)")
+                _log.log_think("(can't run from trainer, forcing attack)")
                 action = ("move", available[0])
 
         # Hard override: if catching and enemy HP <= 50%, force ball throw
@@ -412,7 +390,7 @@ class BattleAI:
             if hp_pct <= 50:
                 for name, count, bag_idx in balls:
                     if count > 0:
-                        _ai_print("(enemy HP low, forcing Poke Ball!)")
+                        _log.log_think("(enemy HP low, forcing Poke Ball!)")
                         action = ("ball", bag_idx)
                         break
 
@@ -568,13 +546,13 @@ class BattleAI:
 
     def _log_action(self, action):
         if action[0] == "run":
-            _ai_think("=> RUN")
+            _log.log_think("=> RUN")
         elif action[0] == "ball":
-            _ai_think("=> throw Poke Ball!")
+            _log.log_think("=> throw Poke Ball!")
         elif action[0] == "switch":
             mon = self._team[action[1]]
             label = (mon['nickname'] if mon['nickname'] == mon['name']
                      else f"{mon['name']} ({mon['nickname']})")
-            _ai_think(f"=> SWITCH to {label}!")
+            _log.log_think(f"=> SWITCH to {label}!")
         else:
-            _ai_think(f"=> {action[1]}")
+            _log.log_think(f"=> {action[1]}")

@@ -1,7 +1,7 @@
 """Console UI for interacting with the game (SRP: user input/output only)."""
 
 BUTTONS = {"up", "down", "left", "right", "a", "b", "start", "select"}
-COMMANDS = BUTTONS | {"quit", "look", "scan", "go", "lead"}
+COMMANDS = BUTTONS | {"quit", "look", "scan", "go", "lead", "ai"}
 
 
 def prompt_menu(options):
@@ -88,6 +88,9 @@ _POI_ICONS = {
 # Fallback icons by POI kind (for labels not in _POI_ICONS, e.g. map names)
 _POI_KIND_ICONS = {
     "connection": "🛤️",
+    "sprite": "🧑",
+    "exit": "🚪",
+    "warp": "🌀",
 }
 
 
@@ -103,34 +106,27 @@ def _poi_icon(poi):
     return _POI_KIND_ICONS.get(poi.get("kind"), "🚪")
 
 
-def print_map(pois, py, px, grid):
-    """Display an ASCII map with numbered POI icons and a legend.
+def render_map(pois, py, px, grid, visit_counts=None):
+    """Return an ASCII map string with numbered POI markers and a legend.
 
-    Each POI shows its reference number on the map; the legend below
-    maps each number to its icon, label, and relative direction.
+    visit_counts: optional list parallel to pois with visit counts per POI.
     """
     if not pois:
-        print("Nothing nearby.")
-        return
+        return "Nothing nearby."
 
     h = len(grid)
     w = len(grid[0]) if h else 0
 
-    # Show the full map grid
-    min_y, max_y = 0, h - 1
-    min_x, max_x = 0, w - 1
-
-    # Build POI lookup: (ty, tx) → reference number string
     poi_at = {}
     for i, poi in enumerate(pois):
         key = (poi["ty"], poi["tx"])
         if key not in poi_at and 0 <= poi["ty"] < h and 0 <= poi["tx"] < w:
             poi_at[key] = str(i + 1)
 
-    # Render map rows
-    for y in range(min_y, max_y + 1):
+    lines = []
+    for y in range(h):
         row = ""
-        for x in range(min_x, max_x + 1):
+        for x in range(w):
             if y == py and x == px:
                 row += " @"
             elif (y, x) in poi_at:
@@ -140,10 +136,19 @@ def print_map(pois, py, px, grid):
                 row += " ·"
             else:
                 row += " #"
-        print(row)
+        lines.append(row)
 
-    # Legend: number + icon + label + direction
-    print()
+    lines.append("")
     for i, poi in enumerate(pois):
         icon = _poi_icon(poi)
-        print(f"  {i + 1:>2}. {icon} {poi['label']} \u2014 {poi['dir']}")
+        suffix = ""
+        if visit_counts and visit_counts[i] > 0:
+            suffix = f" (visited {visit_counts[i]}x)"
+        lines.append(f"  {i + 1:>2}. {icon} {poi['label']}{suffix}")
+
+    return "\n".join(lines)
+
+
+def print_map(pois, py, px, grid):
+    """Display an ASCII map with numbered POI icons and a legend."""
+    print(render_map(pois, py, px, grid))

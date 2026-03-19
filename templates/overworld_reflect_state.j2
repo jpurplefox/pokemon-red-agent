@@ -1,0 +1,23 @@
+--- What you did ---
+Location: {{ map_name }}
+Action: {{ action }}
+{%- if result %}
+Result: {{ result }}
+{%- endif %}
+{%- if dialogue %}
+Dialogue: "{{ dialogue }}"
+{%- endif %}
+
+Main goal: {{ main_goal }}
+{%- if active_subgoal %}
+
+--- Current active sub-goal ---
+{{ active_subgoal.description }}
+{%- endif %}
+{%- if completed_subgoals %}
+
+--- Already completed sub-goals ---
+{%- for sg in completed_subgoals %}
+✅ {{ sg.description }}
+{%- endfor %}
+{%- endif %}

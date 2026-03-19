@@ -5,6 +5,10 @@ services:
       - "11434:11434"
     volumes:
       - ollama_data:/root/.ollama
+    deploy:
+      resources:
+        limits:
+          cpus: "4"
 
 volumes:
   ollama_data:

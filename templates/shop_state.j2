@@ -1,0 +1,27 @@
+You are shopping at a Poké Mart. Decide what to buy.
+
+Your money: ¥{{ money }}
+Poké Balls in bag: {{ pokeballs }}
+
+--- Shop Items ---
+{%- for item in items %}
+{{ loop.index }}. {{ item.name }} — ¥{{ item.price }}
+  {%- if item.price > 0 and money >= item.price %} (can buy up to {{ money // item.price }}){% else %} (can't afford){% endif %}
+{%- endfor %}
+
+--- Your Team ---
+{%- for mon in party %}
+{{ mon.nickname }} Lv{{ mon.level }} — {{ mon.hp }}/{{ mon.max_hp }} HP
+{%- endfor %}
+
+Rules:
+- Buy Poké Balls if you have fewer than 5
+- Don't spend all your money — keep at least 30% as reserve
+- If nothing is needed, buy nothing
+
+Respond with EXACTLY this format (one BUY line per item, or NONE):
+THINK: <brief reasoning>
+BUY: <item_number> x<quantity>
+or
+THINK: <brief reasoning>
+NONE

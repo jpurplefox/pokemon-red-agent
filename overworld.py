@@ -15,6 +15,15 @@ from constants import (
     ADDR_OVERWORLD_MAP, MAP_BORDER, BLOCK_LABELS, WALKABLE_BLOCKS,
     BLOCK_DESCRIPTIONS, SPRITE_LABELS, MAP_NAMES,
 )
+from pathfinder import find_best_path
+
+# Oak's Lab (map 0x28) starter Poké Balls by X coordinate
+# Left-to-right: Charmander, Squirtle, Bulbasaur
+_OAK_LAB_STARTERS = {
+    6: "Poké Ball (CHARMANDER)",
+    7: "Poké Ball (SQUIRTLE)",
+    8: "Poké Ball (BULBASAUR)",
+}
 
 
 class OverworldScanner:
@@ -41,20 +50,29 @@ class OverworldScanner:
                 self._rom = f.read()
 
     def get_pois(self):
-        """Return all nearby points of interest as a list of dicts.
+        """Return all nearby reachable points of interest as a list of dicts.
 
         Each dict: {"label": str, "dir": str, "ty": int, "tx": int, "kind": str}
+        Unreachable POIs (no path via A*) are excluded.
         """
         py = self._pyboy.memory[ADDR_Y_COORD]
         px = self._pyboy.memory[ADDR_X_COORD]
 
-        pois = []
-        pois.extend(self._scan_warps(py, px))
-        pois.extend(self._scan_blocks(py, px))
-        pois.extend(self._scan_signs(py, px))
-        pois.extend(self._scan_sprites(py, px))
-        pois.extend(self._scan_connections(py, px))
-        return pois
+        all_pois = []
+        all_pois.extend(self._scan_warps(py, px))
+        all_pois.extend(self._scan_blocks(py, px))
+        all_pois.extend(self._scan_signs(py, px))
+        all_pois.extend(self._scan_sprites(py, px))
+        all_pois.extend(self._scan_connections(py, px))
+
+        # Filter out unreachable POIs
+        grid, _, _ = self.get_walkable_grid()
+        reachable = []
+        for poi in all_pois:
+            path, _ = find_best_path(grid, (py, px), poi)
+            if path is not None:
+                reachable.append(poi)
+        return reachable
 
     # ------------------------------------------------------------------
     # ROM-based tileset data (auto-detect walkability for any tileset)
@@ -323,6 +341,9 @@ class OverworldScanner:
         3. Position heuristic: bottom-edge warps are exits.
         """
         # Use destination map name when available
+        # dest_map 0xFF means "return to last map" — read wLastMap
+        if dest_map == 0xFF:
+            dest_map = mem[0xD365]
         dest_name = MAP_NAMES.get(dest_map)
         if dest_name:
             # Determine kind: interior warps (stairs) vs building entries
@@ -334,16 +355,7 @@ class OverworldScanner:
                 tile_names = {t.lower() for t in descriptions[block_id]}
                 if "stairs" in tile_names:
                     return dest_name, "warp"
-            # Strip city/town prefix if dest name starts with current map area
-            # e.g. "Viridian Pokecenter" → "Pokecenter" when in Viridian City
-            cur_map = mem[ADDR_MAP_N]
-            cur_name = MAP_NAMES.get(cur_map, "")
-            # Extract city prefix (first word of current map name)
-            city = cur_name.split()[0] if cur_name else ""
-            short = dest_name
-            if city and dest_name.startswith(city + " "):
-                short = dest_name[len(city) + 1:]
-            return short, "exit"
+            return dest_name, "exit"
 
         block_row = wy // 2
         block_col = wx // 2
@@ -540,6 +552,9 @@ class OverworldScanner:
                 continue
 
             label = SPRITE_LABELS.get(pic_id, "Person")
+            # Override Poké Ball labels in Oak's Lab with starter names
+            if label == "Poké Ball" and mem[ADDR_MAP_N] == 0x28:
+                label = _OAK_LAB_STARTERS.get(sx, label)
             results.append({
                 "label": label,
                 "dir": self._relative_dir(py, px, sy, sx),

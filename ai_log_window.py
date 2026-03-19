@@ -19,8 +19,11 @@ _process: mp.Process | None = None
 _started = False
 
 
-def ai_log(text: str):
-    """Append a line (or multi-line) to the AI log window."""
+def ai_log(text: str, kind: str = ""):
+    """Append a line (or multi-line) to the AI log window.
+
+    kind: "" for normal, "memory" for red memory lines.
+    """
     global _started, _queue, _process
     if not _started:
         _queue = mp.Queue()
@@ -28,7 +31,7 @@ def ai_log(text: str):
         _process.start()
         _started = True
     for line in text.split("\n"):
-        _queue.put(line)
+        _queue.put((line, kind))
 
 
 # ── Window config ─────────────────────────────────────────────────────
@@ -42,6 +45,7 @@ _BG = (18, 18, 24)
 _FG = (200, 180, 255)
 _FG_DIM = (100, 90, 140)
 _FG_ACTION = (130, 220, 160)   # green for chosen actions
+_FG_MEMORY = (255, 80, 80)    # red for memory saves
 _TITLE_BG = (30, 28, 40)
 _TITLE_FG = (160, 140, 220)
 
@@ -84,29 +88,40 @@ def _run(q: mp.Queue):
         # ── Drain message queue ───────────────────────────────────
         while True:
             try:
-                text = q.get_nowait()
+                msg = q.get_nowait()
             except Exception:
                 break
+
+            # Support both old str and new (str, kind) format
+            if isinstance(msg, tuple):
+                text, kind = msg
+            else:
+                text, kind = msg, ""
 
             wrap_width = (screen.get_width() - _PADDING * 2) // (font.size("M")[0])
             wrap_width = max(wrap_width, 20)
 
-            if text.strip() == "":
-                lines.append(("", _FG))
+            if kind == "memory":
+                color = _FG_MEMORY
             elif text.startswith("---"):
-                lines.append(("", _FG))
-                lines.append((text, _FG_DIM))
+                new_block = [("", _FG), (text, _FG_DIM)]
+                lines[0:0] = new_block
+                continue
             elif text.startswith("=>"):
-                lines.append((text, _FG_ACTION))
+                color = _FG_ACTION
+            elif text.strip() == "":
+                lines.insert(0, ("", _FG))
+                continue
             else:
-                wrapped = textwrap.wrap(text, width=wrap_width)
-                for wl in wrapped:
-                    lines.append((wl, _FG))
+                color = _FG
+
+            wrapped = textwrap.wrap(text, width=wrap_width) if text.strip() else [""]
+            # Insert at top in correct order
+            for idx, wl in enumerate(wrapped):
+                lines.insert(idx, (wl, color))
 
             if auto_scroll:
-                line_h = _FONT_SIZE + _LINE_SPACING
-                max_visible = (screen.get_height() - 30) // line_h
-                scroll_offset = max(0, len(lines) - max_visible)
+                scroll_offset = 0
 
         # ── Render ────────────────────────────────────────────────
         w, h = screen.get_size()

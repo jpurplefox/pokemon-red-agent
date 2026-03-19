@@ -1,0 +1,43 @@
+--- Current Location ---
+Map: {{ map_name }}
+{%- if map_name not in visited_maps %}
+🆕 NEW MAP — explore before moving on!
+{%- endif %}
+Maps visited so far: {{ visited_maps | join(", ") if visited_maps else "None" }}
+
+--- Team ---
+{%- if party %}
+{%- for mon in party %}
+{{ mon.nickname }} ({{ mon.name }}) Lv{{ mon.level }} — {{ mon.hp }}/{{ mon.max_hp }} HP
+  {%- if mon.hp == 0 %} ☠️ FAINTED{% elif mon.hp < mon.max_hp // 4 %} ⚠️ CRITICAL{% elif mon.hp < mon.max_hp // 2 %} ⚠️ LOW{% endif %}
+{%- endfor %}
+{%- else %}
+No Pokémon yet!
+{%- endif %}
+
+--- Inventory ---
+Poké Balls: {{ pokeballs }}{% if pokeballs < 3 %} ⚠️ LOW{% endif %}
+{%- if active_subgoal %}
+
+--- ⚡ Active Sub-Goal ---
+{{ active_subgoal.description }}
+{%- endif %}
+{%- if completed_subgoals %}
+
+--- Completed Sub-Goals ---
+{%- for sg in completed_subgoals %}
+✅ {{ sg.description }}
+{%- endfor %}
+{%- endif %}
+{%- if history %}
+
+--- Recent History ---
+{%- for entry in history %}
+• [{{ entry.map }}]
+  {%- if entry.poi %} GO:{{ entry.poi_num | default("?") }} [{{ entry.poi_kind | default("?") }}] {{ entry.poi }}:{% endif %} {{ entry.action }}
+  {%- if entry.result %} → {{ entry.result }}{% endif %}
+{%- endfor %}
+{%- endif %}
+
+--- Map (@ = you, # = wall, · = walkable, numbers = POIs) ---
+{{ ascii_map }}

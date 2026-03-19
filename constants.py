@@ -347,25 +347,77 @@ POKEMON_CHARMAP = {
 # Sprite picture IDs → labels (from pret/pokered sprite_constants.asm).
 # Only non-"Person" sprites listed; unlisted IDs default to "Person".
 SPRITE_LABELS = {
+    # Main characters
+    0x01: "Red",            # SPRITE_RED (player — shouldn't appear as NPC)
+    0x02: "Rival",          # SPRITE_BLUE
+    0x03: "Prof. Oak",      # SPRITE_OAK
+    # Human NPCs
+    0x04: "Youngster",      # SPRITE_YOUNGSTER
+    0x06: "Woman",          # SPRITE_COOLTRAINER_F
+    0x07: "Man",            # SPRITE_COOLTRAINER_M
+    0x08: "Little Girl",    # SPRITE_LITTLE_GIRL
+    0x0A: "Man",            # SPRITE_MIDDLE_AGED_MAN
+    0x0B: "Gambler",        # SPRITE_GAMBLER
+    0x0C: "Nerd",           # SPRITE_SUPER_NERD
+    0x0D: "Girl",           # SPRITE_GIRL
+    0x0E: "Hiker",          # SPRITE_HIKER
+    0x0F: "Beauty",         # SPRITE_BEAUTY
+    0x10: "Gentleman",      # SPRITE_GENTLEMAN
+    0x11: "Daisy",          # SPRITE_DAISY
+    0x12: "Biker",          # SPRITE_BIKER
+    0x13: "Sailor",         # SPRITE_SAILOR
+    0x14: "Cook",           # SPRITE_COOK
+    0x15: "Bike Shop Clerk",  # SPRITE_BIKE_SHOP_CLERK
+    0x16: "Mr. Fuji",       # SPRITE_MR_FUJI
+    0x17: "Giovanni",       # SPRITE_GIOVANNI
+    0x18: "Rocket",         # SPRITE_ROCKET
+    0x19: "Channeler",      # SPRITE_CHANNELER
+    0x1A: "Waiter",         # SPRITE_WAITER
+    0x1B: "Worker",         # SPRITE_SILPH_WORKER_F
+    0x1C: "Woman",          # SPRITE_MIDDLE_AGED_WOMAN
+    0x1D: "Girl",           # SPRITE_BRUNETTE_GIRL
+    0x1E: "Lance",          # SPRITE_LANCE
+    0x1F: "Scientist",      # SPRITE_UNUSED_SCIENTIST
+    0x20: "Scientist",      # SPRITE_SCIENTIST
+    0x22: "Swimmer",        # SPRITE_SWIMMER
+    0x23: "Safari Worker",  # SPRITE_SAFARI_ZONE_WORKER
+    0x24: "Gym Guide",      # SPRITE_GYM_GUIDE
+    0x25: "Old Man",        # SPRITE_GRAMPS
+    0x27: "Fishing Guru",   # SPRITE_FISHING_GURU
+    0x28: "Old Woman",      # SPRITE_GRANNY
+    0x2B: "Silph President",  # SPRITE_SILPH_PRESIDENT
+    0x2D: "Warden",         # SPRITE_WARDEN
+    0x2E: "Captain",        # SPRITE_CAPTAIN
+    0x2F: "Fisher",         # SPRITE_FISHER
+    0x30: "Koga",           # SPRITE_KOGA
+    0x31: "Guard",          # SPRITE_GUARD
+    0x33: "Mom",            # SPRITE_MOM
+    0x34: "Balding Man",    # SPRITE_BALDING_GUY
+    0x35: "Little Boy",     # SPRITE_LITTLE_BOY
+    0x37: "Gameboy Kid",    # SPRITE_GAMEBOY_KID
+    0x39: "Agatha",         # SPRITE_AGATHA
+    0x3A: "Bruno",          # SPRITE_BRUNO
+    0x3B: "Lorelei",        # SPRITE_LORELEI
     # Pokémon sprites
-    0x05: "Pokémon",    # Slowbro
-    0x09: "Pokémon",    # Bird (Pidgey)
-    0x21: "Pokémon",    # Clefairy
-    0x25: "Pokémon",    # Seel
-    0x27: "Pokémon",    # Omanyte
-    0x2C: "Pokémon",    # Snorlax
-    # Object sprites (pokered standard IDs)
-    0x26: "Clerk",      # SPRITE_MART_GUY (shop cashier)
-    0x28: "Boulder",    # Pushable boulder
-    0x29: "Nurse",      # SPRITE_NURSE (Pokecenter nurse)
-    0x2A: "Cable Club",  # SPRITE_LINK_RECEPTIONIST
-    0x2B: "Clipboard",  # Clipboard
-    0x2D: "Fossil",     # Old Amber (copy)
-    0x2E: "Fossil",     # Old Amber
-    # Object sprites (alternate ROM IDs — discovered via scan)
-    0x3D: "Poké Ball",  # Poké Ball on table (starters)
-    0x41: "Book",       # Book / Map / Pokédex (alt)
-    0x42: "Note",       # Note/poster on wall
+    0x05: "Pokémon",        # SPRITE_MONSTER (Slowbro)
+    0x09: "Pokémon",        # SPRITE_BIRD (Pidgey)
+    0x21: "Pokémon",        # SPRITE_ROCKER (Clefairy)
+    0x38: "Pokémon",        # SPRITE_FAIRY (Clefairy)
+    0x3C: "Pokémon",        # SPRITE_SEEL
+    0x43: "Pokémon",        # SPRITE_SNORLAX
+    # Object sprites
+    0x26: "Clerk",          # SPRITE_CLERK (shop cashier)
+    0x29: "Nurse",          # SPRITE_NURSE
+    0x2A: "Cable Club",     # SPRITE_LINK_RECEPTIONIST
+    0x2C: "Worker",         # SPRITE_SILPH_WORKER_M
+    0x3D: "Poké Ball",      # SPRITE_POKE_BALL
+    0x3E: "Fossil",         # SPRITE_FOSSIL
+    0x3F: "Boulder",        # SPRITE_BOULDER
+    0x40: "Paper",          # SPRITE_PAPER
+    0x41: "Book",           # SPRITE_POKEDEX
+    0x42: "Note",           # SPRITE_CLIPBOARD
+    0x44: "Old Amber",      # SPRITE_UNUSED_OLD_AMBER
+    0x45: "Old Amber",      # SPRITE_OLD_AMBER
 }
 
 # Battle state
@@ -406,6 +458,53 @@ BALL_ITEMS = {
     ITEM_ULTRA_BALL: "Ultra Ball",
     ITEM_GREAT_BALL: "Great Ball",
     ITEM_POKE_BALL: "Poké Ball",
+}
+
+# Event flags
+ADDR_POKEDEX_FLAG = 0xD74B     # bit 5 = has Pokédex
+
+# Player money (3 bytes, BCD encoded)
+ADDR_PLAYER_MONEY = 0xD347
+
+# Poké Mart current inventory (loaded per-map)
+ADDR_MART_NUM_ITEMS = 0xCF7B   # number of items for sale
+ADDR_MART_ITEMS = 0xCF7C       # item IDs listed sequentially
+
+# Item catalogue: id → (name, price)
+ITEM_CATALOGUE = {
+    0x01: ("Master Ball", 0),
+    0x02: ("Ultra Ball", 1200),
+    0x03: ("Great Ball", 600),
+    0x04: ("Poké Ball", 200),
+    0x05: ("Town Map", 0),
+    0x06: ("Bicycle", 1000000),
+    0x0B: ("Antidote", 100),
+    0x0C: ("Burn Heal", 250),
+    0x0D: ("Ice Heal", 250),
+    0x0E: ("Awakening", 200),
+    0x0F: ("Parlyz Heal", 200),
+    0x10: ("Full Restore", 3000),
+    0x11: ("Max Potion", 2500),
+    0x12: ("Hyper Potion", 1500),
+    0x13: ("Super Potion", 700),
+    0x14: ("Potion", 300),
+    0x1D: ("Escape Rope", 550),
+    0x1E: ("Repel", 350),
+    0x23: ("Full Heal", 600),
+    0x24: ("Revive", 1500),
+    0x25: ("Max Revive", 0),
+    0x2E: ("Fresh Water", 200),
+    0x2F: ("Soda Pop", 300),
+    0x30: ("Lemonade", 350),
+    0x48: ("X Attack", 500),
+    0x49: ("X Defend", 550),
+    0x4A: ("X Speed", 350),
+    0x4B: ("X Special", 350),
+    0x50: ("HP Up", 9800),
+    0x51: ("Protein", 9800),
+    0x52: ("Iron", 9800),
+    0x53: ("Carbos", 9800),
+    0x54: ("Calcium", 9800),
 }
 
 # Name entry keyboard layout (uppercase, Pokemon Red)

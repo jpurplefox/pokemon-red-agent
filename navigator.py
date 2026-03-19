@@ -36,6 +36,15 @@ class Navigator:
         self._go_to_poi(poi, print_surroundings, result)
         return result
 
+    def go_to(self, poi, print_surroundings):
+        """Navigate directly to a specific POI (for AI usage).
+
+        Same as go() but skips interactive POI selection.
+        """
+        result = {"map_changed": False, "show_pois": False}
+        self._go_to_poi(poi, print_surroundings, result)
+        return result
+
     def _go_to_poi(self, poi, print_surroundings, result, attempt=1):
         """Walk to a POI and interact. Retries if NPC moved."""
         mem = self._pyboy.memory
@@ -61,13 +70,18 @@ class Navigator:
 
             if self._screen.read_text_box():
                 print("Interrupted!")
-                self._event_processor.process()
+                lines = self._event_processor.process()
+                result["dialogue"] = " ".join(lines) if lines else ""
                 print_surroundings()
                 return
             if mem[ADDR_MAP_N] != start_map:
                 self._pyboy.tick(300)
                 result["map_changed"] = True
                 result["show_pois"] = True
+                # Capture any dialogue that triggers on map entry
+                if self._screen.read_text_box() or self._poll_for_event():
+                    lines = self._event_processor.process()
+                    result["dialogue"] = " ".join(lines) if lines else ""
                 return
 
         # For sprites (NPCs), verify they're still adjacent
@@ -91,11 +105,18 @@ class Navigator:
         # Poll for event triggered by the interaction
         if self._poll_for_event():
             print(f"Event at {poi['label']}!")
-            self._event_processor.process()
+            lines = self._event_processor.process()
+            result["dialogue"] = " ".join(lines) if lines else ""
             print_surroundings()
             return
 
-        print(f"Arrived at {poi['label']}.")
+        # Check for simple dialogue (sign, NPC one-liner)
+        text = self._screen.read_text_box()
+        if text:
+            lines = self._event_processor.process()
+            result["dialogue"] = " ".join(lines) if lines else ""
+        else:
+            print(f"Arrived at {poi['label']}.")
         print_surroundings()
 
     def _is_npc_adjacent(self, poi):

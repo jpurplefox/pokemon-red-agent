@@ -47,26 +47,35 @@ class BattleHandler:
 
     def notify_battle_end(self):
         """Notify the strategy that the battle ended so it can recap."""
-        if hasattr(self._strategy, 'on_battle_end'):
-            # Determine result from last turn context
-            result = "unknown"
-            if self._strategy._history:
-                last_text = self._strategy._history[-1].get("text", "").lower()
-                if "got" in last_text and "for winning" in last_text:
+        # Determine result from last turn context
+        result = "unknown"
+        if hasattr(self._strategy, '_history') and self._strategy._history:
+            last_text = self._strategy._history[-1].get("text", "").lower()
+            if "got" in last_text and "for winning" in last_text:
+                result = "victory"
+            elif "fainted" in last_text:
+                if "enemy" in last_text:
                     result = "victory"
-                elif "fainted" in last_text:
-                    if "enemy" in last_text:
-                        result = "victory"
-                    else:
-                        result = "defeat"
-                elif "got away" in last_text or "ran" in last_text:
-                    result = "fled"
-                elif "gotcha" in last_text or "was caught" in last_text:
-                    result = "caught"
-            self._strategy.on_battle_end(
-                self._last_was_wild if hasattr(self, '_last_was_wild') else True,
-                result,
-            )
+                else:
+                    result = "defeat"
+            elif "got away" in last_text or "ran" in last_text:
+                result = "fled"
+            elif "gotcha" in last_text or "was caught" in last_text:
+                result = "caught"
+
+        is_wild = self._last_was_wild if hasattr(self, '_last_was_wild') else True
+        enemy_pokemon = getattr(self, '_enemy_name', 'unknown')
+        trainer_name = getattr(self, '_trainer_name', None)
+        battle_type = "Wild" if is_wild else "Trainer"
+        enemy_label = trainer_name if trainer_name else enemy_pokemon
+        self._last_battle_summary = {
+            "type": battle_type,
+            "enemy": enemy_label,
+            "result": result,
+        }
+
+        if hasattr(self._strategy, 'on_battle_end'):
+            self._strategy.on_battle_end(is_wild, result)
 
     def has_battle_menu(self):
         """Check if the main battle menu (FIGHT/ITEM/RUN) is on screen.
@@ -108,6 +117,16 @@ class BattleHandler:
             active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
             self._strategy.set_team(self._read_party(), active_idx)
         self._last_was_wild = self.is_wild()
+        enemy = self._read_mon(ADDR_ENEMY_MON)
+        self._enemy_name = enemy['name']
+        # Extract trainer name from intro text (e.g. "FOLAGOR wants to fight!")
+        self._trainer_name = None
+        if not self._last_was_wild and full:
+            for part in full.split("!"):
+                part = part.strip()
+                if "wants to fight" in part:
+                    self._trainer_name = part.replace("wants to fight", "").strip()
+                    break
         if hasattr(self._strategy, 'on_battle_start'):
             player = self._read_mon(ADDR_BATTLE_MON)
             enemy = self._read_mon(ADDR_ENEMY_MON)
