@@ -5,7 +5,6 @@ adding a new game state means adding a new handler, not modifying existing ones.
 Dependencies are injected via constructor (DIP).
 """
 
-from pyboy import PyBoy
 from data.constants import (
     ADDR_MAP_N, ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, MAP_NAMES,
     ADDR_Y_COORD, ADDR_X_COORD,
@@ -23,13 +22,16 @@ from debug_scanner import DebugScanner
 from orchestration.overworld_controller import OverworldAIController
 from adapters.display.console import (
     prompt_menu, prompt_name, prompt_command, print_map, render_map, BUTTONS,
+    set_input_fn,
 )
 
 
 class Game:
-    def __init__(self, rom_path, battle_strategy=None, naming_ai=None,
-                 overworld_ai=None, shop_ai=None):
-        self._pyboy = PyBoy(rom_path, sound_emulated=False)
+    def __init__(self, pyboy, rom_path=None, battle_strategy=None,
+                 naming_ai=None, overworld_ai=None, shop_ai=None):
+        self._pyboy = pyboy
+        # All console input() calls will tick the emulator while waiting
+        set_input_fn(lambda prompt="": pyboy.run_with_ticking(input, prompt))
         self._screen = ScreenReader(self._pyboy)
         self._menu = MenuReader(self._pyboy, self._screen)
         self._dialogue = DialogueAdvancer(self._pyboy, self._screen)
@@ -84,6 +86,17 @@ class Game:
         self._in_battle = False
         self._show_pois = False
         self._running = True
+        self._fast_mode = pyboy.is_fast
+
+    # ------------------------------------------------------------------
+    # Speed control
+    # ------------------------------------------------------------------
+
+    def set_speed(self, fast: bool):
+        """Toggle between fast mode (no limit, muted) and normal (60fps, sound)."""
+        self._fast_mode = fast
+        self._pyboy.set_speed(fast=fast)
+
 
     # ------------------------------------------------------------------
     # Map / display helpers
@@ -262,6 +275,11 @@ class Game:
         if cmd == "ai" and self._ow_controller:
             self._ow_controller.resume()
             self._show_pois = True
+            return True
+        elif cmd == "speed":
+            self.set_speed(fast=not self._fast_mode)
+            mode = "fast ⚡" if self._fast_mode else "normal 🎮"
+            print(f"  Speed: {mode}")
             return True
         elif cmd == "quit":
             self._running = False

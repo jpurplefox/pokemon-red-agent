@@ -1,7 +1,17 @@
 """Console UI for interacting with the game (SRP: user input/output only)."""
 
 BUTTONS = {"up", "down", "left", "right", "a", "b", "start", "select"}
-COMMANDS = BUTTONS | {"quit", "look", "scan", "go", "lead", "ai"}
+COMMANDS = BUTTONS | {"quit", "look", "scan", "go", "lead", "ai", "speed"}
+
+# Replaceable input function — Game swaps this with a ticking version
+# so the emulator keeps running while waiting for user input.
+_input_fn = input
+
+
+def set_input_fn(fn):
+    """Replace the input function used by all console prompts."""
+    global _input_fn
+    _input_fn = fn
 
 
 def prompt_menu(options):
@@ -11,7 +21,7 @@ def prompt_menu(options):
         print(f"  {i}. {opt}")
     while True:
         try:
-            choice = int(input("Choose: "))
+            choice = int(_input_fn("Choose: "))
             if 1 <= choice <= len(options):
                 return options[choice - 1]
         except (ValueError, EOFError):
@@ -22,7 +32,7 @@ def prompt_menu(options):
 def prompt_name():
     """Ask the user to type a name (1-7 uppercase letters)."""
     while True:
-        name = input("Enter name: ").strip().upper()
+        name = _input_fn("Enter name: ").strip().upper()
         if 1 <= len(name) <= 7 and all(c in "ABCDEFGHIJKLMNOPQRSTUVWXYZ " for c in name):
             return name
         print("1-7 letters A-Z only")
@@ -30,7 +40,7 @@ def prompt_name():
 
 def prompt_command():
     """Prompt for an overworld command. Returns the command string."""
-    cmd = input("> ").strip().lower()
+    cmd = _input_fn("> ").strip().lower()
     if cmd and cmd not in COMMANDS:
         print("Commands: up, down, left, right, a, b, start, select, look, go, quit")
         return None
@@ -50,7 +60,7 @@ def prompt_poi_selection(pois):
 
     while True:
         try:
-            choice = int(input("Go to: "))
+            choice = int(_input_fn("Go to: "))
             if choice == 0:
                 return None
             if 1 <= choice <= len(pois):

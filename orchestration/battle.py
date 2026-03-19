@@ -7,7 +7,7 @@ Dependencies injected via constructor (DIP).
 """
 
 from data.constants import ADDR_PLAYER_MON_NUMBER
-from adapters.display.console import prompt_menu
+from adapters.display.console import prompt_menu, _input_fn
 from adapters.state.battle_state_reader import BattleStateReader
 from adapters.input.battle_menu_driver import BattleMenuDriver
 
@@ -475,7 +475,7 @@ class BattleHandler:
                     caught_species, team_context
                 )
             else:
-                name = input("Enter nickname (empty to skip): ").strip()
+                name = _input_fn("Enter nickname (empty to skip): ").strip()
 
             if is_nickname_prompt:
                 # We're at the YES/NO menu

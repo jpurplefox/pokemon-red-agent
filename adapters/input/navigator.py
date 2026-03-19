@@ -58,13 +58,28 @@ class Navigator:
             print(f"Cannot reach {poi['label']}.")
             return
 
-        # Walk step by step, checking for interrupts
+        # Walk step by step, recalculating path before each move
         if attempt == 1:
             print(f"Walking to {poi['label']} ({len(path)} steps)...")
         else:
             print(f"Retrying... ({len(path)} steps)")
         start_map = mem[ADDR_MAP_N]
-        for direction in path:
+        while path:
+            # Re-scan NPC position if target is a sprite
+            if poi["kind"] == "sprite":
+                updated = self._find_same_npc(poi)
+                if updated:
+                    poi = updated
+            # Recalculate path from current position
+            grid, _, _ = self._scanner.get_walkable_grid()
+            blocked = self._scanner.get_npc_tiles()
+            py, px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
+            new_path, new_face = find_best_path(grid, (py, px), poi, blocked)
+            if new_path is not None:
+                path = new_path
+                face = new_face
+            # Take the first step
+            direction = path.pop(0)
             self._pyboy.button(direction, delay=8)
             self._pyboy.tick(30)
 
@@ -78,7 +93,6 @@ class Navigator:
                 self._pyboy.tick(300)
                 result["map_changed"] = True
                 result["show_pois"] = True
-                # Capture any dialogue that triggers on map entry
                 if self._screen.read_text_box() or self._poll_for_event():
                     lines = self._event_processor.process()
                     result["dialogue"] = " ".join(lines) if lines else ""

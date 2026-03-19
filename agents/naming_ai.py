@@ -182,7 +182,7 @@ class NamingAI:
             HumanMessage(content=prompt),
         ]
 
-        _log.log_think(f"[Naming prompt]\n{_PURPLE}{prompt}{_RESET}")
+        _log.log_think(f"[Naming prompt]\n{prompt}")
         response = self._llm.invoke(messages)
         name = self._parse_name(response.content)
 
@@ -190,9 +190,9 @@ class NamingAI:
         for line in response.content.strip().split("\n"):
             if line.strip().startswith("THINK:"):
                 reasoning = line.strip()[6:].strip()
-                print(f"{_PURPLE}  AI: {reasoning}{_RESET}")
+                _log.log_think(reasoning)
 
-        print(f"{_PURPLE}  AI: Nickname → {name}{_RESET}")
+        _log.log_think(f"Nickname → {name}")
         return name
 
     def _parse_name(self, text):

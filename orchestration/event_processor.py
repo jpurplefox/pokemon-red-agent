@@ -11,7 +11,7 @@ from data.constants import (
     ITEM_CATALOGUE,
 )
 from dialogue import DialogueAdvancer
-from adapters.display.console import prompt_menu, prompt_name
+from adapters.display.console import prompt_menu, prompt_name, _input_fn
 
 
 class EventProcessor:
@@ -253,7 +253,7 @@ class EventProcessor:
                 self._print_mart_inventory(items, money)
 
                 try:
-                    choice = int(input("  Buy item #: "))
+                    choice = int(_input_fn("  Buy item #: "))
                 except (ValueError, EOFError):
                     choice = -1
 
@@ -267,7 +267,7 @@ class EventProcessor:
 
                 max_qty = money // item["price"]
                 try:
-                    qty = int(input(f"  Quantity (1-{max_qty}): "))
+                    qty = int(_input_fn(f"  Quantity (1-{max_qty}): "))
                 except (ValueError, EOFError):
                     qty = 0
 

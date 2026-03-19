@@ -46,7 +46,7 @@ class AILogger:
     def _to_window(self, msg: str, kind: str = ""):
         """Send to the AI thoughts pygame window (if running)."""
         try:
-            from ai_log_window import ai_log
+            from adapters.display.ai_log_window import ai_log
             ai_log(msg, kind)
         except Exception:
             pass

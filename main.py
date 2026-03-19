@@ -1,5 +1,9 @@
 import sys
+from pyboy import PyBoy
+from adapters.pyboy_wrapper import PyBoyWrapper
 from orchestration.game import Game
+
+ROM = "rom.gb"
 
 if __name__ == "__main__":
     strategy = None
@@ -8,14 +12,22 @@ if __name__ == "__main__":
     shop_ai = None
     flags = set(sys.argv[1:])
 
+    raw_pyboy = PyBoy(ROM, sound_emulated=True)
+    pyboy = PyBoyWrapper(raw_pyboy)
+    pyboy.set_speed(fast="--fast" in flags)
+
+    from adapters.display.ai_log_window import start as start_ai_window
+    start_ai_window()
+
     if flags & {"--ai", "--naming", "--shop"}:
         from langchain_ollama import ChatOllama
-        # Single shared LLM — the only place ChatOllama is created
-        llm = ChatOllama(
+        from adapters.ticking_llm import TickingLLM
+        raw_llm = ChatOllama(
             base_url="http://localhost:11434",
             model="qwen2.5:14b",
             temperature=0.3,
         )
+        llm = TickingLLM(raw_llm, pyboy)
         from agents.naming_ai import NamingAI
         naming_ai = NamingAI(llm=llm)
         print("Naming AI enabled")
@@ -33,5 +45,5 @@ if __name__ == "__main__":
         shop_ai = ShopAI(llm=llm)
         print("Shop AI enabled (manual overworld control)")
 
-    Game("rom.gb", battle_strategy=strategy, naming_ai=naming_ai,
+    Game(pyboy, rom_path=ROM, battle_strategy=strategy, naming_ai=naming_ai,
          overworld_ai=overworld_ai, shop_ai=shop_ai).run()

@@ -67,7 +67,7 @@ class ScoutAI:
             HumanMessage(content=prompt),
         ]
 
-        _log.log_think(f"[Scout prompt]\n{_PURPLE}{prompt}{_RESET}")
+        _log.log_think(f"[Scout prompt]\n{prompt}")
         response = self._llm.invoke(messages)
         decision = self._parse_decision(response.content)
 

@@ -19,17 +19,23 @@ _process: mp.Process | None = None
 _started = False
 
 
-def ai_log(text: str, kind: str = ""):
-    """Append a line (or multi-line) to the AI log window.
-
-    kind: "" for normal, "memory" for red memory lines.
-    """
+def start():
+    """Start the AI log window immediately."""
     global _started, _queue, _process
     if not _started:
         _queue = mp.Queue()
         _process = mp.Process(target=_run, args=(_queue,), daemon=True)
         _process.start()
         _started = True
+
+
+def ai_log(text: str, kind: str = ""):
+    """Append a line (or multi-line) to the AI log window.
+
+    kind: "" for normal, "memory" for red memory lines.
+    """
+    if not _started:
+        start()
     for line in text.split("\n"):
         _queue.put((line, kind))
 
