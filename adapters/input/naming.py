@@ -1,4 +1,4 @@
-from constants import NAME_KEYBOARD
+from data.constants import NAME_KEYBOARD
 
 
 class NameEntry:

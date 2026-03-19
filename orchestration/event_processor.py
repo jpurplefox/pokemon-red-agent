@@ -4,25 +4,26 @@ Ticks through events that interrupt gameplay — dialogue sequences,
 YES/NO menus, naming keyboards — until the game state stabilises.
 """
 
-from constants import (
+from data.constants import (
     ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD,
     ADDR_MAX_MENU, ADDR_IS_IN_BATTLE,
-    ADDR_PLAYER_MONEY, ADDR_MART_NUM_ITEMS, ADDR_MART_ITEMS,
-    ADDR_NUM_BAG_ITEMS, ADDR_BAG_ITEMS, BALL_ITEMS,
+    ADDR_MART_NUM_ITEMS, ADDR_MART_ITEMS,
     ITEM_CATALOGUE,
 )
 from dialogue import DialogueAdvancer
-from console import prompt_menu, prompt_name
+from adapters.display.console import prompt_menu, prompt_name
 
 
 class EventProcessor:
-    def __init__(self, pyboy, screen, menu, naming, name_menu_handler):
+    def __init__(self, pyboy, screen, menu, naming, name_menu_handler,
+                 bag_reader=None):
         self._pyboy = pyboy
         self._screen = screen
         self._menu = menu
         self._naming = naming
         self._handle_name_menu = name_menu_handler
         self._dialogue = DialogueAdvancer(pyboy, screen)
+        self._bag = bag_reader
         self.auto_accept = False
         self.auto_name_fn = None
         self.auto_buy_fn = None   # callback(items, money, pokeballs) → [(idx, qty)]
@@ -188,28 +189,12 @@ class EventProcessor:
         self._pyboy.tick(30)
 
     def _read_money(self):
-        """Read player money from BCD-encoded 3 bytes."""
-        mem = self._pyboy.memory
-        b0 = mem[ADDR_PLAYER_MONEY]
-        b1 = mem[ADDR_PLAYER_MONEY + 1]
-        b2 = mem[ADDR_PLAYER_MONEY + 2]
-        # BCD: each byte = two decimal digits
-        return (
-            (b0 >> 4) * 100000 + (b0 & 0xF) * 10000
-            + (b1 >> 4) * 1000 + (b1 & 0xF) * 100
-            + (b2 >> 4) * 10 + (b2 & 0xF)
-        )
+        """Read player money."""
+        return self._bag.read_money()
 
     def _count_pokeballs(self):
         """Count total Poké Balls of all types in the bag."""
-        mem = self._pyboy.memory
-        total = 0
-        for i in range(mem[ADDR_NUM_BAG_ITEMS]):
-            item_id = mem[ADDR_BAG_ITEMS + i * 2]
-            count = mem[ADDR_BAG_ITEMS + i * 2 + 1]
-            if item_id in BALL_ITEMS:
-                total += count
-        return total
+        return self._bag.count_pokeballs()
 
     def _get_mart_items(self):
         """Read the mart's item list with names and prices."""

@@ -5,17 +5,12 @@ compares against the trainer's current team to maintain type diversity
 and avoid redundancy.
 """
 
-from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
-from pokemon_data import POKEMON_TYPES
-from naming_ai import EVOLUTION_LINES
+from data.pokemon_data import POKEMON_TYPES
+from agents.naming_ai import EVOLUTION_LINES
+from adapters.display.ai_logger import AILogger
 
-_PURPLE = "\033[35m"
-_RESET = "\033[0m"
-
-
-def _ai_print(msg):
-    print(f"{_PURPLE}  AI: {msg}{_RESET}")
+_log = AILogger("SCOUT")
 
 
 SYSTEM_PROMPT = """\
@@ -39,12 +34,8 @@ DECISION: CATCH or DEFEAT"""
 
 
 class ScoutAI:
-    def __init__(self, base_url="http://localhost:11434", model="qwen2.5:3b"):
-        self._llm = ChatOllama(
-            base_url=base_url,
-            model=model,
-            temperature=0.3,
-        )
+    def __init__(self, llm):
+        self._llm = llm
 
     def should_catch(self, enemy_name, enemy_level, team):
         """Decide whether to catch a wild Pokemon.
@@ -65,9 +56,9 @@ class ScoutAI:
                 for mon in team:
                     team_evo = EVOLUTION_LINES.get(mon['name'].upper())
                     if team_evo and tuple(team_evo) == enemy_line:
-                        _ai_print(f"Already have {mon['name']} from the "
+                        _log.log_think(f"Already have {mon['name']} from the "
                                   f"{' → '.join(enemy_evo)} line. SKIP!")
-                        _ai_print("Decision: DEFEAT ⚔️")
+                        _log.log_think("Decision: DEFEAT ⚔️")
                         return False
 
         prompt = self._build_prompt(enemy_name, enemy_level, team)
@@ -76,19 +67,19 @@ class ScoutAI:
             HumanMessage(content=prompt),
         ]
 
-        _ai_print(f"[Scout prompt]\n{_PURPLE}{prompt}{_RESET}")
+        _log.log_think(f"[Scout prompt]\n{_PURPLE}{prompt}{_RESET}")
         response = self._llm.invoke(messages)
         decision = self._parse_decision(response.content)
 
         # Print reasoning
         for line in response.content.strip().split("\n"):
             if line.strip().startswith("THINK:"):
-                _ai_print(line.strip()[6:].strip())
+                _log.log_think(line.strip()[6:].strip())
 
         if decision:
-            _ai_print("Decision: CATCH! 🔴")
+            _log.log_think("Decision: CATCH! 🔴")
         else:
-            _ai_print("Decision: DEFEAT ⚔️")
+            _log.log_think("Decision: DEFEAT ⚔️")
 
         return decision
 

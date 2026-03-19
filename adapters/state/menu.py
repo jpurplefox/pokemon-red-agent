@@ -1,4 +1,4 @@
-from constants import (
+from data.constants import (
     ADDR_MENU_Y, ADDR_MENU_X, ADDR_CURRENT_MENU, ADDR_MAX_MENU,
     ADDR_MENU_WATCHED_KEYS, ADDR_TILEMAP,
 )

@@ -4,7 +4,7 @@ Dumps block maps, walkability data, sprite information, and missable
 object flags for development and troubleshooting.
 """
 
-from constants import (
+from data.constants import (
     ADDR_Y_COORD, ADDR_X_COORD,
     ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, ADDR_OVERWORLD_MAP,
     ADDR_TILESET, ADDR_TILESET_BANK, ADDR_TILESET_COLL_PTR,

@@ -6,29 +6,29 @@ Dependencies are injected via constructor (DIP).
 """
 
 from pyboy import PyBoy
-from constants import (
+from data.constants import (
     ADDR_MAP_N, ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, MAP_NAMES,
     ADDR_Y_COORD, ADDR_X_COORD,
-    ADDR_NUM_BAG_ITEMS, ADDR_BAG_ITEMS, BALL_ITEMS,
-    ADDR_POKEDEX_FLAG,
 )
-from screen import ScreenReader
-from menu import MenuReader
+from adapters.state.screen import ScreenReader
+from adapters.state.menu import MenuReader
 from dialogue import DialogueAdvancer
-from naming import NameEntry
-from overworld import OverworldScanner
-from event_processor import EventProcessor
-from navigator import Navigator
-from battle import BattleHandler
+from adapters.input.naming import NameEntry
+from adapters.state.overworld import OverworldScanner
+from orchestration.event_processor import EventProcessor
+from adapters.input.navigator import Navigator
+from orchestration.battle import BattleHandler
+from adapters.state.bag_reader import BagReader
 from debug_scanner import DebugScanner
-from console import (
+from orchestration.overworld_controller import OverworldAIController
+from adapters.display.console import (
     prompt_menu, prompt_name, prompt_command, print_map, render_map, BUTTONS,
 )
 
 
 class Game:
     def __init__(self, rom_path, battle_strategy=None, naming_ai=None,
-                 overworld_ai=None):
+                 overworld_ai=None, shop_ai=None):
         self._pyboy = PyBoy(rom_path, sound_emulated=False)
         self._screen = ScreenReader(self._pyboy)
         self._menu = MenuReader(self._pyboy, self._screen)
@@ -37,18 +37,20 @@ class Game:
         self._scanner = OverworldScanner(self._pyboy, rom_path)
 
         self._naming_ai = naming_ai
+        self._bag = BagReader(self._pyboy)
         self._event_processor = EventProcessor(
             self._pyboy, self._screen, self._menu,
             self._naming, self._handle_name_menu,
+            bag_reader=self._bag,
         )
         if naming_ai:
             self._event_processor.auto_accept = True
             def _auto_name():
-                party = self._battle._read_party()
+                party = self._battle.read_party()
                 if party:
                     last = party[-1]
-                    team = [(m['name'], m['nickname']) for m in party[:-1]]
-                    return self._naming_ai.suggest_name(last['name'], team)
+                    team = [(m.name, m.nickname) for m in party[:-1]]
+                    return self._naming_ai.suggest_name(last.name, team)
                 return ""
             self._event_processor.auto_name_fn = _auto_name
             # auto_buy_fn set below after _overworld_ai is available
@@ -58,13 +60,23 @@ class Game:
         self._battle = BattleHandler(
             self._pyboy, self._screen, self._menu, self._dialogue,
             strategy=battle_strategy, naming_ai=naming_ai,
+            bag_reader=self._bag,
         )
         self._debug = DebugScanner(self._pyboy, self._scanner)
         self._overworld_ai = overworld_ai
+        self._ow_controller = None
         if overworld_ai:
+            self._ow_controller = OverworldAIController(
+                overworld_ai, self._pyboy, self._scanner, self._navigator,
+                self._battle, self._bag, self._print_surroundings,
+                self._handle_game_menu,
+            )
+        # Wire shop AI: prefer explicit shop_ai, fall back to overworld_ai's shop
+        _shop = shop_ai or (overworld_ai.shop_ai if overworld_ai else None)
+        if _shop:
             def _ai_buy(items, money, pokeballs):
-                party = self._battle._read_party()
-                return self._overworld_ai.decide_purchases(
+                party = self._battle.read_party()
+                return _shop.decide_purchases(
                     items, money, pokeballs, party=party)
             self._event_processor.auto_buy_fn = _ai_buy
 
@@ -171,15 +183,11 @@ class Game:
                 print("\nBattle ended!")
                 self._battle.notify_battle_end()
                 # Record battle result in overworld AI history
-                summary = getattr(self._battle, '_last_battle_summary', None)
-                if summary and self._overworld_ai:
+                summary = self._battle._last_battle_summary
+                if summary and self._ow_controller:
                     mem = self._pyboy.memory
                     map_name = MAP_NAMES.get(mem[ADDR_MAP_N], f"Map {mem[ADDR_MAP_N]}")
-                    action_desc = f"Battle vs {summary['type']} {summary['enemy']}"
-                    self._overworld_ai.record_action(
-                        action_desc, map_name,
-                        result_text=summary['result'],
-                    )
+                    self._ow_controller.record_battle(summary, map_name)
                 self._event_processor.process()
                 self._in_overworld = True
                 self._show_pois = True
@@ -189,7 +197,7 @@ class Game:
             # Just entered a battle — advance intro and show summary
             self._in_battle = True
             self._in_overworld = False
-            self._battle._last_move_idx = 0  # cursor starts at 0
+            self._battle.reset_move_cursor()  # cursor starts at 0
             self._battle.process_intro()
             self._battle.print_summary()
 
@@ -247,14 +255,12 @@ class Game:
             self._show_pois = False
             self._print_surroundings()
 
-        if self._overworld_ai and not getattr(self._overworld_ai, '_shop_only', False) \
-                and not getattr(self, '_overworld_ai_paused', False):
+        if self._ow_controller and not self._ow_controller.paused:
             return self._handle_overworld_ai()
 
         cmd = prompt_command()
-        if cmd == "ai" and self._overworld_ai:
-            print("  ▶️  AI resumed!")
-            self._overworld_ai_paused = False
+        if cmd == "ai" and self._ow_controller:
+            self._ow_controller.resume()
             self._show_pois = True
             return True
         elif cmd == "quit":
@@ -284,103 +290,23 @@ class Game:
 
         return True
 
-    def _check_user_interrupt(self):
-        """Check if the user pressed Enter to take over from the AI."""
-        import sys, select
-        if select.select([sys.stdin], [], [], 0)[0]:
-            sys.stdin.readline()  # consume the input
-            print("\n  ⏸️  AI paused — you have control now. Type 'ai' to resume.")
-            self._overworld_ai_paused = True
-            return True
-        return False
-
     def _handle_overworld_ai(self):
-        """Let the overworld AI decide the next action."""
-        if self._check_user_interrupt():
-            return True
-        mem = self._pyboy.memory
-        map_id = mem[ADDR_MAP_N]
-        map_name = MAP_NAMES.get(map_id, f"Map {map_id}")
-        pois = self._scanner.get_pois()
-        grid, _, _ = self._scanner.get_walkable_grid()
-        py, px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
-
-        party = self._battle._read_party()
-
-        # Read bag: pokeballs count and pokedex flag
-        num_items = mem[ADDR_NUM_BAG_ITEMS]
-        pokeballs = 0
-        for i in range(num_items):
-            item_id = mem[ADDR_BAG_ITEMS + i * 2]
-            count = mem[ADDR_BAG_ITEMS + i * 2 + 1]
-            if item_id in BALL_ITEMS:
-                pokeballs += count
-        has_pokedex = bool(mem[ADDR_POKEDEX_FLAG] & (1 << 5))
-
-        action_type, detail = self._overworld_ai.decide(
-            map_name, pois, grid=grid, player_y=py, player_x=px,
-            party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
-        )
-
-        if action_type == "goal_reached":
-            print("AI has reached its goal — returning control to you.")
+        """Delegate to the OverworldAIController."""
+        result = self._ow_controller.tick()
+        if result == "goal_reached":
+            self._ow_controller = None
             self._overworld_ai = None
             self._show_pois = True
-            return True
-
-        if action_type == "go":
-            poi = pois[detail]
-            self._overworld_ai.record_poi_visited(map_name, poi["label"])
-            result = self._navigator.go_to(poi, self._print_surroundings)
+        elif result == "acted":
             self._in_overworld = True
-            new_map_id = mem[ADDR_MAP_N]
-            new_map_name = MAP_NAMES.get(new_map_id, f"Map {new_map_id}")
-            dialogue = result.get("dialogue", "")
-            if result.get("map_changed"):
-                action_desc = f"Went to {poi['label']}"
-                result_desc = f"Arrived at {new_map_name}"
-                self._overworld_ai.record_action(
-                    action_desc, map_name, result_desc,
-                    poi_label=poi['label'], poi_kind=poi['kind'],
-                    poi_num=detail + 1,
-                )
-            else:
-                action_desc = f"Interacted with {poi['label']}"
-                result_desc = dialogue or ""
-                self._overworld_ai.record_action(
-                    action_desc, map_name, result_desc,
-                    poi_label=poi['label'], poi_kind=poi['kind'],
-                    poi_num=detail + 1,
-                )
-            # Reflect only when there was dialogue (NPC info, events)
-            if dialogue:
-                self._overworld_ai.reflect(
-                    map_name, action_desc,
-                    result=result_desc, dialogue=dialogue,
-                )
             self._show_pois = True
-
-        elif action_type == "move":
-            self._pyboy.button(detail, delay=8)
-            self._pyboy.tick(30)
-            self._overworld_ai.record_action(f"Moved {detail}", map_name, "")
-            self._print_surroundings()
-
-        elif action_type == "look":
-            self._print_surroundings()
-
-        elif action_type == "start":
-            self._pyboy.button("start", delay=8)
-            self._pyboy.tick(30)
-            self._handle_game_menu()
-
         return True
 
     def _change_lead(self):
         """Let the player choose a new lead Pokemon via the in-game party menu."""
         from constants import ADDR_CURRENT_MENU
 
-        party = self._battle._read_party()
+        party = self._battle.read_party()
         if len(party) <= 1:
             print("Only one Pokemon in party.")
             return
@@ -389,14 +315,14 @@ class Game:
         print("\n--- Choose Lead ---")
         options = []
         for i, mon in enumerate(party):
-            label = mon['nickname']
-            if mon['nickname'] != mon['name']:
-                label = f"{mon['name']} ({mon['nickname']})"
+            label = mon.nickname
+            if mon.nickname != mon.name:
+                label = f"{mon.name} ({mon.nickname})"
             lead = " ⭐" if i == 0 else ""
-            fainted = " 💀" if mon['hp'] <= 0 else ""
+            fainted = " 💀" if mon.hp <= 0 else ""
             options.append(
-                f"{label} Lv{mon['level']}"
-                f"  {mon['hp']}/{mon['max_hp']} HP{lead}{fainted}"
+                f"{label} Lv{mon.level}"
+                f"  {mon.hp}/{mon.max_hp} HP{lead}{fainted}"
             )
         options.append("Cancel")
         choice = prompt_menu(options)
@@ -474,12 +400,12 @@ class Game:
             self._pyboy.tick(30)
 
         # Verify the swap
-        new_party = self._battle._read_party()
+        new_party = self._battle.read_party()
         new_lead = new_party[0]
-        label = new_lead['nickname']
-        if new_lead['nickname'] != new_lead['name']:
-            label = f"{new_lead['name']} ({new_lead['nickname']})"
-        print(f"New lead: {label} Lv{new_lead['level']}!")
+        label = new_lead.nickname
+        if new_lead.nickname != new_lead.name:
+            label = f"{new_lead.name} ({new_lead.nickname})"
+        print(f"New lead: {label} Lv{new_lead.level}!")
         self._show_pois = True
 
     def _handle_game_menu(self):

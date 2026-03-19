@@ -10,10 +10,9 @@ Prompts are managed as Jinja2 templates in the templates/ directory.
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
-from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
-from pokemon_data import POKEMON_TYPES, MOVE_TYPES, MOVE_DATA
-from ai_logger import AILogger
+from data.pokemon_data import POKEMON_TYPES, MOVE_TYPES, MOVE_DATA
+from adapters.display.ai_logger import AILogger
 
 _TEMPLATES = Path(__file__).parent / "templates"
 _env = Environment(loader=FileSystemLoader(_TEMPLATES), trim_blocks=True,
@@ -27,13 +26,8 @@ def _render(template_name, **kwargs):
 
 
 class BattleAI:
-    def __init__(self, base_url="http://localhost:11434", model="qwen2.5:14b",
-                 scout=None):
-        self._llm = ChatOllama(
-            base_url=base_url,
-            model=model,
-            temperature=0.3,
-        )
+    def __init__(self, llm, scout=None):
+        self._llm = llm
         self._goal = None  # "defeat" or "catch"
         self._scout = scout
         self._team = []  # [{name, level, ...}] — updated from battle data
@@ -70,29 +64,33 @@ class BattleAI:
             "_enemy_hp": enemy_hp,
         })
 
+    def get_history(self):
+        """Return the battle turn history."""
+        return self._history
+
     def on_battle_start(self, player, enemy, is_wild, balls=None):
         """Called at the start of a new battle to set the goal."""
         self._history = []
         self._goal = "defeat"
         if is_wild:
             has_balls = balls and any(c > 0 for _, c, _ in balls)
-            _log.log_think(f"A wild {enemy['name']} (Lv{enemy['level']}) appeared!")
+            _log.log_think(f"A wild {enemy.name} (Lv{enemy.level}) appeared!")
             if has_balls and self._scout:
                 should_catch = self._scout.should_catch(
-                    enemy['name'], enemy['level'], self._team
+                    enemy.name, enemy.level, self._team
                 )
                 if should_catch:
                     self._goal = "catch"
-                    _log.log_think(f"Goal: CATCH {enemy['name']}!")
+                    _log.log_think(f"Goal: CATCH {enemy.name}!")
                 else:
-                    _log.log_think(f"Goal: DEFEAT {enemy['name']}!")
+                    _log.log_think(f"Goal: DEFEAT {enemy.name}!")
             elif has_balls:
                 choice = input(f"\033[35m  AI: Fight or catch? [f/c]: \033[0m").strip().lower()
                 if choice.startswith("c"):
                     self._goal = "catch"
-                    _log.log_think(f"Goal: CATCH {enemy['name']}!")
+                    _log.log_think(f"Goal: CATCH {enemy.name}!")
                 else:
-                    _log.log_think(f"Goal: DEFEAT {enemy['name']}!")
+                    _log.log_think(f"Goal: DEFEAT {enemy.name}!")
             else:
                 _log.log_think("No Poke Balls — going for the win!")
 
@@ -150,42 +148,42 @@ class BattleAI:
         if not enemy or len(alive_indices) == 1:
             # Only one option or no enemy data — skip LLM
             idx = alive_indices[0]
-            label = party[idx]['nickname']
-            if party[idx]['nickname'] != party[idx]['name']:
-                label = f"{party[idx]['name']} ({party[idx]['nickname']})"
-            _log.log_think(f"=> Sending out {label} Lv{party[idx]['level']}!")
+            label = party[idx].nickname
+            if party[idx].nickname != party[idx].name:
+                label = f"{party[idx].name} ({party[idx].nickname})"
+            _log.log_think(f"=> Sending out {label} Lv{party[idx].level}!")
             return idx
 
         # Build candidate list
         candidates = []
         for i in alive_indices:
             mon = party[i]
-            nick = mon['nickname']
-            label = (f"{mon['name']} ({nick})"
-                     if nick != mon['name'] else nick)
-            m_types = POKEMON_TYPES.get(mon['name'].upper(), "")
+            nick = mon.nickname
+            label = (f"{mon.name} ({nick})"
+                     if nick != mon.name else nick)
+            m_types = POKEMON_TYPES.get(mon.name.upper(), "")
             candidates.append({
                 "label": label, "types": m_types,
-                "level": mon['level'],
-                "hp": mon['hp'], "max_hp": mon['max_hp'],
+                "level": mon.level,
+                "hp": mon.hp, "max_hp": mon.max_hp,
             })
 
         # Enemy data
-        e_types = POKEMON_TYPES.get(enemy['name'].upper(), "")
-        hp_pct = round(enemy['hp'] / enemy['max_hp'] * 100) if enemy['max_hp'] else 0
+        e_types = POKEMON_TYPES.get(enemy.name.upper(), "")
+        hp_pct = round(enemy.hp / enemy.max_hp * 100) if enemy.max_hp else 0
         enemy_data = {
-            "name": enemy['name'], "types": e_types,
-            "level": enemy['level'],
-            "hp": enemy['hp'], "max_hp": enemy['max_hp'],
+            "name": enemy.name, "types": e_types,
+            "level": enemy.level,
+            "hp": enemy.hp, "max_hp": enemy.max_hp,
             "hp_pct": hp_pct,
-            "status": enemy.get('status', ''),
+            "status": enemy.status,
         }
 
         # Find fainted pokemon name
         fainted_name = "your pokemon"
         active = self._active_idx
         if active is not None and active < len(party):
-            fainted_name = party[active]['name']
+            fainted_name = party[active].name
 
         battle_type = "Wild" if is_wild else "Trainer"
 
@@ -229,24 +227,24 @@ class BattleAI:
                     target = action[7:].strip()
                     for i in alive_indices:
                         mon = party[i]
-                        if (target.upper() in mon['nickname'].upper()
-                                or target.upper() in mon['name'].upper()):
-                            label = mon['nickname']
-                            if mon['nickname'] != mon['name']:
-                                label = f"{mon['name']} ({mon['nickname']})"
-                            _log.log_think(f"=> Sending out {label} Lv{mon['level']}!")
+                        if (target.upper() in mon.nickname.upper()
+                                or target.upper() in mon.name.upper()):
+                            label = mon.nickname
+                            if mon.nickname != mon.name:
+                                label = f"{mon.name} ({mon.nickname})"
+                            _log.log_think(f"=> Sending out {label} Lv{mon.level}!")
                             return i
 
         # Fallback: highest level
         best_idx = alive_indices[0]
         best_level = 0
         for i in alive_indices:
-            if party[i]['level'] > best_level:
-                best_level = party[i]['level']
+            if party[i].level > best_level:
+                best_level = party[i].level
                 best_idx = i
-        label = party[best_idx]['nickname']
-        if party[best_idx]['nickname'] != party[best_idx]['name']:
-            label = f"{party[best_idx]['name']} ({party[best_idx]['nickname']})"
+        label = party[best_idx].nickname
+        if party[best_idx].nickname != party[best_idx].name:
+            label = f"{party[best_idx].name} ({party[best_idx].nickname})"
         _log.log_think(f"=> Sending out {label} Lv{best_level}!")
         return best_idx
 
@@ -259,26 +257,26 @@ class BattleAI:
         _log.log_think("--- Switch before next opponent? ---")
 
         current = party[active_idx]
-        hp_pct = round(current['hp'] / current['max_hp'] * 100) if current['max_hp'] else 100
-        p_types = POKEMON_TYPES.get(current['name'].upper(), "")
+        hp_pct = round(current.hp / current.max_hp * 100) if current.max_hp else 100
+        p_types = POKEMON_TYPES.get(current.name.upper(), "")
         active_data = {
-            "name": current['name'], "types": p_types,
-            "level": current['level'],
-            "hp": current['hp'], "max_hp": current['max_hp'],
+            "name": current.name, "types": p_types,
+            "level": current.level,
+            "hp": current.hp, "max_hp": current.max_hp,
             "hp_pct": hp_pct,
         }
 
         candidates = []
         for i in alive_indices:
             mon = party[i]
-            nick = mon['nickname']
-            label = (f"{mon['name']} ({nick})"
-                     if nick != mon['name'] else nick)
-            m_types = POKEMON_TYPES.get(mon['name'].upper(), "")
+            nick = mon.nickname
+            label = (f"{mon.name} ({nick})"
+                     if nick != mon.name else nick)
+            m_types = POKEMON_TYPES.get(mon.name.upper(), "")
             candidates.append({
                 "label": label, "types": m_types,
-                "level": mon['level'],
-                "hp": mon['hp'], "max_hp": mon['max_hp'],
+                "level": mon.level,
+                "hp": mon.hp, "max_hp": mon.max_hp,
             })
 
         system_prompt = _render("switch_offer.j2")
@@ -307,12 +305,12 @@ class BattleAI:
                     target = action[7:].strip()
                     for i in alive_indices:
                         mon = party[i]
-                        if (target.upper() in mon['nickname'].upper()
-                                or target.upper() in mon['name'].upper()):
-                            label = mon['nickname']
-                            if mon['nickname'] != mon['name']:
-                                label = f"{mon['name']} ({mon['nickname']})"
-                            _log.log_think(f"=> SWITCH to {label} Lv{mon['level']}!")
+                        if (target.upper() in mon.nickname.upper()
+                                or target.upper() in mon.name.upper()):
+                            label = mon.nickname
+                            if mon.nickname != mon.name:
+                                label = f"{mon.name} ({mon.nickname})"
+                            _log.log_think(f"=> SWITCH to {label} Lv{mon.level}!")
                             return i
 
         # Couldn't parse — stay
@@ -330,7 +328,7 @@ class BattleAI:
             tuple: ("move", move_name), ("run", None),
                    ("ball", bag_index), or ("switch", party_idx)
         """
-        _log.log_think(f"--- Turn: {player['name']} vs {enemy['name']} ---")
+        _log.log_think(f"--- Turn: {player.name} vs {enemy.name} ---")
 
         # If catching and no balls left, switch to defeat
         if self._goal == "catch" and (not balls or all(c == 0 for _, c, _ in balls)):
@@ -370,7 +368,7 @@ class BattleAI:
 
         # Final fallback if all retries failed
         if action is None:
-            available = [m[0] for m in player['moves'] if m[1] > 0]
+            available = [m.name for m in player.moves if m.pp > 0]
             if available:
                 _log.log_think("(all retries failed, using first move)")
                 action = ("move", available[0])
@@ -379,14 +377,14 @@ class BattleAI:
 
         # Hard override: never RUN in trainer battles
         if not is_wild and action[0] == "run":
-            available = [m[0] for m in player['moves'] if m[1] > 0]
+            available = [m.name for m in player.moves if m.pp > 0]
             if available:
                 _log.log_think("(can't run from trainer, forcing attack)")
                 action = ("move", available[0])
 
         # Hard override: if catching and enemy HP <= 50%, force ball throw
         if self._goal == "catch" and action[0] != "ball" and balls:
-            hp_pct = round(enemy['hp'] / enemy['max_hp'] * 100) if enemy['max_hp'] else 100
+            hp_pct = round(enemy.hp / enemy.max_hp * 100) if enemy.max_hp else 100
             if hp_pct <= 50:
                 for name, count, bag_idx in balls:
                     if count > 0:
@@ -418,40 +416,40 @@ class BattleAI:
     def _render_state(self, player, enemy, is_wild, balls=None):
         """Render the battle state user prompt."""
         # Enemy data
-        e_types = POKEMON_TYPES.get(enemy['name'].upper(), "")
-        hp_pct = round(enemy['hp'] / enemy['max_hp'] * 100) if enemy['max_hp'] else 0
+        e_types = POKEMON_TYPES.get(enemy.name.upper(), "")
+        hp_pct = round(enemy.hp / enemy.max_hp * 100) if enemy.max_hp else 0
         enemy_data = {
-            "name": enemy['name'], "types": e_types,
-            "level": enemy['level'],
-            "hp": enemy['hp'], "max_hp": enemy['max_hp'],
+            "name": enemy.name, "types": e_types,
+            "level": enemy.level,
+            "hp": enemy.hp, "max_hp": enemy.max_hp,
             "hp_pct": hp_pct,
-            "status": enemy.get('status', ''),
+            "status": enemy.status,
         }
 
         # Player data with typed moves + power/description + STAB
-        p_types = POKEMON_TYPES.get(player['name'].upper(), "")
+        p_types = POKEMON_TYPES.get(player.name.upper(), "")
         p_type_list = [t.strip() for t in p_types.split("/")] if p_types else []
         moves = []
-        for name, pp, max_pp in player['moves']:
-            m_type = MOVE_TYPES.get(name.upper(), "")
-            data = MOVE_DATA.get(name.upper())
+        for m in player.moves:
+            m_type = MOVE_TYPES.get(m.name.upper(), "")
+            data = MOVE_DATA.get(m.name.upper())
             power = data[0] if data else 0
             accuracy = data[1] if data else 0
             category = data[2] if data else ""
             desc = data[3] if data else ""
             stab = m_type != "" and m_type in p_type_list
             moves.append({
-                "name": name, "type": m_type,
-                "pp": pp, "max_pp": max_pp,
+                "name": m.name, "type": m_type,
+                "pp": m.pp, "max_pp": m.max_pp,
                 "power": power, "accuracy": accuracy,
                 "category": category, "desc": desc,
                 "stab": stab,
             })
         player_data = {
-            "name": player['name'], "types": p_types,
-            "level": player['level'],
-            "hp": player['hp'], "max_hp": player['max_hp'],
-            "status": player.get('status', ''),
+            "name": player.name, "types": p_types,
+            "level": player.level,
+            "hp": player.hp, "max_hp": player.max_hp,
+            "status": player.status,
             "moves": moves,
         }
 
@@ -465,16 +463,16 @@ class BattleAI:
         for i, mon in enumerate(self._team):
             if i == self._active_idx:
                 continue
-            if mon['hp'] <= 0:
+            if mon.hp <= 0:
                 continue
-            nick = mon['nickname']
-            label = (f"{mon['name']} ({nick})"
-                     if nick != mon['name'] else nick)
-            m_types = POKEMON_TYPES.get(mon['name'].upper(), "")
+            nick = mon.nickname
+            label = (f"{mon.name} ({nick})"
+                     if nick != mon.name else nick)
+            m_types = POKEMON_TYPES.get(mon.name.upper(), "")
             switchable.append({
                 "label": label, "types": m_types,
-                "level": mon['level'],
-                "hp": mon['hp'], "max_hp": mon['max_hp'],
+                "level": mon.level,
+                "hp": mon.hp, "max_hp": mon.max_hp,
             })
 
         battle_type = "Wild" if is_wild else "Trainer (CANNOT RUN)"
@@ -515,18 +513,18 @@ class BattleAI:
                     for i, mon in enumerate(self._team):
                         if i == self._active_idx:
                             continue
-                        if mon['hp'] <= 0:
+                        if mon.hp <= 0:
                             continue
-                        if (target.upper() in mon['nickname'].upper()
-                                or target.upper() in mon['name'].upper()):
+                        if (target.upper() in mon.nickname.upper()
+                                or target.upper() in mon.name.upper()):
                             return ("switch", i), None
                     return None, (
                         f"'{target}' doesn't match any switchable party member. "
-                        f"Available: {[m['nickname'] for m in self._team if m['hp'] > 0 and self._team.index(m) != self._active_idx]}"
+                        f"Available: {[m.nickname for m in self._team if m.hp > 0 and self._team.index(m) != self._active_idx]}"
                     )
                 if action.startswith("MOVE:"):
                     move_name = action[5:].strip().replace("_", " ")
-                    available = [m[0] for m in player['moves'] if m[1] > 0]
+                    available = [m.name for m in player.moves if m.pp > 0]
                     for m in available:
                         if m.upper() == move_name.upper():
                             return ("move", m), None
@@ -551,8 +549,8 @@ class BattleAI:
             _log.log_think("=> throw Poke Ball!")
         elif action[0] == "switch":
             mon = self._team[action[1]]
-            label = (mon['nickname'] if mon['nickname'] == mon['name']
-                     else f"{mon['name']} ({mon['nickname']})")
+            label = (mon.nickname if mon.nickname == mon.name
+                     else f"{mon.name} ({mon.nickname})")
             _log.log_think(f"=> SWITCH to {label}!")
         else:
             _log.log_think(f"=> {action[1]}")

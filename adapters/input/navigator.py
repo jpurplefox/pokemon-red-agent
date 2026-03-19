@@ -4,9 +4,9 @@ Handles the 'go' command: selecting a POI, finding a path, walking
 step-by-step with interrupt detection, and interacting on arrival.
 """
 
-from constants import ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD
-from pathfinder import find_best_path
-from console import prompt_poi_selection
+from data.constants import ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD
+from adapters.input.pathfinder import find_best_path
+from adapters.display.console import prompt_poi_selection
 
 MAX_NPC_RETRIES = 3
 

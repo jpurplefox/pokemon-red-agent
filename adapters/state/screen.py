@@ -1,4 +1,4 @@
-from constants import ADDR_TILEMAP, POKEMON_CHARMAP
+from data.constants import ADDR_TILEMAP, POKEMON_CHARMAP
 
 
 class ScreenReader:

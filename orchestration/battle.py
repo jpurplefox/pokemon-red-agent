@@ -1,56 +1,60 @@
-"""Battle system — detects battles and manages the combat loop (SRP).
+"""Battle system — orchestrates the combat loop (SRP).
 
-Handles battle state detection, auto-advancing intro dialogue,
-displaying battle summaries, and prompting for battle actions.
+Delegates state reading to BattleStateReader and menu navigation to
+BattleMenuDriver. This class handles flow control only: intro processing,
+turn sequencing, switch handling, and strategy dispatch.
 Dependencies injected via constructor (DIP).
 """
 
-from constants import (
-    ADDR_IS_IN_BATTLE, ADDR_BATTLE_MON, ADDR_ENEMY_MON,
-    ADDR_PLAYER_MON_NUMBER,
-    BMON_SPECIES, BMON_HP, BMON_STATUS, BMON_MOVES,
-    BMON_PP, BMON_LEVEL, BMON_MAX_HP,
-    ADDR_NUM_BAG_ITEMS, ADDR_BAG_ITEMS, BALL_ITEMS,
-    ADDR_PARTY_COUNT, ADDR_PARTY_SPECIES, ADDR_PARTY_MONS,
-    PARTY_MON_SIZE, PARTY_MON_LEVEL, PARTY_MON_HP, PARTY_MON_MAX_HP,
-    ADDR_PARTY_NICKS, PARTY_NICK_SIZE,
-)
-from pokemon_data import POKEMON_NAMES, MOVE_NAMES, MOVE_BASE_PP, status_text
-from constants import POKEMON_CHARMAP
-from console import prompt_menu
+from data.constants import ADDR_PLAYER_MON_NUMBER
+from adapters.display.console import prompt_menu
+from adapters.state.battle_state_reader import BattleStateReader
+from adapters.input.battle_menu_driver import BattleMenuDriver
 
 
 class BattleHandler:
     def __init__(self, pyboy, screen, menu, dialogue, strategy=None,
-                 naming_ai=None):
+                 naming_ai=None, bag_reader=None):
         self._pyboy = pyboy
         self._screen = screen
         self._menu = menu
         self._dialogue = dialogue
-        self._last_move_idx = 0  # move menu cursor starts at 0
+        self._state = BattleStateReader(pyboy)
+        self._driver = BattleMenuDriver(pyboy, screen)
         self._strategy = strategy or ManualStrategy()
         self._naming_ai = naming_ai
+        self._bag = bag_reader
+        self._last_was_wild = True
+        self._enemy_name = "unknown"
+        self._trainer_name = None
+        self._last_battle_summary = None
 
     # ------------------------------------------------------------------
     # State detection
     # ------------------------------------------------------------------
 
     def is_in_battle(self):
-        """Check if we're currently in a battle."""
-        return self._pyboy.memory[ADDR_IS_IN_BATTLE] != 0
+        return self._state.is_in_battle()
+
+    def reset_move_cursor(self):
+        self._driver.reset_move_cursor()
 
     def is_wild(self):
-        return self._pyboy.memory[ADDR_IS_IN_BATTLE] == 1
+        return self._state.is_wild()
 
     def is_trainer(self):
-        return self._pyboy.memory[ADDR_IS_IN_BATTLE] == 2
+        return self._state.is_trainer()
+
+    def read_party(self):
+        return self._state.read_party()
 
     def notify_battle_end(self):
         """Notify the strategy that the battle ended so it can recap."""
         # Determine result from last turn context
         result = "unknown"
-        if hasattr(self._strategy, '_history') and self._strategy._history:
-            last_text = self._strategy._history[-1].get("text", "").lower()
+        history = self._strategy.get_history()
+        if history:
+            last_text = history[-1].get("text", "").lower()
             if "got" in last_text and "for winning" in last_text:
                 result = "victory"
             elif "fainted" in last_text:
@@ -63,9 +67,9 @@ class BattleHandler:
             elif "gotcha" in last_text or "was caught" in last_text:
                 result = "caught"
 
-        is_wild = self._last_was_wild if hasattr(self, '_last_was_wild') else True
-        enemy_pokemon = getattr(self, '_enemy_name', 'unknown')
-        trainer_name = getattr(self, '_trainer_name', None)
+        is_wild = self._last_was_wild
+        enemy_pokemon = self._enemy_name
+        trainer_name = self._trainer_name
         battle_type = "Wild" if is_wild else "Trainer"
         enemy_label = trainer_name if trainer_name else enemy_pokemon
         self._last_battle_summary = {
@@ -74,20 +78,7 @@ class BattleHandler:
             "result": result,
         }
 
-        if hasattr(self._strategy, 'on_battle_end'):
-            self._strategy.on_battle_end(is_wild, result)
-
-    def has_battle_menu(self):
-        """Check if the main battle menu (FIGHT/ITEM/RUN) is on screen.
-
-        Scans the bottom portion of the screen (rows 14-17, cols 8-19)
-        for the "FIGHT" text that appears in the battle action menu.
-        """
-        for row in range(14, 18):
-            text = self._screen.decode_tiles(row, 8, 12)
-            if "FIGHT" in text:
-                return True
-        return False
+        self._strategy.on_battle_end(is_wild, result)
 
     # ------------------------------------------------------------------
     # Battle intro
@@ -100,7 +91,7 @@ class BattleHandler:
         Prints all dialogue text, then returns when ready for player input.
         """
         full = self._dialogue.advance_until(
-            lambda d, u: self.has_battle_menu()
+            lambda d, u: self._driver.has_battle_menu()
         )
         if full:
             # Filter out garbage from battle transition animation
@@ -113,12 +104,11 @@ class BattleHandler:
                 print(f"\n{clean.strip()}")
 
         # Update strategy with current team roster and notify of battle start
-        if hasattr(self._strategy, 'set_team'):
-            active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
-            self._strategy.set_team(self._read_party(), active_idx)
+        active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
+        self._strategy.set_team(self._state.read_party(), active_idx)
         self._last_was_wild = self.is_wild()
-        enemy = self._read_mon(ADDR_ENEMY_MON)
-        self._enemy_name = enemy['name']
+        enemy = self._state.read_enemy()
+        self._enemy_name = enemy.name
         # Extract trainer name from intro text (e.g. "FOLAGOR wants to fight!")
         self._trainer_name = None
         if not self._last_was_wild and full:
@@ -127,84 +117,19 @@ class BattleHandler:
                 if "wants to fight" in part:
                     self._trainer_name = part.replace("wants to fight", "").strip()
                     break
-        if hasattr(self._strategy, 'on_battle_start'):
-            player = self._read_mon(ADDR_BATTLE_MON)
-            enemy = self._read_mon(ADDR_ENEMY_MON)
-            balls = self.get_balls() if self._last_was_wild else []
-            self._strategy.on_battle_start(player, enemy, self._last_was_wild, balls)
+        player = self._state.read_player()
+        enemy = self._state.read_enemy()
+        balls = self.get_balls() if self._last_was_wild else []
+        self._strategy.on_battle_start(player, enemy, self._last_was_wild, balls)
 
     # ------------------------------------------------------------------
     # Battle summary
     # ------------------------------------------------------------------
 
-    def _read_enemy_species(self):
-        """Read the enemy Pokemon's species name."""
-        mem = self._pyboy.memory
-        species = mem[ADDR_ENEMY_MON + BMON_SPECIES]
-        return POKEMON_NAMES.get(species, f"POKEMON#{species:02X}")
-
-    def _read_party(self):
-        """Read the player's party: list of {name, level, nickname}."""
-        mem = self._pyboy.memory
-        count = mem[ADDR_PARTY_COUNT]
-        party = []
-        for i in range(min(count, 6)):
-            species_id = mem[ADDR_PARTY_SPECIES + i]
-            name = POKEMON_NAMES.get(species_id, f"#{species_id:02X}")
-            base = ADDR_PARTY_MONS + i * PARTY_MON_SIZE
-            level = mem[base + PARTY_MON_LEVEL]
-            hp = (mem[base + PARTY_MON_HP] << 8) | mem[base + PARTY_MON_HP + 1]
-            max_hp = (mem[base + PARTY_MON_MAX_HP] << 8) | mem[base + PARTY_MON_MAX_HP + 1]
-            # Read nickname from WRAM
-            nick_base = ADDR_PARTY_NICKS + i * PARTY_NICK_SIZE
-            nickname = ""
-            for j in range(10):
-                tile = mem[nick_base + j]
-                if tile == 0x50:
-                    break
-                nickname += POKEMON_CHARMAP.get(tile, "")
-            party.append({
-                "name": name,
-                "level": level,
-                "hp": hp,
-                "max_hp": max_hp,
-                "nickname": nickname.strip() or name,
-            })
-        return party
-
-    def _read_mon(self, base):
-        """Read a battle mon's stats from WRAM."""
-        mem = self._pyboy.memory
-        species = mem[base + BMON_SPECIES]
-        hp = (mem[base + BMON_HP] << 8) | mem[base + BMON_HP + 1]
-        max_hp = (mem[base + BMON_MAX_HP] << 8) | mem[base + BMON_MAX_HP + 1]
-        level = mem[base + BMON_LEVEL]
-        status = status_text(mem[base + BMON_STATUS])
-        name = POKEMON_NAMES.get(species, f"#{species:02X}")
-
-        moves = []
-        for i in range(4):
-            move_id = mem[base + BMON_MOVES + i]
-            if move_id == 0:
-                continue
-            pp_byte = mem[base + BMON_PP + i]
-            pp = pp_byte & 0x3F          # lower 6 bits = current PP
-            pp_ups = pp_byte >> 6         # upper 2 bits = PP Up count
-            base_pp = MOVE_BASE_PP.get(move_id, 0)
-            max_pp = base_pp + (base_pp * pp_ups) // 5
-            move_name = MOVE_NAMES.get(move_id, f"Move #{move_id}")
-            moves.append((move_name, pp, max_pp))
-
-        return {
-            "name": name, "level": level,
-            "hp": hp, "max_hp": max_hp,
-            "status": status, "moves": moves,
-        }
-
     def print_summary(self):
         """Print the current battle state: both pokemon and available moves."""
-        player = self._read_mon(ADDR_BATTLE_MON)
-        enemy = self._read_mon(ADDR_ENEMY_MON)
+        player = self._state.read_player()
+        enemy = self._state.read_enemy()
 
         battle_type = "Wild" if self.is_wild() else "Trainer"
         print(f"\n{'=' * 40}")
@@ -212,20 +137,20 @@ class BattleHandler:
         print(f"{'=' * 40}")
 
         # Enemy pokemon
-        e_status = f" [{enemy['status']}]" if enemy['status'] else ""
-        print(f"  Enemy: {enemy['name']} Lv{enemy['level']}"
-              f"  HP: {enemy['hp']}/{enemy['max_hp']}{e_status}")
+        e_status = f" [{enemy.status}]" if enemy.status else ""
+        print(f"  Enemy: {enemy.name} Lv{enemy.level}"
+              f"  HP: {enemy.hp}/{enemy.max_hp}{e_status}")
 
         # Player pokemon
-        p_status = f" [{player['status']}]" if player['status'] else ""
-        print(f"  Your:  {player['name']} Lv{player['level']}"
-              f"  HP: {player['hp']}/{player['max_hp']}{p_status}")
+        p_status = f" [{player.status}]" if player.status else ""
+        print(f"  Your:  {player.name} Lv{player.level}"
+              f"  HP: {player.hp}/{player.max_hp}{p_status}")
 
         # Player moves
         print(f"{'-' * 40}")
         print("  Moves:")
-        for i, (name, pp, max_pp) in enumerate(player['moves'], 1):
-            print(f"    {i}. {name:<14} {pp}/{max_pp} PP")
+        for i, m in enumerate(player.moves, 1):
+            print(f"    {i}. {m.name:<14} {m.pp}/{m.max_pp} PP")
 
         # Show balls in wild battles
         if self.is_wild():
@@ -236,21 +161,21 @@ class BattleHandler:
                     print(f"    🔴 {ball_name} ×{count}")
 
         # Show party
-        party = self._read_party()
+        party = self._state.read_party()
         active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
         if len(party) > 1:
             print("  Party:")
             for i, mon in enumerate(party):
                 is_active = (i == active_idx)
                 flag = " ⚔️" if is_active else ""
-                fainted = " 💀" if mon['hp'] <= 0 else ""
-                label = mon['nickname']
-                if mon['nickname'] != mon['name']:
-                    label = f"{mon['name']} ({mon['nickname']})"
+                fainted = " 💀" if mon.hp <= 0 else ""
+                label = mon.nickname
+                if mon.nickname != mon.name:
+                    label = f"{mon.name} ({mon.nickname})"
                 # Show battle HP for active, party HP for others
-                hp = player['hp'] if is_active else mon['hp']
-                max_hp = player['max_hp'] if is_active else mon['max_hp']
-                print(f"    {label} Lv{mon['level']}"
+                hp = player.hp if is_active else mon.hp
+                max_hp = player.max_hp if is_active else mon.max_hp
+                print(f"    {label} Lv{mon.level}"
                       f"  {hp}/{max_hp} HP{flag}{fainted}")
         print(f"{'=' * 40}")
 
@@ -259,27 +184,21 @@ class BattleHandler:
     # ------------------------------------------------------------------
 
     def get_balls(self):
-        """Return list of (item_name, count) for Poké Balls in the bag."""
-        mem = self._pyboy.memory
-        num_items = mem[ADDR_NUM_BAG_ITEMS]
-        balls = []
-        for i in range(num_items):
-            item_id = mem[ADDR_BAG_ITEMS + i * 2]
-            count = mem[ADDR_BAG_ITEMS + i * 2 + 1]
-            if item_id in BALL_ITEMS:
-                balls.append((BALL_ITEMS[item_id], count, i))
-        return balls
+        """Return list of (ball_name, count, bag_index) for Poké Balls."""
+        if self._bag:
+            return self._bag.get_balls()
+        # Fallback for when no BagReader is injected
+        from bag_reader import BagReader
+        return BagReader(self._pyboy).get_balls()
 
     def _record_turn(self, text):
         """Pass turn text and current HP to the strategy for history tracking."""
-        if not hasattr(self._strategy, 'add_turn'):
-            return
-        player = self._read_mon(ADDR_BATTLE_MON)
-        enemy = self._read_mon(ADDR_ENEMY_MON)
+        player = self._state.read_player()
+        enemy = self._state.read_enemy()
         self._strategy.add_turn(
             text,
-            player['hp'], player['max_hp'],
-            enemy['hp'], enemy['max_hp'],
+            player.hp, player.max_hp,
+            enemy.hp, enemy.max_hp,
         )
 
     # ------------------------------------------------------------------
@@ -288,14 +207,13 @@ class BattleHandler:
 
     def prompt_action(self):
         """Decide and execute a battle action using the injected strategy."""
-        player = self._read_mon(ADDR_BATTLE_MON)
-        enemy = self._read_mon(ADDR_ENEMY_MON)
+        player = self._state.read_player()
+        enemy = self._state.read_enemy()
         balls = self.get_balls() if self.is_wild() else []
         active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
 
         # Refresh party data so strategy has current info
-        if hasattr(self._strategy, 'set_team'):
-            self._strategy.set_team(self._read_party(), active_idx)
+        self._strategy.set_team(self._state.read_party(), active_idx)
 
         action_type, detail = self._strategy.decide(
             player, enemy, self.is_wild(), balls
@@ -306,165 +224,20 @@ class BattleHandler:
             self._pyboy.tick(10)
             return
         elif action_type == "run":
-            self._select_battle_option("RUN")
+            self._driver.select_battle_option("RUN")
         elif action_type == "ball":
-            self._use_ball(detail)
+            self._driver.use_ball(detail)
         elif action_type == "switch":
-            self._switch_pokemon(detail)
+            self._driver.switch_pokemon(detail)
         else:
             move_idx = next(
-                (i for i, (n, _, _) in enumerate(player['moves'])
-                 if n == detail),
+                (i for i, m in enumerate(player.moves)
+                 if m.name == detail),
                 0,
             )
-            self._select_battle_option("FIGHT")
-            self._wait_for_move_menu(player['moves'])
-            self._select_move(move_idx)
-
-    def _wait_for_move_menu(self, moves):
-        """Wait for the move selection menu to appear after selecting FIGHT.
-
-        Polls until the battle action menu (FIGHT/ITEM/RUN) disappears
-        and the first move name is visible on screen.
-        """
-        first_move = moves[0][0] if moves else ""
-        for _ in range(60):  # up to ~600 frames
-            self._pyboy.tick(10)
-            # Battle action menu gone = move menu is loading/loaded
-            if not self.has_battle_menu():
-                break
-
-        # Now wait for the actual move name to appear on screen
-        if first_move:
-            for _ in range(30):
-                for row in range(14, 18):
-                    text = self._screen.decode_tiles(row, 1, 12)
-                    if first_move in text:
-                        self._pyboy.tick(5)  # small buffer for input readiness
-                        return
-                self._pyboy.tick(10)
-
-    def _select_battle_option(self, option):
-        """Select FIGHT, ITEM, PKMN, or RUN from the battle menu.
-
-        Battle menu layout (2x2 grid):
-          FIGHT  PkMn    (row 0: col 0, col 1)
-          ITEM   RUN     (row 1: col 0, col 1)
-
-        Navigates by resetting to top-left (FIGHT) first, then
-        moving to the target — no memory reads needed.
-        """
-        targets = {"FIGHT": (0, 0), "PKMN": (0, 1),
-                   "ITEM": (1, 0), "RUN": (1, 1)}
-        row, col = targets.get(option, (0, 0))
-
-        # Reset to FIGHT (top-left)
-        self._pyboy.button("up")
-        self._pyboy.tick(8)
-        self._pyboy.button("left")
-        self._pyboy.tick(8)
-
-        # Navigate to target
-        for _ in range(row):
-            self._pyboy.button("down")
-            self._pyboy.tick(8)
-        for _ in range(col):
-            self._pyboy.button("right")
-            self._pyboy.tick(8)
-
-        self._pyboy.button("a")
-        self._pyboy.tick(10)
-
-    def _use_ball(self, bag_index):
-        """Select ITEM from battle menu, then select the ball by bag index."""
-        self._select_battle_option("ITEM")
-        # Wait for item menu to appear
-        for _ in range(30):
-            self._pyboy.tick(10)
-            if not self.has_battle_menu():
-                break
-
-        # Navigate to the ball's position in the bag list
-        # Reset cursor to top
-        for _ in range(10):
-            self._pyboy.button("up")
-            self._pyboy.tick(5)
-
-        # Move down to the item
-        for _ in range(bag_index):
-            self._pyboy.button("down")
-            self._pyboy.tick(8)
-
-        # Select the item
-        self._pyboy.button("a")
-        self._pyboy.tick(20)
-
-        # If the game asks "Use this item?" just confirm
-        self._pyboy.button("a")
-        self._pyboy.tick(10)
-
-    def _switch_pokemon(self, party_idx):
-        """Switch to a different Pokemon by party index (0-based).
-
-        Reads wCurrentMenuItem from WRAM to know the cursor position
-        after the party menu opens, then navigates relative to it.
-        """
-        from constants import ADDR_CURRENT_MENU
-
-        self._select_battle_option("PKMN")
-        # Wait for party menu to appear and become interactive
-        for _ in range(30):
-            self._pyboy.tick(10)
-            if not self.has_battle_menu():
-                break
-        # Extra delay for the party menu to fully render
-        self._pyboy.tick(40)
-
-        # Read current cursor position from WRAM
-        current = self._pyboy.memory[ADDR_CURRENT_MENU]
-        diff = party_idx - current
-
-        if diff > 0:
-            for _ in range(diff):
-                self._pyboy.button("down")
-                self._pyboy.tick(10)
-        elif diff < 0:
-            for _ in range(-diff):
-                self._pyboy.button("up")
-                self._pyboy.tick(10)
-
-        # Select the Pokemon
-        self._pyboy.button("a")
-        self._pyboy.tick(20)
-
-        # The game shows a sub-menu (SWITCH/STATS) — select SWITCH (first option)
-        self._pyboy.button("a")
-        self._pyboy.tick(10)
-
-        # Game resets move cursor to 0 when a new pokemon enters battle
-        self._last_move_idx = 0
-
-    def _select_move(self, move_idx):
-        """Select a move by index (0-3) from the move menu.
-
-        Navigates from the last known cursor position (the move menu
-        in Pokemon Red remembers/wraps, so blind resets don't work).
-        """
-        # Navigate from last known position
-        current = self._last_move_idx
-        diff = move_idx - current
-        if diff > 0:
-            for _ in range(diff):
-                self._pyboy.button("down")
-                self._pyboy.tick(8)
-        elif diff < 0:
-            for _ in range(-diff):
-                self._pyboy.button("up")
-                self._pyboy.tick(8)
-
-        self._pyboy.button("a")
-        self._pyboy.tick(10)
-        self._last_move_idx = move_idx
+            self._driver.select_battle_option("FIGHT")
+            self._driver.wait_for_move_menu(player.moves)
+            self._driver.select_move(move_idx)
 
     def _handle_fainted_switch(self):
         """Handle switching after a party pokemon fainted.
@@ -478,8 +251,8 @@ class BattleHandler:
         """
         from constants import ADDR_CURRENT_MENU
 
-        party = self._read_party()
-        player = self._read_mon(ADDR_BATTLE_MON)
+        party = self._state.read_party()
+        player = self._state.read_player()
         active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
 
         # Build options: alive non-active party members
@@ -488,14 +261,14 @@ class BattleHandler:
         for i, mon in enumerate(party):
             if i == active_idx:
                 continue
-            if mon['hp'] <= 0:
+            if mon.hp <= 0:
                 continue
-            label = mon['nickname']
-            if mon['nickname'] != mon['name']:
-                label = f"{mon['name']} ({mon['nickname']})"
+            label = mon.nickname
+            if mon.nickname != mon.name:
+                label = f"{mon.name} ({mon.nickname})"
             options.append(
-                f"{label} Lv{mon['level']}"
-                f"  {mon['hp']}/{mon['max_hp']} HP"
+                f"{label} Lv{mon.level}"
+                f"  {mon.hp}/{mon.max_hp} HP"
             )
             indices.append(i)
 
@@ -511,12 +284,11 @@ class BattleHandler:
         if self.is_wild():
             options.append("RUN")
 
-        if hasattr(self._strategy, 'choose_switch_in'):
-            enemy = self._read_mon(ADDR_ENEMY_MON)
-            choice_idx = self._strategy.choose_switch_in(
-                party, indices, self.is_wild(), enemy
-            )
-        else:
+        enemy = self._state.read_enemy()
+        choice_idx = self._strategy.choose_switch_in(
+            party, indices, self.is_wild(), enemy
+        )
+        if choice_idx is None:
             print("\n--- Send out which POKéMON? ---")
             choice = prompt_menu(options)
             if choice == "RUN":
@@ -574,7 +346,7 @@ class BattleHandler:
         """
         from constants import ADDR_CURRENT_MENU
 
-        party = self._read_party()
+        party = self._state.read_party()
         active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
 
         # Build switchable list
@@ -583,14 +355,14 @@ class BattleHandler:
         for i, mon in enumerate(party):
             if i == active_idx:
                 continue
-            if mon['hp'] <= 0:
+            if mon.hp <= 0:
                 continue
-            label = mon['nickname']
-            if mon['nickname'] != mon['name']:
-                label = f"{mon['name']} ({mon['nickname']})"
+            label = mon.nickname
+            if mon.nickname != mon.name:
+                label = f"{mon.name} ({mon.nickname})"
             options.append(
-                f"{label} Lv{mon['level']}"
-                f"  {mon['hp']}/{mon['max_hp']} HP"
+                f"{label} Lv{mon.level}"
+                f"  {mon.hp}/{mon.max_hp} HP"
             )
             indices.append(i)
 
@@ -599,17 +371,17 @@ class BattleHandler:
         if not indices:
             # No one to switch to — select NO
             pass
-        elif hasattr(self._strategy, 'choose_switch_offer'):
+        else:
             choice_idx = self._strategy.choose_switch_offer(
                 party, active_idx, indices
             )
-        else:
-            # Manual: ask the player
-            print("\n--- Switch POKéMON before next opponent? ---")
-            options.append("NO")
-            choice = prompt_menu(options)
-            if choice != "NO":
-                choice_idx = indices[options.index(choice)]
+            if choice_idx is None:
+                # Manual: ask the player
+                print("\n--- Switch POKéMON before next opponent? ---")
+                options.append("NO")
+                choice = prompt_menu(options)
+                if choice != "NO":
+                    choice_idx = indices[options.index(choice)]
 
         if choice_idx is None:
             # Select NO
@@ -653,7 +425,7 @@ class BattleHandler:
         turn_texts = []
         while True:
             full = self._dialogue.advance_until(
-                lambda d, u: (self.has_battle_menu()
+                lambda d, u: (self._driver.has_battle_menu()
                               or not self.is_in_battle()
                               or self._has_choice_or_naming())
             )
@@ -661,7 +433,7 @@ class BattleHandler:
                 print(f"\n{full}")
                 turn_texts.append(full)
 
-            if self.has_battle_menu() and self.is_in_battle():
+            if self._driver.has_battle_menu() and self.is_in_battle():
                 self._record_turn(" ".join(turn_texts))
                 return True
             if not self.is_in_battle():
@@ -690,14 +462,14 @@ class BattleHandler:
 
         if is_nickname_prompt or is_naming_keyboard:
             # Get the species of the caught Pokemon from enemy data
-            caught_species = self._read_enemy_species()
+            caught_species = self._state.read_enemy_species()
 
             if self._naming_ai:
                 # Read actual party with real nicknames from WRAM
                 # Exclude last entry — it's the Pokemon we just caught
-                party = self._read_party()[:-1]
+                party = self._state.read_party()[:-1]
                 team_context = [
-                    (m['name'], m['nickname']) for m in party
+                    (m.name, m.nickname) for m in party
                 ]
                 name = self._naming_ai.suggest_name(
                     caught_species, team_context
@@ -727,13 +499,13 @@ class BattleHandler:
                     self._pyboy.button("a")
                     self._pyboy.tick(60)
                     # Now type the name on the keyboard
-                    self._type_on_naming_keyboard(name.upper()[:10])
+                    self._driver.type_name(name.upper()[:10])
             elif is_naming_keyboard:
                 if not name:
                     self._pyboy.button("b")
                     self._pyboy.tick(60)
                 else:
-                    self._type_on_naming_keyboard(name.upper()[:10])
+                    self._driver.type_name(name.upper()[:10])
             return not self.is_in_battle()
 
         # Detect fainted pokemon
@@ -763,46 +535,6 @@ class BattleHandler:
         # Nothing detected — keep going
         return self.is_in_battle()
 
-    # Pokemon Red naming keyboard layout (upper case)
-    # The keyboard is a 9-column × 5-row grid starting at tile (10, 2)
-    _NAMING_GRID = {
-        'A': (0, 0), 'B': (0, 1), 'C': (0, 2), 'D': (0, 3), 'E': (0, 4),
-        'F': (0, 5), 'G': (0, 6), 'H': (0, 7), 'I': (0, 8),
-        'J': (1, 0), 'K': (1, 1), 'L': (1, 2), 'M': (1, 3), 'N': (1, 4),
-        'O': (1, 5), 'P': (1, 6), 'Q': (1, 7), 'R': (1, 8),
-        'S': (2, 0), 'T': (2, 1), 'U': (2, 2), 'V': (2, 3), 'W': (2, 4),
-        'X': (2, 5), 'Y': (2, 6), 'Z': (2, 7), ' ': (2, 8),
-    }
-
-    def _type_on_naming_keyboard(self, name):
-        """Type a name on the Pokemon Red naming keyboard."""
-        cur_row, cur_col = 0, 0  # cursor starts at A
-        for ch in name:
-            if ch not in self._NAMING_GRID:
-                continue
-            target_row, target_col = self._NAMING_GRID[ch]
-            # Navigate vertically
-            dy = target_row - cur_row
-            btn = "down" if dy > 0 else "up"
-            for _ in range(abs(dy)):
-                self._pyboy.button(btn)
-                self._pyboy.tick(5)
-            # Navigate horizontally
-            dx = target_col - cur_col
-            btn = "right" if dx > 0 else "left"
-            for _ in range(abs(dx)):
-                self._pyboy.button(btn)
-                self._pyboy.tick(5)
-            # Select character
-            self._pyboy.button("a")
-            self._pyboy.tick(8)
-            cur_row, cur_col = target_row, target_col
-
-        # Navigate to END button and confirm
-        # END is below the grid — press Start as shortcut to confirm
-        self._pyboy.button("start")
-        self._pyboy.tick(30)
-
     def _has_choice_or_naming(self):
         """Check if a choice menu or naming keyboard is on screen."""
         text = self._screen.read_text_box()
@@ -820,15 +552,34 @@ class ManualStrategy:
     def __init__(self):
         self._party = []
         self._active_idx = None
+        self._history = []
 
     def set_team(self, party, active_idx=None):
         self._party = party
         self._active_idx = active_idx
 
+    def on_battle_start(self, player, enemy, is_wild, balls=None):
+        pass
+
+    def on_battle_end(self, is_wild, result="unknown"):
+        pass
+
+    def add_turn(self, text, player_hp, player_max_hp, enemy_hp, enemy_max_hp):
+        pass
+
+    def get_history(self):
+        return self._history
+
+    def choose_switch_in(self, party, alive_indices, is_wild, enemy=None):
+        return None
+
+    def choose_switch_offer(self, party, active_idx, alive_indices):
+        return None
+
     def decide(self, player, enemy, is_wild, balls=None):
         actions = []
-        for name, pp, max_pp in player['moves']:
-            actions.append(f"{name} ({pp}/{max_pp} PP)")
+        for m in player.moves:
+            actions.append(f"{m.name} ({m.pp}/{m.max_pp} PP)")
         if balls:
             for ball_name, count, _ in balls:
                 actions.append(f"🔴 {ball_name} ×{count}")
@@ -836,14 +587,14 @@ class ManualStrategy:
         for i, mon in enumerate(self._party):
             if i == self._active_idx:
                 continue
-            if mon['hp'] <= 0:
+            if mon.hp <= 0:
                 continue  # skip fainted
-            label = mon['nickname']
-            if mon['nickname'] != mon['name']:
-                label = f"{mon['name']} ({mon['nickname']})"
+            label = mon.nickname
+            if mon.nickname != mon.name:
+                label = f"{mon.name} ({mon.nickname})"
             actions.append(
-                f"🔄 {label} Lv{mon['level']}"
-                f" ({mon['hp']}/{mon['max_hp']} HP)"
+                f"🔄 {label} Lv{mon.level}"
+                f" ({mon.hp}/{mon.max_hp} HP)"
             )
         if is_wild:
             actions.append("RUN")
@@ -864,9 +615,9 @@ class ManualStrategy:
             # Find party index — match the full label before " Lv"
             label = choice.split("🔄 ")[1].split(" Lv")[0]
             for i, mon in enumerate(self._party):
-                nick = mon['nickname']
-                full = (f"{mon['name']} ({nick})"
-                        if nick != mon['name'] else nick)
+                nick = mon.nickname
+                full = (f"{mon.name} ({nick})"
+                        if nick != mon.name else nick)
                 if full == label:
                     return ("switch", i)
         move_name = choice.split(" (")[0]

@@ -10,10 +10,9 @@ Prompts are managed as Jinja2 templates in the templates/ directory.
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
-from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
-from console import render_map
-from ai_logger import AILogger
+from adapters.display.console import render_map
+from adapters.display.ai_logger import AILogger
 
 _GREEN = "\033[32m"
 _YELLOW = "\033[33m"
@@ -35,14 +34,12 @@ def _render(template_name, **kwargs):
 
 
 class OverworldAI:
-    def __init__(self, base_url="http://localhost:11434",
-                 model="qwen2.5:14b", goal="Reach Viridian Forest"):
-        self._llm = ChatOllama(
-            base_url=base_url,
-            model=model,
-            temperature=0.4,
-        )
+    def __init__(self, llm, goal="Reach Viridian Forest"):
+        self._llm = llm
         self._goal = goal
+        # Compose a ShopAI sharing the same LLM
+        from agents.shop_ai import ShopAI
+        self.shop_ai = ShopAI(llm=self._llm)
         self._history = []
         self._visited_maps = set()
         self._visited_pois = set()
@@ -183,52 +180,8 @@ class OverworldAI:
     # ------------------------------------------------------------------
 
     def decide_purchases(self, items, money, pokeballs, party=None):
-        """Ask the LLM what to buy at a Poké Mart.
-
-        Returns list of (item_index, quantity) tuples.
-        """
-        user_prompt = _render("shop_state.j2",
-                              items=items, money=money,
-                              pokeballs=pokeballs,
-                              party=party or [])
-
-        if _DEBUG_PROMPTS:
-            _log.log_prompt("SHOP", "(inline)", user_prompt)
-
-        messages = [HumanMessage(content=user_prompt)]
-        response = self._llm.invoke(messages)
-        text = response.content
-
-        if _DEBUG_PROMPTS:
-            _log.log_response("SHOP", text)
-
-        # Parse BUY lines
-        purchases = []
-        think = ""
-        for line in text.strip().split("\n"):
-            line = line.strip()
-            if line.startswith("THINK:"):
-                think = line[6:].strip()
-            elif line.startswith("BUY:"):
-                try:
-                    parts = line[4:].strip().split("x")
-                    idx = int(parts[0].strip()) - 1  # 1-based → 0-based
-                    qty = int(parts[1].strip())
-                    if 0 <= idx < len(items) and qty > 0:
-                        purchases.append((idx, qty))
-                except (ValueError, IndexError):
-                    pass
-
-        if think:
-            _log.log_think(f"🛒 {think}")
-
-        if purchases:
-            for idx, qty in purchases:
-                _log.log_think(f"=> BUY {qty}x {items[idx]['name']}")
-        else:
-            _log.log_think("=> Nothing to buy")
-
-        return purchases
+        """Delegate to ShopAI for purchase decisions."""
+        return self.shop_ai.decide_purchases(items, money, pokeballs, party)
 
     # ------------------------------------------------------------------
     # Decision

@@ -4,7 +4,7 @@ Scans warps (stairs/doors), blocks (PC, SNES), signs, and sprites (NPCs)
 from Pokemon Red's WRAM structures.  Dependencies injected via constructor (DIP).
 """
 
-from constants import (
+from data.constants import (
     ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD,
     ADDR_NUM_WARPS, ADDR_WARP_ENTRIES,
     ADDR_NUM_SIGNS, ADDR_SIGN_COORDS,
@@ -15,7 +15,7 @@ from constants import (
     ADDR_OVERWORLD_MAP, MAP_BORDER, BLOCK_LABELS, WALKABLE_BLOCKS,
     BLOCK_DESCRIPTIONS, SPRITE_LABELS, MAP_NAMES,
 )
-from pathfinder import find_best_path
+from adapters.input.pathfinder import find_best_path
 
 # Oak's Lab (map 0x28) starter Poké Balls by X coordinate
 # Left-to-right: Charmander, Squirtle, Bulbasaur

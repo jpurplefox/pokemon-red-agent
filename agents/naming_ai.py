@@ -5,15 +5,10 @@ team nicknames to avoid duplicates.  Names are limited to 10 characters
 (Pokemon Red constraint).
 """
 
-from langchain_ollama import ChatOllama
 from langchain_core.messages import SystemMessage, HumanMessage
+from adapters.display.ai_logger import AILogger
 
-_PURPLE = "\033[35m"
-_RESET = "\033[0m"
-
-
-def _ai_print(msg):
-    print(f"{_PURPLE}  AI: {msg}{_RESET}")
+_log = AILogger("NAME")
 
 
 # Gen 1 evolution lines (species → [stage1, stage2, stage3])
@@ -151,12 +146,8 @@ NAME: <the nickname in uppercase, 10 chars max>"""
 
 
 class NamingAI:
-    def __init__(self, base_url="http://localhost:11434", model="qwen2.5:3b"):
-        self._llm = ChatOllama(
-            base_url=base_url,
-            model=model,
-            temperature=0.8,  # more creative for names
-        )
+    def __init__(self, llm):
+        self._llm = llm
 
     def suggest_name(self, species, team_names=None):
         """Generate a nickname for a caught Pokemon.
@@ -191,7 +182,7 @@ class NamingAI:
             HumanMessage(content=prompt),
         ]
 
-        _ai_print(f"[Naming prompt]\n{_PURPLE}{prompt}{_RESET}")
+        _log.log_think(f"[Naming prompt]\n{_PURPLE}{prompt}{_RESET}")
         response = self._llm.invoke(messages)
         name = self._parse_name(response.content)
 
