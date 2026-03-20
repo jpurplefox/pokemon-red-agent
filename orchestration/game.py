@@ -7,10 +7,15 @@ Dependencies are injected via constructor (DIP).
 
 from data.constants import (
     ADDR_MAP_N, ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, MAP_NAMES,
-    ADDR_Y_COORD, ADDR_X_COORD,
+    ADDR_Y_COORD, ADDR_X_COORD, ADDR_BADGES, ADDR_PLAYER_NAME,
+    ADDR_PLAY_HOURS, ADDR_PLAY_MINUTES, ADDR_PLAY_SECONDS,
+    ADDR_CURRENT_MENU, POKEMON_CHARMAP,
 )
+from domain.models import HUDState
 from adapters.state.screen import ScreenReader
 from adapters.state.menu import MenuReader
+from adapters.display.ai_log_window import ai_update_hud
+from agents.overworld_ai import _log as ow_logger
 from dialogue import DialogueAdvancer
 from adapters.input.naming import NameEntry
 from adapters.state.overworld import OverworldScanner
@@ -71,7 +76,7 @@ class Game:
             self._ow_controller = OverworldAIController(
                 overworld_ai, self._pyboy, self._scanner, self._navigator,
                 self._battle, self._bag, self._print_surroundings,
-                self._handle_game_menu,
+                self._handle_game_menu, logger=ow_logger,
             )
         # Wire shop AI: prefer explicit shop_ai, fall back to overworld_ai's shop
         _shop = shop_ai or (overworld_ai.shop_ai if overworld_ai else None)
@@ -117,6 +122,53 @@ class Game:
         grid, _, _ = self._scanner.get_walkable_grid()
         print_map(pois, mem[ADDR_Y_COORD], mem[ADDR_X_COORD], grid)
 
+    def _update_hud(self, map_name=""):
+        """Send current game state to the AI thoughts HUD."""
+        try:
+            mem = self._pyboy.memory
+
+            player_name = ""
+            for i in range(11):
+                tile = mem[ADDR_PLAYER_NAME + i]
+                if tile == 0x50:
+                    break
+                player_name += POKEMON_CHARMAP.get(tile, "")
+
+            hours = mem[ADDR_PLAY_HOURS] | (mem[ADDR_PLAY_HOURS + 1] << 8)
+            minutes = mem[ADDR_PLAY_MINUTES]
+            seconds = mem[ADDR_PLAY_SECONDS]
+
+            party = self._battle.read_party()
+
+            goal = ""
+            subgoal = ""
+            if self._ow_controller:
+                ow = self._ow_controller._ai
+                goal = getattr(ow, '_goal', '')
+                active = ow.active_subgoal() if hasattr(ow, 'active_subgoal') else None
+                if active:
+                    subgoal = active.get('description', '')
+
+            hud = HUDState(
+                team=party,
+                goal=goal,
+                subgoal=subgoal,
+                badges=mem[ADDR_BADGES],
+                map_name=map_name,
+                player_name=player_name,
+                play_time=f"{hours}:{minutes:02d}:{seconds:02d}",
+            )
+            team_data = [
+                {"name": m.name, "nickname": m.nickname,
+                 "level": m.level, "hp": m.hp, "max_hp": m.max_hp}
+                for m in hud.team
+            ]
+            ai_update_hud(team_data, hud.goal, hud.subgoal, 0.0,
+                          hud.action_count, hud.badges, hud.map_name,
+                          hud.player_name, hud.play_time)
+        except Exception as e:
+            print(f"  [HUD error] {e}")
+
     # ------------------------------------------------------------------
     # Game lifecycle
     # ------------------------------------------------------------------
@@ -146,6 +198,11 @@ class Game:
                 if self._map_loaded():
                     self._in_overworld = True
                     self._show_pois = True
+                    # Let WRAM fully populate before reading
+                    self._pyboy.tick(60)
+                    mem = self._pyboy.memory
+                    map_name = MAP_NAMES.get(mem[ADDR_MAP_N], "")
+                    self._update_hud(map_name)
                     break
 
     def _game_loop(self):
@@ -267,6 +324,9 @@ class Game:
         if self._show_pois:
             self._show_pois = False
             self._print_surroundings()
+            mem = self._pyboy.memory
+            map_name = MAP_NAMES.get(mem[ADDR_MAP_N], f"Map {mem[ADDR_MAP_N]}")
+            self._update_hud(map_name)
 
         if self._ow_controller and not self._ow_controller.paused:
             return self._handle_overworld_ai()
@@ -322,8 +382,6 @@ class Game:
 
     def _change_lead(self):
         """Let the player choose a new lead Pokemon via the in-game party menu."""
-        from constants import ADDR_CURRENT_MENU
-
         party = self._battle.read_party()
         if len(party) <= 1:
             print("Only one Pokemon in party.")

@@ -59,6 +59,21 @@ class BallInfo:
     index: int
 
 
+# -- Display -----------------------------------------------------------------
+
+@dataclass
+class HUDState:
+    """Snapshot of game state for the HUD display."""
+    team: list[PartyMember] = field(default_factory=list)
+    goal: str = ""
+    subgoal: str = ""
+    badges: int = 0
+    map_name: str = ""
+    player_name: str = ""
+    play_time: str = ""
+    action_count: int = 0
+
+
 # -- Overworld AI ------------------------------------------------------------
 
 @dataclass

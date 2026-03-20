@@ -6,6 +6,11 @@ ADDR_CURRENT_MENU = 0xCC26     # wCurrentMenuItem: selected item (0 = first)
 ADDR_MAX_MENU = 0xCC28         # wMaxMenuItem: index of last item
 ADDR_MENU_WATCHED_KEYS = 0xCC29  # wMenuWatchedKeys: non-zero when menu awaits input
 
+ADDR_PLAYER_NAME = 0xD158     # wPlayerName: 11 bytes (up to 7 chars + 0x50 terminator)
+ADDR_BADGES = 0xD356           # wObtainedBadges: 8 bits, 1 per badge
+ADDR_PLAY_HOURS = 0xDA40       # wPlayTimeHours: 2 bytes (little-endian)
+ADDR_PLAY_MINUTES = 0xDA43     # wPlayTimeMinutes: 1 byte
+ADDR_PLAY_SECONDS = 0xDA44     # wPlayTimeSeconds: 1 byte
 ADDR_TILEMAP = 0xC3A0          # wTileMap: WRAM copy of screen (20 tiles per row)
 
 # Player position

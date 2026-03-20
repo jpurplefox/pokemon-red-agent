@@ -78,6 +78,8 @@ class Navigator:
             if new_path is not None:
                 path = new_path
                 face = new_face
+            if not path:
+                break
             # Take the first step
             direction = path.pop(0)
             self._pyboy.button(direction, delay=8)

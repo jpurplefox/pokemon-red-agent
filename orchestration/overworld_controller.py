@@ -8,14 +8,21 @@ navigator, and records results.
 import sys
 import select
 
-from data.constants import ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD, ADDR_POKEDEX_FLAG, MAP_NAMES
+from data.constants import (
+    ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD, ADDR_POKEDEX_FLAG,
+    ADDR_BADGES, ADDR_PLAYER_NAME, ADDR_PLAY_HOURS, ADDR_PLAY_MINUTES,
+    ADDR_PLAY_SECONDS, MAP_NAMES, POKEMON_CHARMAP,
+)
+from adapters.display.ai_logger import AILogger
+from domain.models import HUDState
 
 
 class OverworldAIController:
     """Drives the overworld AI: reads game state, asks AI, executes actions."""
 
     def __init__(self, overworld_ai, pyboy, scanner, navigator, battle,
-                 bag_reader, print_surroundings_fn, handle_game_menu_fn):
+                 bag_reader, print_surroundings_fn, handle_game_menu_fn,
+                 logger: AILogger | None = None):
         self._ai = overworld_ai
         self._pyboy = pyboy
         self._scanner = scanner
@@ -24,6 +31,7 @@ class OverworldAIController:
         self._bag = bag_reader
         self._print_surroundings = print_surroundings_fn
         self._handle_game_menu = handle_game_menu_fn
+        self._log = logger or AILogger("OW")
         self._paused = False
 
     @property
@@ -68,10 +76,40 @@ class OverworldAIController:
         pokeballs = self._bag.count_pokeballs()
         has_pokedex = bool(mem[ADDR_POKEDEX_FLAG] & (1 << 5))
 
+        # Read player info for HUD (before AI thinks, so HUD stays visible)
+        player_name = ""
+        for i in range(11):
+            tile = mem[ADDR_PLAYER_NAME + i]
+            if tile == 0x50:
+                break
+            player_name += POKEMON_CHARMAP.get(tile, "")
+        hours = mem[ADDR_PLAY_HOURS] | (mem[ADDR_PLAY_HOURS + 1] << 8)
+        minutes = mem[ADDR_PLAY_MINUTES]
+        seconds = mem[ADDR_PLAY_SECONDS]
+        play_time = f"{hours}:{minutes:02d}:{seconds:02d}"
+
+        active_sg = self._ai.active_subgoal()
+        hud = HUDState(
+            team=party,
+            goal=self._ai.goal,
+            subgoal=active_sg["description"] if active_sg else "",
+            action_count=self._ai.iteration,
+            badges=mem[ADDR_BADGES],
+            map_name=map_name,
+            player_name=player_name,
+            play_time=play_time,
+        )
+        self._log.update_hud(hud)
+
         action_type, detail = self._ai.decide(
             map_name, pois, grid=grid, player_y=py, player_x=px,
             party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
         )
+
+        # Update HUD again after decide (think time + action count updated)
+        hud.action_count = self._ai.iteration
+        hud.subgoal = (self._ai.active_subgoal() or {}).get("description", "")
+        self._log.update_hud(hud)
 
         if action_type == "goal_reached":
             print("AI has reached its goal — returning control to you.")

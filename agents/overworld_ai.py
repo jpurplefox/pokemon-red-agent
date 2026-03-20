@@ -11,6 +11,7 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 from langchain_core.messages import SystemMessage, HumanMessage
+from agents.shop_ai import ShopAI
 from adapters.display.console import render_map
 from adapters.display.ai_logger import AILogger
 
@@ -36,9 +37,7 @@ def _render(template_name, **kwargs):
 class OverworldAI:
     def __init__(self, llm, goal="Reach Viridian Forest"):
         self._llm = llm
-        self._goal = goal
-        # Compose a ShopAI sharing the same LLM
-        from agents.shop_ai import ShopAI
+        self.goal = goal
         self.shop_ai = ShopAI(llm=self._llm)
         self._history = []
         self._visited_maps = set()
@@ -46,7 +45,12 @@ class OverworldAI:
         self._subgoals = []
         self._iteration = 0
 
-    def _active_subgoal(self):
+    @property
+    def iteration(self) -> int:
+        """Number of decisions made so far."""
+        return self._iteration
+
+    def active_subgoal(self):
         """Return the current active sub-goal dict, or None."""
         for sg in self._subgoals:
             if sg["status"] == "active":
@@ -74,7 +78,7 @@ class OverworldAI:
 
     def reflect(self, map_name, action, result="", dialogue=""):
         """Ask the LLM to reflect and detect/complete sub-goals."""
-        active = self._active_subgoal()
+        active = self.active_subgoal()
 
         system_prompt = _render("overworld_reflect.j2")
         user_prompt = _render("overworld_reflect_state.j2",
@@ -87,7 +91,7 @@ class OverworldAI:
                                   sg for sg in self._subgoals
                                   if sg["status"] == "done"
                               ],
-                              main_goal=self._goal)
+                              main_goal=self.goal)
 
         if _DEBUG_PROMPTS:
             _log.log_prompt("REFLECT", system_prompt, user_prompt)
@@ -194,9 +198,9 @@ class OverworldAI:
         Returns ("goal_reached", None) when the main goal is completed.
         """
         # Check if main goal is reached (goal name appears in map name)
-        goal_keywords = self._goal.lower().replace("reach ", "").strip()
+        goal_keywords = self.goal.lower().replace("reach ", "").strip()
         if goal_keywords in map_name.lower():
-            msg = f"🏆 GOAL REACHED: {self._goal} (arrived at {map_name})"
+            msg = f"🏆 GOAL REACHED: {self.goal} (arrived at {map_name})"
             print(f"\n  {_GREEN}{'='*50}")
             print(f"  {msg}")
             print(f"  {'='*50}{_RESET}\n")
@@ -204,6 +208,7 @@ class OverworldAI:
             return ("goal_reached", None)
 
         self._iteration += 1
+        _log._action_count = self._iteration
         self._visited_maps.add(map_name)
         self._expire_subgoals()
 
@@ -227,10 +232,10 @@ class OverworldAI:
         if pois:
             actions.append("GO:<number>")
 
-        active = self._active_subgoal()
+        active = self.active_subgoal()
 
         system_prompt = _render("overworld_system.j2",
-                                goal=self._goal, actions=actions,
+                                goal=self.goal, actions=actions,
                                 active_subgoal=active)
         user_prompt = _render("overworld_state.j2",
                               map_name=map_name,
@@ -255,7 +260,9 @@ class OverworldAI:
         ]
 
         for attempt in range(3):
+            _log.start_thinking()
             response = self._llm.invoke(messages)
+            _log.stop_thinking()
             text = response.content
             result = self._parse_response(text, pois)
             if result is not None:

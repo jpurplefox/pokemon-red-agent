@@ -6,9 +6,10 @@ turn sequencing, switch handling, and strategy dispatch.
 Dependencies injected via constructor (DIP).
 """
 
-from data.constants import ADDR_PLAYER_MON_NUMBER
+from data.constants import ADDR_PLAYER_MON_NUMBER, ADDR_CURRENT_MENU
 from adapters.display.console import prompt_menu, _input_fn
 from adapters.state.battle_state_reader import BattleStateReader
+from adapters.state.bag_reader import BagReader
 from adapters.input.battle_menu_driver import BattleMenuDriver
 
 
@@ -188,7 +189,6 @@ class BattleHandler:
         if self._bag:
             return self._bag.get_balls()
         # Fallback for when no BagReader is injected
-        from bag_reader import BagReader
         return BagReader(self._pyboy).get_balls()
 
     def _record_turn(self, text):
@@ -249,7 +249,6 @@ class BattleHandler:
 
         Returns True to keep processing, False if battle ended/fled.
         """
-        from constants import ADDR_CURRENT_MENU
 
         party = self._state.read_party()
         player = self._state.read_player()
@@ -344,7 +343,6 @@ class BattleHandler:
 
         Returns True to keep processing.
         """
-        from constants import ADDR_CURRENT_MENU
 
         party = self._state.read_party()
         active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
