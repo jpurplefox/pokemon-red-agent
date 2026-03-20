@@ -182,7 +182,7 @@ class NamingAI:
             HumanMessage(content=prompt),
         ]
 
-        _log.log_prompt("NAMING", system, prompt)
+        _log.log_prompt("NAMING", SYSTEM_PROMPT, prompt)
         response = self._llm.invoke(messages)
         name = self._parse_name(response.content)
         _log.log_response("NAMING", response.content)

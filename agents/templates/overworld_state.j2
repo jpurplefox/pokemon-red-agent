@@ -39,5 +39,11 @@ Poké Balls: {{ pokeballs }}{% if pokeballs < 3 %} ⚠️ LOW{% endif %}
 {%- endfor %}
 {%- endif %}
 
---- Map (@ = you, # = wall, · = walkable, numbers = POIs) ---
-{{ ascii_map }}
+--- Points of Interest ---
+{%- for poi in pois %}
+{{ loop.index }}. {{ poi.icon }} {{ poi.label }} — {{ poi.dir }}
+  {%- if poi.times_recent > 0 %} ⚠️ VISITED ({{ poi.times_recent }}x recently){% endif %}
+{%- endfor %}
+{%- if not pois %}
+Nothing nearby.
+{%- endif %}

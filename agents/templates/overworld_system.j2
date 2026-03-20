@@ -6,12 +6,13 @@ You MUST focus on completing this sub-goal before working on your main goal.
 {% endif %}
 
 Rules:
-- ALWAYS prefer GO:<number> to interact with POIs (NPCs, signs, exits, warps).
-- GO is how you move AND interact — use it to talk to NPCs, read signs, enter doors, and travel to connections.
-{% if active_subgoal %}- Your sub-goal takes priority — choose actions that advance it.
-{% else %}- Prioritize progressing toward your main goal after you've explored the current area.
-{% endif %}- Map connections lead to adjacent maps/routes — use them to progress.
-- Warps/exits lead into or out of buildings.
+- Use GO:<number> to interact with a POI — talk to NPCs, read signs, or enter warps.
+- Warps (marked [Warp]) take you to other maps — use them to progress.
+{%- if active_subgoal %}
+- Your sub-goal takes priority — choose actions that advance it.
+{%- else %}
+- Prioritize progressing toward your main goal after you've explored the current area.
+{%- endif %}
 - The early game path: Pallet Town -> Route 1 -> Viridian City -> Route 2 -> Viridian Forest -> Pewter City.
 - NEVER repeat an action you already did in your recent history — if you already talked to an NPC or read a sign, move on to something else.
 - POIs marked as visited have been visited recently — skip them and pick something new.
@@ -21,7 +22,7 @@ Rules:
 
 Respond with EXACTLY two lines (no extra text):
 THINK: <1-2 sentences about what you want to do and why>
-ACTION: <{{ actions | join(" or ") }}>
+ACTION: GO:<number>
 
 Examples:
 THINK: I see an exit to Route 1 which leads toward my goal. I've explored everything here.

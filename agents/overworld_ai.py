@@ -12,8 +12,8 @@ from pathlib import Path
 from jinja2 import Environment, FileSystemLoader
 from langchain_core.messages import SystemMessage, HumanMessage
 from agents.shop_ai import ShopAI
-from adapters.display.console import render_map
 from adapters.display.ai_logger import AILogger
+from adapters.display.console import _poi_icon
 
 _GREEN = "\033[32m"
 _YELLOW = "\033[33m"
@@ -212,34 +212,32 @@ class OverworldAI:
         self._visited_maps.add(map_name)
         self._expire_subgoals()
 
-        # Count how many times each POI appears in recent history
+        # Build POI data with visit counts and directions
         recent = self._history[-15:]
-        visit_counts = []
+        poi_data = []
         for poi in pois:
             times = sum(1 for e in recent
                         if e.get("map") == map_name
                         and e.get("poi") == poi["label"])
-            visit_counts.append(times)
-
-        # Build ASCII map with visit counts in the legend
-        ascii_map = ""
-        if grid:
-            ascii_map = render_map(pois, player_y, player_x, grid,
-                                  visit_counts=visit_counts)
-
-        # Available actions
-        actions = []
-        if pois:
-            actions.append("GO:<number>")
+            label = poi["label"]
+            kind = poi["kind"]
+            if kind in ("exit", "warp", "connection"):
+                label = f"[Warp] \u2192 {label}"
+            poi_data.append({
+                "icon": _poi_icon(poi),
+                "label": label,
+                "dir": poi["dir"],
+                "times_recent": times,
+            })
 
         active = self.active_subgoal()
 
         system_prompt = _render("overworld_system.j2",
-                                goal=self.goal, actions=actions,
+                                goal=self.goal,
                                 active_subgoal=active)
         user_prompt = _render("overworld_state.j2",
                               map_name=map_name,
-                              ascii_map=ascii_map,
+                              pois=poi_data,
                               visited_maps=sorted(self._visited_maps),
                               history=self._history[-15:],
                               active_subgoal=active,

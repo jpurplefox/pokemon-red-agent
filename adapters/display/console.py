@@ -97,10 +97,10 @@ _POI_ICONS = {
 
 # Fallback icons by POI kind (for labels not in _POI_ICONS, e.g. map names)
 _POI_KIND_ICONS = {
-    "connection": "🛤️",
+    "connection": "🚪",
     "sprite": "🧑",
     "exit": "🚪",
-    "warp": "🌀",
+    "warp": "🚪",
 }
 
 
