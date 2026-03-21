@@ -45,6 +45,7 @@ class EventProcessor:
         pending_lines = []
         all_dialogue = []
 
+        _debug = self.auto_accept  # debug only when AI is driving
         while idle < 20:
             self._pyboy.tick(10)
 
@@ -85,6 +86,8 @@ class EventProcessor:
                 if text != last_text:
                     last_text = text
                     pending_lines.append(text)
+                    if _debug:
+                        print(f"  [EVT] text: {text[:80]}")
 
                 # Brief wait for choice menu to appear after text
                 self._pyboy.tick(30)
@@ -94,6 +97,8 @@ class EventProcessor:
                 # for cursor tile, no WRAM dependency
                 choice_options = self._menu.read_choice_menu()
                 if choice_options:
+                    if _debug:
+                        print(f"  [EVT] menu: {choice_options}")
                     self._flush_dialogue(pending_lines, all_dialogue)
                     pending_lines = []
                     self._handle_choice_menu(choice_options)
@@ -102,6 +107,8 @@ class EventProcessor:
                     continue
 
                 # Not a menu — press A to advance dialogue
+                if _debug:
+                    print(f"  [EVT] pressing A (no menu)")
                 self._pyboy.button("a", delay=8)
                 self._pyboy.tick(20)
                 idle = 0
@@ -116,6 +123,8 @@ class EventProcessor:
             # without text box content — just a cursor + options
             choice_options = self._menu.read_choice_menu()
             if choice_options:
+                if _debug:
+                    print(f"  [EVT] standalone menu: {choice_options}")
                 self._handle_choice_menu(choice_options)
                 idle = 0
                 continue
@@ -175,11 +184,17 @@ class EventProcessor:
             choice = "HEAL"
             print("  [AUTO] Selecting HEAL")
         elif self.auto_accept:
-            # Unknown menu while AI is active — dismiss with B
-            print(f"  [AUTO] Dismissing menu: {options}")
-            self._pyboy.button("b")
-            self._pyboy.tick(30)
-            return
+            # Check if it's a PC or similar menu — dismiss with B
+            if any(opt in ("LOG OFF", "WITHDRAW", "DEPOSIT", "ITEM STORAGE",
+                           "BILL's PC", "SOMEONE's PC", "PROF.OAK's PC")
+                   for opt in options):
+                print(f"  [AUTO] Closing menu: {options}")
+                self._pyboy.button("b")
+                self._pyboy.tick(30)
+                return
+            # Otherwise select first option (safer than B for dialogues)
+            print(f"  [AUTO] Selecting first option: {options[0]}")
+            choice = options[0]
         else:
             options_with_cancel = options + ["CANCEL"]
             choice = prompt_menu(options_with_cancel)
