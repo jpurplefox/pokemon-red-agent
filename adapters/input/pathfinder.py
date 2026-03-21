@@ -107,6 +107,10 @@ def find_interaction_targets(poi, grid, blocked=None, other_poi_tiles=None):
     if kind == "warp":
         return [(ty, tx, None)]
 
+    if kind == "grass":
+        # Walk onto the grass tile itself
+        return [(ty, tx, None)]
+
     if kind == "exit":
         # Top-edge exits activate by pressing up, others by pressing down
         face = "up" if ty <= 1 else "down"

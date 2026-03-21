@@ -12,6 +12,7 @@ ADDR_PLAY_HOURS = 0xDA40       # wPlayTimeHours: 2 bytes (little-endian)
 ADDR_PLAY_MINUTES = 0xDA43     # wPlayTimeMinutes: 1 byte
 ADDR_PLAY_SECONDS = 0xDA44     # wPlayTimeSeconds: 1 byte
 ADDR_TILEMAP = 0xC3A0          # wTileMap: WRAM copy of screen (20 tiles per row)
+ADDR_GRASS_TILE = 0xD535       # wGrassTile: tile ID that triggers wild encounters
 
 # Player position
 ADDR_Y_COORD = 0xD361          # wYCoord: player Y on current map

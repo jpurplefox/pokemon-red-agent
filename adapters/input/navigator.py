@@ -192,12 +192,29 @@ class Navigator:
         elif poi["kind"] == "exit":
             self._pyboy.button(face, delay=8)
             self._pyboy.tick(60)
+        elif poi["kind"] == "grass":
+            self._walk_in_grass()
         else:
             # Sign/Sprite — face the POI and press A
             self._pyboy.button(face, delay=8)
             self._pyboy.tick(30)
             self._pyboy.button("a", delay=8)
             self._pyboy.tick(30)
+
+    def _walk_in_grass(self):
+        """Walk back and forth in tall grass until a wild battle triggers."""
+        from data.constants import ADDR_IS_IN_BATTLE
+        mem = self._pyboy.memory
+        print("Searching for wild Pokémon...")
+        directions = ["left", "right", "right", "left"]
+        for _ in range(50):  # max 50 steps before giving up
+            for d in directions:
+                self._pyboy.button(d, delay=8)
+                self._pyboy.tick(30)
+                if mem[ADDR_IS_IN_BATTLE] != 0:
+                    return
+                if self._screen.read_text_box():
+                    return
 
     def _poll_for_event(self):
         """Wait briefly to see if an interaction triggered a cutscene."""

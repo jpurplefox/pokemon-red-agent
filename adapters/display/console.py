@@ -101,6 +101,7 @@ _POI_KIND_ICONS = {
     "sprite": "🧑",
     "exit": "🚪",
     "warp": "🚪",
+    "grass": "🌿",
 }
 
 

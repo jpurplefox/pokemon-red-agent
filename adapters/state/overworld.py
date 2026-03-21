@@ -13,7 +13,7 @@ from data.constants import (
     ADDR_TILESET, ADDR_TILESET_BANK, ADDR_TILESET_BLOCKS_PTR,
     ADDR_TILESET_COLL_PTR, ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH,
     ADDR_OVERWORLD_MAP, MAP_BORDER, BLOCK_LABELS, WALKABLE_BLOCKS,
-    BLOCK_DESCRIPTIONS, SPRITE_LABELS, MAP_NAMES,
+    BLOCK_DESCRIPTIONS, SPRITE_LABELS, MAP_NAMES, ADDR_GRASS_TILE,
 )
 from adapters.input.pathfinder import find_best_path
 
@@ -78,6 +78,12 @@ class OverworldScanner:
             path, _ = find_best_path(grid, (py, px), poi)
             if path is not None:
                 reachable.append(poi)
+
+        # Add a single grass POI if there's tall grass on this map
+        grass_poi = self._find_nearest_grass(py, px, grid)
+        if grass_poi:
+            reachable.append(grass_poi)
+
         return reachable
 
     # ------------------------------------------------------------------
@@ -275,6 +281,87 @@ class OverworldScanner:
             if sy >= 0 and sx >= 0:
                 blocked.add((sy, sx))
         return blocked
+
+    # ------------------------------------------------------------------
+    # Grass scanning
+    # ------------------------------------------------------------------
+
+    def _find_nearest_grass(self, py, px, grid):
+        """Find the nearest tall grass tile and return a single grass POI.
+
+        Uses wGrassTile (0xD535) to identify which tile triggers encounters,
+        then scans block data to find tiles matching that ID.
+        Returns a POI dict or None if no grass on this map.
+        """
+        mem = self._pyboy.memory
+        grass_tile = mem[ADDR_GRASS_TILE]
+        if grass_tile == 0:
+            return None
+
+        if self._rom is None:
+            return None
+
+        W = mem[ADDR_MAP_WIDTH]
+        H = mem[ADDR_MAP_HEIGHT]
+        row_width = W + 2 * MAP_BORDER
+
+        # Scan all blocks for grass tiles
+        grass_tiles = []
+        for row in range(H):
+            for col in range(W):
+                addr = ADDR_OVERWORLD_MAP + (row + MAP_BORDER) * row_width + (col + MAP_BORDER)
+                block_id = mem[addr]
+                bt = self.get_block_tiles(block_id)
+                if bt is None:
+                    continue
+                # Each block has 4 tiles: TL, TR, BL, BR
+                positions = [
+                    (row * 2, col * 2, bt[0]),
+                    (row * 2, col * 2 + 1, bt[1]),
+                    (row * 2 + 1, col * 2, bt[2]),
+                    (row * 2 + 1, col * 2 + 1, bt[3]),
+                ]
+                for ty, tx, tile_id in positions:
+                    if tile_id == grass_tile:
+                        grass_tiles.append((ty, tx))
+
+        if not grass_tiles:
+            return None
+
+        # Find the nearest walkable grass tile
+        best = None
+        best_dist = float("inf")
+        for ty, tx in grass_tiles:
+            if not grid[ty][tx]:
+                continue
+            dist = abs(ty - py) + abs(tx - px)
+            if dist < best_dist:
+                best_dist = dist
+                best = (ty, tx)
+
+        if best is None:
+            return None
+
+        dy = best[0] - py
+        dx = best[1] - px
+        parts = []
+        if dy < 0:
+            parts.append(f"{-dy} north")
+        elif dy > 0:
+            parts.append(f"{dy} south")
+        if dx < 0:
+            parts.append(f"{-dx} west")
+        elif dx > 0:
+            parts.append(f"{dx} east")
+        dir_str = ", ".join(parts) if parts else "here"
+
+        return {
+            "kind": "grass",
+            "label": "Wild Pokémon (tall grass)",
+            "ty": best[0],
+            "tx": best[1],
+            "dir": dir_str,
+        }
 
     # ------------------------------------------------------------------
     # Warp scanning
