@@ -92,8 +92,21 @@ class Navigator:
                 break
             # Take the first step
             direction = path.pop(0)
+            old_py, old_px = py, px
             self._pyboy.button(direction, delay=8)
             self._pyboy.tick(30)
+
+            # Verify the player actually moved — if not, the tile is
+            # blocked (bad collision data). Mark it and recalculate.
+            new_py, new_px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
+            if (new_py, new_px) == (old_py, old_px) and mem[ADDR_MAP_N] == start_map:
+                # Player didn't move — mark target tile as blocked
+                dy = {"up": -1, "down": 1}.get(direction, 0)
+                dx = {"left": -1, "right": 1}.get(direction, 0)
+                bad_tile = (old_py + dy, old_px + dx)
+                if 0 <= bad_tile[0] < len(grid) and 0 <= bad_tile[1] < len(grid[0]):
+                    grid[bad_tile[0]][bad_tile[1]] = False
+                continue
 
             if self._screen.read_text_box():
                 print("Interrupted!")
