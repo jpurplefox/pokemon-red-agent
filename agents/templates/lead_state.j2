@@ -1,0 +1,8 @@
+--- Your Team ---
+{%- for mon in party %}
+{{ loop.index }}. {{ mon.nickname }} ({{ mon.name }}) Lv{{ mon.level }} — {{ mon.hp }}/{{ mon.max_hp }} HP
+  {%- if mon.hp == 0 %} FAINTED{% elif mon.hp < mon.max_hp // 4 %} CRITICAL{% elif mon.hp < mon.max_hp // 2 %} LOW{% endif %}
+  {%- if loop.index0 == 0 %} [CURRENT LEAD]{% endif %}
+{%- endfor %}
+
+Alive team members: {{ alive | length }}/{{ party | length }}

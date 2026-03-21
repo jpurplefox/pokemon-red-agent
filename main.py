@@ -8,6 +8,7 @@ from agents.naming_ai import NamingAI
 from agents.battle_ai import BattleAI
 from agents.scout_ai import ScoutAI
 from agents.overworld_ai import OverworldAI
+from agents.lead_ai import LeadAI
 from agents.shop_ai import ShopAI
 from orchestration.game import Game
 
@@ -17,6 +18,7 @@ if __name__ == "__main__":
     strategy = None
     naming_ai = None
     overworld_ai = None
+    lead_ai = None
     shop_ai = None
     flags = set(sys.argv[1:])
 
@@ -40,10 +42,11 @@ if __name__ == "__main__":
         scout = ScoutAI(llm=llm)
         strategy = BattleAI(llm=llm, scout=scout)
         overworld_ai = OverworldAI(llm=llm)
-        print("Battle AI + Scout AI + Overworld AI enabled")
+        lead_ai = LeadAI(llm=llm)
+        print("Battle AI + Scout AI + Overworld AI + Lead AI enabled")
     elif "--shop" in flags:
         shop_ai = ShopAI(llm=llm)
         print("Shop AI enabled (manual overworld control)")
 
     Game(pyboy, rom_path=ROM, battle_strategy=strategy, naming_ai=naming_ai,
-         overworld_ai=overworld_ai, shop_ai=shop_ai).run()
+         overworld_ai=overworld_ai, lead_ai=lead_ai, shop_ai=shop_ai).run()

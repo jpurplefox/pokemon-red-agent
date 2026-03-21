@@ -33,8 +33,10 @@ from adapters.display.console import (
 
 class Game:
     def __init__(self, pyboy, rom_path=None, battle_strategy=None,
-                 naming_ai=None, overworld_ai=None, shop_ai=None):
+                 naming_ai=None, overworld_ai=None, lead_ai=None,
+                 shop_ai=None):
         self._pyboy = pyboy
+        self._lead_ai = lead_ai
         # All console input() calls will tick the emulator while waiting
         set_input_fn(lambda prompt="": pyboy.run_with_ticking(input, prompt))
         self._screen = ScreenReader(self._pyboy)
@@ -259,6 +261,12 @@ class Game:
                     map_name = MAP_NAMES.get(mem[ADDR_MAP_N], f"Map {mem[ADDR_MAP_N]}")
                     self._ow_controller.record_battle(summary, map_name)
                 self._event_processor.process()
+                # Let Lead AI decide if we should swap the lead
+                if self._lead_ai:
+                    party = self._battle.read_party()
+                    new_lead = self._lead_ai.choose_lead(party)
+                    if new_lead and new_lead != 0:
+                        self._swap_lead(new_lead)
                 self._in_overworld = True
                 self._show_pois = True
             return False
@@ -412,6 +420,10 @@ class Game:
             print("Already the lead!")
             return
 
+        self._swap_lead(selected_idx)
+
+    def _swap_lead(self, selected_idx):
+        """Swap party member at selected_idx to the lead position via game menus."""
         # Open START menu
         self._pyboy.button("start", delay=8)
         self._pyboy.tick(30)
