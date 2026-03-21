@@ -22,7 +22,8 @@ Turn {{ loop.index }}: {{ turn.text }}
 {{ player.name }}{% if player.types %} ({{ player.types }}){% endif %} Lv{{ player.level }}  HP: {{ player.hp }}/{{ player.max_hp }}{% if player.status %} [{{ player.status }}]{% endif %}
 
 Moves:
-{% for move in player.moves %}  - {{ move.name }}{% if move.type %} [{{ move.type }}]{% endif %}{% if move.stab and move.power %} *STAB*{% endif %} Pow:{{ move.power }}{% if move.accuracy %} Acc:{{ move.accuracy }}%{% endif %}{% if move.category %} ({{ move.category }}){% endif %} — {{ move.pp }}/{{ move.max_pp }} PP{% if move.desc %} — {{ move.desc }}{% endif %}
+{% for move in player.moves %}{% if not move.disabled %}  - {{ move.name }}{% if move.type %} [{{ move.type }}]{% endif %}{% if move.stab and move.power %} *STAB*{% endif %} Pow:{{ move.power }}{% if move.accuracy %} Acc:{{ move.accuracy }}%{% endif %}{% if move.category %} ({{ move.category }}){% endif %} — {{ move.pp }}/{{ move.max_pp }} PP{% if move.desc %} — {{ move.desc }}{% endif %}
+{% endif %}
 
 {% endfor %}
 {% if balls %}

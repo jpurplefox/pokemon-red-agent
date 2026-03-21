@@ -449,6 +449,9 @@ BMON_LEVEL = 0x0E              # 1 byte
 BMON_MAX_HP = 0x0F             # 2 bytes big-endian
 BMON_PP = 0x19                 # 4 bytes: PP remaining (lower 6 bits)
 
+# Disable status
+ADDR_DISABLED_MOVE = 0xD06D    # wDisabledMove: bits 0-2 = move slot (1-4), bits 4-7 = turns left
+
 # Bag / inventory
 ADDR_NUM_BAG_ITEMS = 0xD31D    # wNumBagItems: count of item types in bag
 ADDR_BAG_ITEMS = 0xD31E        # wBagItems: pairs of (item_id, count), FF-terminated

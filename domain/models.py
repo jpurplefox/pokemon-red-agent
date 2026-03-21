@@ -18,6 +18,7 @@ class Move:
     name: str
     pp: int
     max_pp: int
+    disabled: bool = False
 
 
 @dataclass

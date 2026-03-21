@@ -6,7 +6,7 @@ Returns domain objects (BattleMon, PartyMember, Move) from models.py.
 
 from data.constants import (
     ADDR_IS_IN_BATTLE, ADDR_BATTLE_MON, ADDR_ENEMY_MON,
-    ADDR_PLAYER_MON_NUMBER,
+    ADDR_PLAYER_MON_NUMBER, ADDR_DISABLED_MOVE,
     BMON_SPECIES, BMON_HP, BMON_STATUS, BMON_MOVES,
     BMON_PP, BMON_LEVEL, BMON_MAX_HP,
     ADDR_PARTY_COUNT, ADDR_PARTY_SPECIES, ADDR_PARTY_MONS,
@@ -37,7 +37,14 @@ class BattleStateReader:
         return self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
 
     def read_player(self) -> BattleMon:
-        return self._read_mon(ADDR_BATTLE_MON)
+        mon = self._read_mon(ADDR_BATTLE_MON)
+        # Mark disabled move (from DISABLE status effect)
+        disabled_byte = self._pyboy.memory[ADDR_DISABLED_MOVE]
+        if disabled_byte:
+            disabled_slot = (disabled_byte & 0x07) - 1  # 1-based → 0-based
+            if 0 <= disabled_slot < len(mon.moves):
+                mon.moves[disabled_slot].disabled = True
+        return mon
 
     def read_enemy(self) -> BattleMon:
         return self._read_mon(ADDR_ENEMY_MON)
