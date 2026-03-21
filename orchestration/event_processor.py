@@ -174,6 +174,12 @@ class EventProcessor:
         elif self.auto_accept and "HEAL" in options:
             choice = "HEAL"
             print("  [AUTO] Selecting HEAL")
+        elif self.auto_accept:
+            # Unknown menu while AI is active — dismiss with B
+            print(f"  [AUTO] Dismissing menu: {options}")
+            self._pyboy.button("b")
+            self._pyboy.tick(30)
+            return
         else:
             options_with_cancel = options + ["CANCEL"]
             choice = prompt_menu(options_with_cancel)
