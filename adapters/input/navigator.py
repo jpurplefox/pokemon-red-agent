@@ -33,19 +33,20 @@ class Navigator:
         if not poi:
             return result
 
-        self._go_to_poi(poi, print_surroundings, result)
+        self._go_to_poi(poi, print_surroundings, result, all_pois=pois)
         return result
 
-    def go_to(self, poi, print_surroundings):
+    def go_to(self, poi, print_surroundings, all_pois=None):
         """Navigate directly to a specific POI (for AI usage).
 
         Same as go() but skips interactive POI selection.
         """
         result = {"map_changed": False, "show_pois": False}
-        self._go_to_poi(poi, print_surroundings, result)
+        self._go_to_poi(poi, print_surroundings, result, all_pois=all_pois)
         return result
 
-    def _go_to_poi(self, poi, print_surroundings, result, attempt=1):
+    def _go_to_poi(self, poi, print_surroundings, result, attempt=1,
+                   all_pois=None):
         """Walk to a POI and interact. Retries if NPC moved."""
         mem = self._pyboy.memory
         grid, _, _ = self._scanner.get_walkable_grid()
@@ -53,7 +54,15 @@ class Navigator:
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
 
-        path, face = find_best_path(grid, (py, px), poi, blocked)
+        # Tiles of other POIs — avoid standing on them to interact
+        other_poi_tiles = set()
+        if all_pois:
+            for p in all_pois:
+                if p is not poi:
+                    other_poi_tiles.add((p["ty"], p["tx"]))
+
+        path, face = find_best_path(grid, (py, px), poi, blocked,
+                                    other_poi_tiles)
         if path is None:
             print(f"Cannot reach {poi['label']}.")
             return
@@ -74,7 +83,8 @@ class Navigator:
             grid, _, _ = self._scanner.get_walkable_grid()
             blocked = self._scanner.get_npc_tiles()
             py, px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
-            new_path, new_face = find_best_path(grid, (py, px), poi, blocked)
+            new_path, new_face = find_best_path(grid, (py, px), poi, blocked,
+                                                other_poi_tiles)
             if new_path is not None:
                 path = new_path
                 face = new_face

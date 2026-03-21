@@ -81,18 +81,23 @@ def find_path(grid, start, goal, blocked=None):
     return None
 
 
-def find_interaction_targets(poi, grid, blocked=None):
+def find_interaction_targets(poi, grid, blocked=None, other_poi_tiles=None):
     """Determine valid tiles from which the player can interact with a POI.
 
     For warps:   walk onto the warp tile itself (auto-activates).
     For exits:   walk onto the tile, then press down to go through.
     For others:  walkable tile adjacent to the POI tile, face + press A.
 
+    other_poi_tiles: set of (y, x) occupied by other POIs — these are
+    not valid interaction positions to avoid interacting with the wrong POI.
+
     Returns list of (goal_y, goal_x, face_direction).
     face_direction is None for warps, "down" for exits.
     """
     if blocked is None:
         blocked = set()
+    if other_poi_tiles is None:
+        other_poi_tiles = set()
 
     kind = poi["kind"]
     ty, tx = poi["ty"], poi["tx"]
@@ -142,12 +147,14 @@ def find_interaction_targets(poi, grid, blocked=None):
 
             if 0 <= ny < h and 0 <= nx < w:
                 if grid[ny][nx] and (ny, nx) not in blocked:
-                    if (ny, nx) not in poi_tiles:
+                    if (ny, nx) not in poi_tiles and (ny, nx) not in other_poi_tiles:
                         targets.append((ny, nx, face))
 
-    # Across-counter: for sprites, also try 2 tiles away when there's
+    # Across-counter: for sprites only, also try 2 tiles away when there's
     # a non-walkable tile in between (counter/ledge).  Pokemon Red
     # allows interaction across counter tiles with A button.
+    # Only for sprites — items (Poké Balls) and other POIs don't work
+    # across counters and would cause wrong POI selection.
     if kind == "sprite":
         for pty, ptx in poi_tiles:
             for (dy, dx), face in _FACE_DIR.items():
@@ -157,6 +164,10 @@ def find_interaction_targets(poi, grid, blocked=None):
                     if grid[mid_y][mid_x]:
                         continue  # no counter here, skip
 
+                # Skip if the intermediate tile is another POI (not a counter)
+                if (mid_y, mid_x) in other_poi_tiles:
+                    continue
+
                 ny, nx = pty + 2 * dy, ptx + 2 * dx
                 if (ny, nx) in seen:
                     continue
@@ -164,13 +175,13 @@ def find_interaction_targets(poi, grid, blocked=None):
 
                 if 0 <= ny < h and 0 <= nx < w:
                     if grid[ny][nx] and (ny, nx) not in blocked:
-                        if (ny, nx) not in poi_tiles:
+                        if (ny, nx) not in poi_tiles and (ny, nx) not in other_poi_tiles:
                             targets.append((ny, nx, face))
 
     return targets
 
 
-def find_best_path(grid, start, poi, blocked=None):
+def find_best_path(grid, start, poi, blocked=None, other_poi_tiles=None):
     """Find the shortest path to any valid interaction tile for a POI.
 
     Returns (path, face_direction) or (None, None) if unreachable.
@@ -180,7 +191,7 @@ def find_best_path(grid, start, poi, blocked=None):
     if blocked is None:
         blocked = set()
 
-    targets = find_interaction_targets(poi, grid, blocked)
+    targets = find_interaction_targets(poi, grid, blocked, other_poi_tiles)
     if not targets:
         return None, None
 

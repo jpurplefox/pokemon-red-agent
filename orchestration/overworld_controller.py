@@ -156,12 +156,13 @@ class OverworldAIController:
     def _handle_go(self, pois, detail, map_name, mem):
         """Navigate to a POI and record the result."""
         poi = pois[detail]
-        self._handle_go_with_poi(poi, map_name, mem)
+        self._handle_go_with_poi(poi, map_name, mem, all_pois=pois)
 
-    def _handle_go_with_poi(self, poi, map_name, mem):
+    def _handle_go_with_poi(self, poi, map_name, mem, all_pois=None):
         """Navigate to a specific POI dict and record the result."""
         self._ai.record_poi_visited(map_name, poi["label"])
-        result = self._navigator.go_to(poi, self._print_surroundings)
+        result = self._navigator.go_to(poi, self._print_surroundings,
+                                       all_pois=all_pois)
 
         # If a battle interrupted the walk, save POI to resume after
         if self._battle.is_in_battle():
