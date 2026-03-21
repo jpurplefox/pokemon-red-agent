@@ -237,7 +237,7 @@ When the overworld agent selects a POI, the navigator module computes a path usi
 
 Navigation is designed for interruption safety. At each step, the navigator checks whether a battle has started, dialogue has appeared, or the player has warped to a new map. If a battle interrupts navigation, the pending POI is preserved and navigation resumes automatically after the battle is resolved, since the original destination was never reached. This is important for maintaining coherence: without resumption, the agent would observe that its last decision produced no visible result --- it chose to go to a POI but arrived somewhere unexpected --- leading to confusion in subsequent reasoning. By completing the interrupted action, the system ensures that the agent's decisions have the outcomes it intended. A map transition triggers a wait period for the game to stabilize before continuing.
 
-The path is recalculated before each step rather than computed once upfront, because NPCs move between tiles and can block previously valid routes. This per-step recalculation ensures the navigator always works with the current state of the map.
+The path is recalculated before each step rather than computed once upfront, because NPCs move between tiles and can block previously valid routes. Additionally, if the player fails to move after a step --- indicating that a tile marked as walkable in the ROM data is actually blocked --- the navigator marks that tile as non-walkable and recalculates the path around it. This handles cases where the game's collision data does not match actual walkability, such as certain cave walls in Mt.\ Moon.
 
 Different POI types require different approach strategies: warps activate by walking onto the tile, signs and NPCs require facing the target and pressing A, and map connections require walking to the edge and stepping off.
 
@@ -259,7 +259,7 @@ The advancer stops based on configurable conditions: the appearance of a battle 
 
 An event processor sits between the navigator and the game, handling contextual interactions that arise during gameplay. When the player interacts with a Pok\'{e} Center nurse and a YES/NO prompt appears, the event processor automatically accepts. When a shop menu appears, it delegates to the shop agent. When a naming keyboard appears after catching a Pok\'{e}mon, it delegates to the naming agent.
 
-This module acts as a dispatcher: it detects the type of event from WRAM state and routes it to the appropriate handler, whether that is an automated response (accepting healing) or an LLM agent (deciding what to buy). When the agent encounters an unrecognized menu --- such as a PC terminal --- the event processor automatically dismisses it, preventing the agent from getting stuck in interfaces it was not designed to handle.
+This module acts as a dispatcher: it detects the type of event from WRAM state and routes it to the appropriate handler, whether that is an automated response (accepting healing) or an LLM agent (deciding what to buy). When the agent encounters an unrecognized menu, the event processor handles it based on context: PC-related menus are dismissed, while other unknown menus default to selecting the first option. This prevents the agent from getting stuck in interfaces it was not designed to handle.
 
 \subsection{Name Entry}
 
