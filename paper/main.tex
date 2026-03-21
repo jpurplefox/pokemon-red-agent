@@ -1,0 +1,387 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{booktabs}
+\usepackage{natbib}
+\usepackage[margin=1in]{geometry}
+
+\title{Playing Pok\'{e}mon Red with a Language Model: An Autonomous LLM Agent for Retro RPG Gameplay}
+
+\author{
+  J\'{e}sica Collado \\
+  \texttt{collado.jesica@gmail.com}
+}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We present an autonomous agent capable of playing Pok\'{e}mon Red, a classic role-playing game for the Game Boy, using a large language model as its sole decision-making engine. Unlike prior work that applies reinforcement learning or targets isolated game mechanics such as competitive battling, our agent attempts to play the full RPG experience: navigating an open world, engaging in combat, capturing Pok\'{e}mon, managing resources, and pursuing narrative objectives --- all through natural language reasoning over structured game state, with no task-specific training or fine-tuning.
+
+The system is built around five specialized LLM-based agents --- overworld navigation, battle strategy, catch-or-defeat evaluation, shop optimization, and nickname generation --- each operating on prompts constructed from direct memory reads of the emulator's working RAM. A minimal layer of mechanical automation handles low-level execution (menu traversal, pathfinding, dialogue advancement), while a feedback-based validation mechanism allows the LLM to self-correct when it attempts invalid actions rather than relying on hard-coded overrides. This separation between strategic reasoning and mechanical execution allows us to study which decisions an LLM can reliably make and how effectively it recovers from errors through feedback.
+
+We run our experiments using Qwen 2.5 14B, a relatively small open-weight model running locally on consumer hardware via MLX, demonstrating that complex game-playing behavior does not necessarily require frontier-scale models. Early experiments show the agent is able to autonomously navigate the game's opening areas, including reaching Viridian Forest within 30 minutes of gameplay. We discuss the design trade-offs involved in building a viable LLM-based game agent, the failure modes we observe, and the minimal set of interventions needed to keep the agent on track.
+\end{abstract}
+
+% --------------------------------------------------------------------------- %
+
+\section{Introduction}
+\label{sec:introduction}
+
+Large language models have demonstrated remarkable capabilities as general-purpose reasoners, leading to growing interest in deploying them as autonomous agents in interactive environments. Recent work has shown that LLMs can navigate web interfaces, write and debug code, and operate software tools through natural language reasoning alone. A natural question arises: can these models handle the sustained, multi-faceted decision-making required to play a complete video game?
+
+Video games, and role-playing games in particular, present a uniquely challenging testbed for language model agents. Unlike single-task benchmarks, an RPG demands the simultaneous coordination of multiple interleaved skills: spatial navigation through interconnected maps, turn-based combat with type-based strategy, resource management across items and currency, team composition and long-term planning, and the pursuit of narrative objectives conveyed through in-game dialogue. These decisions unfold over long time horizons, where early choices --- which Pok\'{e}mon to catch, when to heal, what items to stock --- compound into consequences hours later.
+
+The dominant paradigm for game-playing AI has been reinforcement learning, which has achieved superhuman performance in domains ranging from Atari games to Go. However, RL agents typically require millions of episodes of training, learn narrow policies tied to specific reward functions, and offer limited interpretability into their decision-making process. More recently, LLM-based agents have been applied to games such as Minecraft \citep{wang2023voyager} and competitive Pok\'{e}mon battles \citep{hu2024pokellmon}, but these efforts have either targeted open-ended sandbox environments or focused on isolated game mechanics rather than the full RPG experience.
+
+We choose Pok\'{e}mon Red (1996) for the Game Boy as our testbed for several reasons. First, its mechanics are extensively documented by the fan community, including full maps of working RAM (WRAM) addresses, which enables precise programmatic access to game state without relying on computer vision. Second, the game offers a gradually increasing complexity curve: early routes are largely linear and forgiving, while later areas introduce branching paths, puzzle-based dungeons, and tougher opponents. Third, Pok\'{e}mon Red requires all the core RPG skills simultaneously --- exploration, combat, resource management, and quest tracking --- making it a comprehensive benchmark for evaluating an LLM's ability to coordinate multiple reasoning modes.
+
+In this work, we present an autonomous agent that plays Pok\'{e}mon Red using a large language model as its sole decision-making engine, with no reinforcement learning, fine-tuning, or task-specific training. The system is organized around five specialized LLM-based agents, each responsible for a distinct aspect of gameplay: overworld navigation, battle strategy, catch-or-defeat evaluation, shop optimization, and nickname generation. Each agent operates on structured prompts constructed from direct reads of the emulator's working RAM, and produces decisions in a constrained format that a mechanical execution layer translates into button presses.
+
+A key design principle of our approach is the explicit separation between \emph{strategic reasoning} and \emph{mechanical execution}. The LLM is responsible for all high-level decisions --- where to go, what move to use, whether to catch a Pok\'{e}mon --- while a thin automation layer handles low-level tasks that require no intelligence: pathfinding via A*, menu traversal, and dialogue advancement. When the LLM attempts an invalid action, the system provides feedback explaining the failure and requests a new decision, preserving the LLM as the sole decision-maker. This separation allows us to study a focused question: \emph{which decisions can an LLM reliably make in an RPG, and how effectively does it self-correct when given feedback on invalid actions?}
+
+Notably, our agent runs entirely on consumer hardware using Qwen 2.5 14B, a relatively small open-weight model, via MLX on Apple Silicon. This demonstrates that complex game-playing behavior through prompting alone does not necessarily require frontier-scale models or cloud-based inference.
+
+Our contributions are as follows:
+\begin{itemize}
+  \item We present, to our knowledge, the first LLM-based agent that attempts to play a complete RPG --- including exploration, combat, resource management, and quest tracking --- rather than isolated game mechanics.
+  \item We propose a multi-agent architecture with explicit separation between strategic LLM reasoning and mechanical game execution, using feedback-based validation that allows the LLM to self-correct rather than relying on hard-coded overrides.
+  \item We demonstrate that a 14-billion-parameter model running locally on consumer hardware can exhibit coherent RPG gameplay through prompting alone, without reinforcement learning or fine-tuning.
+  \item We provide an analysis of the decision boundaries between LLM reasoning and mechanical automation, contributing to the broader understanding of where LLM agents succeed and fail in complex interactive environments.
+\end{itemize}
+
+% --------------------------------------------------------------------------- %
+
+\section{Related Work}
+\label{sec:related-work}
+
+Our work sits at the intersection of three active research areas: reinforcement learning for game playing, LLM-based game agents, and structured reasoning frameworks for language models.
+
+\subsection{Reinforcement Learning for Game Playing}
+
+Reinforcement learning has been the dominant paradigm for building game-playing AI. Deep Q-Networks demonstrated that a single architecture could learn to play dozens of Atari games from raw pixels \citep{mnih2015human}, while AlphaGo showed that RL combined with tree search could surpass human experts in Go \citep{silver2016mastering}. More recently, \citet{pleines2025pokemon} applied RL directly to Pok\'{e}mon Red, training agents over tens of thousands of hours of gameplay to navigate the game's opening areas. Their work demonstrates that RL can eventually produce viable game-playing behavior, but at enormous computational cost and with policies that remain brittle outside their training distribution. In contrast, our approach requires no training at all --- the LLM generalizes from its pre-training knowledge to make decisions in a zero-shot fashion.
+
+\subsection{LLM-Based Game Agents}
+
+A growing body of work explores LLMs as decision-making engines in interactive environments. Voyager \citep{wang2023voyager} deployed GPT-4 as a lifelong learning agent in Minecraft, using an automatic curriculum, a skill library of executable code, and iterative prompting with environment feedback. While Voyager demonstrates impressive open-ended exploration, Minecraft's sandbox nature differs fundamentally from the structured, narrative-driven progression of an RPG.
+
+Closest to our work is Pok\'{e}LLMon \citep{hu2024pokellmon}, which achieves human-parity performance in competitive Pok\'{e}mon battles on Showdown. Pok\'{e}LLMon introduces in-context reinforcement learning from battle feedback, knowledge-augmented generation to reduce hallucination, and consistent action generation to prevent panic switching. However, Pok\'{e}LLMon operates exclusively in the competitive battling domain --- a turn-based strategy game with complete information about available moves and types. It does not address overworld navigation, resource management, team building through wild encounters, or any of the other RPG mechanics that constitute the full game experience. Our agent attempts to play the complete RPG, coordinating across all these interleaved skills simultaneously.
+
+CRADLE \citep{tan2024cradle} takes a different approach by targeting General Computer Control: a multimodal agent that interacts with software through screenshots and keyboard/mouse actions. CRADLE has been applied to complex games including Red Dead Redemption 2 and Stardew Valley, demonstrating broad applicability. However, its reliance on visual input introduces latency and interpretation errors that our approach avoids through direct memory reads, and its generalist design trades off the domain-specific optimizations that we find necessary for sustained RPG gameplay.
+
+\subsection{Structured Reasoning for LLM Agents}
+
+Our agent's decision-making process draws on the ReAct framework \citep{yao2023react}, which interleaves reasoning traces with actions in a synergistic loop. ReAct demonstrated that allowing LLMs to ``think aloud'' before acting reduces hallucination and improves performance on interactive tasks. Our agents follow a similar pattern: each receives structured game state, produces a reasoning trace analyzing the situation, and then outputs a constrained action.
+
+Several works have explored reflection and sub-goal management in LLM agents. Reflexion \citep{shinn2023reflexion} introduces verbal reinforcement learning, where an agent reflects on failed attempts to improve on subsequent trials of the same task. Agent-Pro \citep{zhang2024agentpro} extends this with policy-level reflection to evolve agent behavior over time. Voyager's automatic curriculum \citep{wang2023voyager} proactively generates sub-goals to maximize exploration in Minecraft. Our agent also reflects after each action and manages sub-goals (Section~\ref{sec:reflection}), but unlike these approaches, its sub-goals are not pre-generated or designed to optimize exploration --- they emerge reactively from in-game events, particularly NPC dialogue. This is closer to how a human player discovers quests: an NPC mentions a task, and the player infers a new objective.
+
+% --------------------------------------------------------------------------- %
+
+\section{System Overview}
+\label{sec:system-overview}
+
+Our system connects a large language model to a Game Boy emulator, enabling the LLM to observe game state and issue strategic decisions that are translated into button presses. The architecture is organized around three layers: a \emph{perception layer} that extracts structured state from emulator memory, a \emph{decision layer} composed of specialized LLM agents, and an \emph{execution layer} that translates high-level decisions into low-level input sequences. A feedback-based validation mechanism sits between the decision and execution layers, allowing the LLM to self-correct when it attempts invalid actions.
+
+\subsection{Emulator Interface}
+
+We use PyBoy, an open-source Game Boy emulator written in Python, as our execution environment. Rather than interpreting the game visually through screen captures, we read game state directly from the emulator's working RAM (WRAM) at documented memory addresses. The Pok\'{e}mon Red fan community has produced comprehensive maps of the game's memory layout, providing access to player position, map identity, party composition, battle state, inventory contents, and active dialogue --- all as structured numerical data.
+
+This approach offers two advantages over vision-based alternatives. First, it eliminates the need for an image recognition pipeline, removing an entire class of perception errors. Second, it provides access to information that is not always visible on screen, such as exact HP values, move power points, or the species of a wild Pok\'{e}mon before the battle animation completes.
+
+The emulator runs synchronously with the agent: after each decision, the execution layer sends a sequence of button presses and advances the emulator by a fixed number of frames before the next state read. During LLM inference --- which takes several seconds per decision --- a wrapper keeps the emulator rendering on the main thread while the model runs on a background thread, preventing the display from freezing.
+
+\subsection{Multi-Agent Architecture}
+
+Rather than using a single monolithic prompt, we decompose gameplay into five specialized agents, each responsible for a distinct aspect of the game:
+
+\begin{itemize}
+  \item \textbf{Overworld Agent}: Decides where to go next by examining a list of nearby points of interest (POIs) --- warps, NPCs, and signs --- extracted from the current map, along with the party's health status and a history of recent actions. Outputs a target POI for the Navigator to reach via pathfinding.
+  \item \textbf{Battle Agent}: Selects combat actions (attack, use item, switch Pok\'{e}mon) based on the current battle state, including both combatants' types, HP, available moves, and status conditions.
+  \item \textbf{Scout Agent}: Evaluates whether a newly encountered wild Pok\'{e}mon should be caught or defeated, considering the current party composition and whether the species (or its evolution line) is already represented.
+  \item \textbf{Shop Agent}: Decides what items to purchase at Pok\'{e} Marts based on current inventory, available funds, and party needs.
+  \item \textbf{Naming Agent}: Generates creative nicknames for newly caught Pok\'{e}mon. While this agent does not affect gameplay outcomes, it illustrates the LLM's ability to perform creative tasks within the same architecture used for strategic reasoning.
+\end{itemize}
+
+Each agent follows the same interaction pattern: a set of state readers extract relevant information from WRAM, Jinja2 templates render this state into a natural language prompt, the LLM produces a response containing a \texttt{THINK:} reasoning trace followed by an \texttt{ACTION:} directive, and a parser extracts the structured decision. This pattern mirrors the ReAct framework \citep{yao2023react}, where explicit reasoning before acting improves decision quality.
+
+The main game loop dispatches agents based on the current game state, with a fixed priority order: battle handling takes precedence over dialogue, which takes precedence over overworld navigation. This ensures that interrupts --- such as a wild encounter during exploration --- are handled before the overworld agent attempts to continue navigating.
+
+\subsection{Reflection and Sub-Goal Discovery}
+\label{sec:reflection}
+
+After each overworld action, a dedicated reflection step invokes the LLM a second time to evaluate the outcome of the previous action and manage sub-goals. The agent receives the action it just took, any resulting dialogue or events, the current main goal, and the list of active and completed sub-goals. Based on this context, it can create a new sub-goal, mark the current one as done, or take no action.
+
+Sub-goals emerge from in-game events --- for example, when an NPC says ``Please deliver this parcel to Professor Oak'', the agent creates a sub-goal: \emph{Deliver Oak's Parcel to Professor Oak}. When the delivery is completed and the game confirms it, the agent marks the sub-goal as done. If a more important sub-goal is discovered, the agent replaces the current one.
+
+This mechanism allows the agent to discover and track its own objectives from gameplay rather than relying on a pre-programmed quest list. The main goal (e.g., ``Become the Pok\'{e}mon Champion'') provides long-term direction, while sub-goals decompose it into concrete, actionable steps as the agent encounters them organically through NPC dialogue and game events.
+
+\subsection{Decision vs. Execution Separation}
+
+A central design principle is the strict separation between what the LLM decides and how those decisions are mechanically executed. The LLM outputs high-level intentions --- ``use Bubble'', ``go to the Pok\'{e} Center'', ``throw a Pok\'{e} Ball'' --- while dedicated driver modules handle the mechanical task of translating these into sequences of button presses:
+
+\begin{itemize}
+  \item A \textbf{Battle Menu Driver} navigates the in-game battle menu to select the correct move, open the bag to use an item, or switch to a specific party member.
+  \item A \textbf{Navigator} computes A* paths between the player's current position and a target point of interest, then executes the walk step by step, handling collision and interrupting if an event (battle, dialogue) occurs mid-path.
+  \item A \textbf{Name Entry} module translates a string into cursor movements on the in-game naming keyboard.
+  \item A \textbf{Dialogue Advancer} detects and scrolls through text boxes, recording dialogue content for context while pressing the advance button at appropriate timing.
+\end{itemize}
+
+This separation is motivated by the observation that menu navigation and pathfinding require no intelligence --- they are deterministic translations of a goal into a sequence of inputs. Delegating these to code frees the LLM's limited context window and inference budget for decisions that genuinely benefit from reasoning.
+
+\subsection{Action Validation and Feedback}
+
+When the LLM attempts an action that is illegal or impossible given the current game state --- such as using a move with no remaining power points, selecting a fainted Pok\'{e}mon, or targeting a point of interest that does not exist on the current map --- the system provides explicit feedback explaining why the action failed and requests a new decision.
+
+This design preserves the principle that the LLM is the sole decision-maker: the system constrains \emph{what information the agent receives}, not \emph{what the agent decides}. The feedback loop also produces a natural signal for evaluating agent competence --- each rejection represents a decision the LLM got wrong. We instrument this loop with a counter that tracks the frequency and type of invalid actions per agent, providing infrastructure for future quantitative analysis of decision quality.
+
+In practice, we observe that the LLM typically self-corrects within one or two feedback rounds. The most common invalid actions include selecting points of interest that do not exist in the current map and choosing moves that are not available to the active Pok\'{e}mon.
+
+% --------------------------------------------------------------------------- %
+
+\section{Agent Design}
+\label{sec:agent-design}
+
+This section details the prompt design and decision logic for each specialized agent. All agents share a common interaction pattern: they receive structured game state rendered through Jinja2 templates, produce a \texttt{THINK:} trace with brief reasoning, and output an \texttt{ACTION:} (or equivalent) directive that is parsed into a structured decision.
+
+\subsection{Overworld Agent}
+
+The overworld agent is the most frequently invoked and the most complex, responsible for all navigation decisions outside of battle. Its prompt contains:
+
+\begin{itemize}
+  \item The current map name and a list of previously visited maps, with newly entered maps flagged to encourage exploration.
+  \item A list of POIs on the current map, each annotated with an icon (warp, NPC, sign), a descriptive label, a cardinal direction relative to the player, and a \emph{visit counter} showing how many times the agent has recently visited that POI.
+  \item The party roster with nicknames, species, levels, and HP status.
+  \item Pok\'{e} Ball count with a low-stock indicator.
+  \item The active sub-goal and completed sub-goals list.
+  \item A rolling history of the last 15 actions taken, providing short-term memory of recent decisions.
+\end{itemize}
+
+The agent outputs \texttt{GO:<number>}, selecting a POI by its index. The visit counter is a key design choice: by showing the agent how many times it has already gone to each POI, we provide the information needed to avoid repetitive loops without hard-coding anti-loop rules. The agent can reason for itself that visiting the same NPC five times is unproductive.
+
+\subsection{Battle Agent}
+
+The battle agent handles all combat decisions. Its design is distinguished by a \emph{goal-based prompt switching} mechanism: the agent receives an entirely different system prompt depending on whether the battle goal is \textsc{defeat} or \textsc{catch}, as determined by the scout agent for wild encounters.
+
+In \textsc{defeat} mode, the prompt prioritizes winning efficiently: it highlights type advantages, marks moves with Same Type Attack Bonus (STAB), and encourages minimizing unnecessary switches. In \textsc{catch} mode, the priorities invert: the prompt warns against one-hit knockouts, favors weakening moves, and promotes using Pok\'{e} Balls when the target's HP is low.
+
+The battle state provided to the agent includes:
+
+\begin{itemize}
+  \item The enemy Pok\'{e}mon's name, types, level, HP percentage, and any status conditions.
+  \item The active Pok\'{e}mon's name, types, level, HP, and available moves --- each annotated with power, accuracy, PP remaining, type, physical/special category, a brief description, and a STAB indicator.
+  \item Available party members for switching, with their types and levels.
+  \item A turn-by-turn history tracking damage dealt and received.
+  \item The available action space, which varies by context: \texttt{MOVE:<name>}, \texttt{SWITCH:<nickname>}, \texttt{BALL} (catch mode only), and \texttt{RUN} (wild battles only).
+\end{itemize}
+
+When a Pok\'{e}mon faints mid-battle, a dedicated \emph{switch-in sub-agent} selects a replacement based on type matchups against the current enemy.
+\subsection{Scout Agent}
+
+Upon encountering a wild Pok\'{e}mon, the scout agent decides whether the battle goal should be \textsc{catch} or \textsc{defeat}. This decision runs before the battle agent is invoked, setting the strategic frame for the entire encounter.
+
+The scout evaluates:
+
+\begin{itemize}
+  \item Whether the wild Pok\'{e}mon's species or any member of its evolution line is already represented on the team.
+  \item What types are currently covered by the party versus what the wild Pok\'{e}mon would add.
+\end{itemize}
+
+The prompt establishes a clear priority hierarchy: type diversity is valued above evolution potential, which is valued above avoiding duplicates.
+
+\subsection{Shop Agent}
+
+The shop agent is invoked when the player enters a Pok\'{e} Mart. It receives the list of available items with prices, the player's current money, Pok\'{e} Ball count, and party state. The agent outputs a purchase list in the format \texttt{BUY: <item\_number> x<quantity>}, or \texttt{NONE} if no purchases are needed.
+
+The prompt includes a budget constraint: the agent is instructed not to spend more than 70\% of available funds, maintaining a reserve for future needs. This is one of the few strategic constraints we impose through the prompt rather than leaving it entirely open-ended, motivated by early observations that the agent would otherwise spend all available money on the first shop visit.
+
+\subsection{Naming Agent}
+
+The naming agent generates nicknames for newly caught Pok\'{e}mon. It receives the species name, the full evolution line, and the current team's nicknames to avoid duplicates. The prompt instructs the agent to choose a name that remains fitting across all evolutionary stages --- for instance, a name for a Charmander should still suit a Charizard.
+
+The output is constrained to 10 uppercase characters, matching Pok\'{e}mon Red's character limit. A post-processing step strips any characters outside the game's allowed character set and truncates names that exceed the limit.
+As noted in Section~\ref{sec:system-overview}, this agent does not influence gameplay outcomes but demonstrates the LLM's capacity for creative generation within the same THINK/ACTION architecture used for strategic decision-making.
+
+% --------------------------------------------------------------------------- %
+
+\section{Mechanical Automation Layer}
+\label{sec:automation}
+
+While the LLM handles all strategic decisions, a set of automated modules handle the mechanical translation of those decisions into emulator inputs. These components perform tasks that are fully deterministic and require no reasoning --- they are the equivalent of a human player's muscle memory for pressing buttons.
+
+\subsection{Pathfinding and Navigation}
+
+When the overworld agent selects a POI, the navigator module computes a path using the A* algorithm over a 2D walkability grid of the current map. A* uses Manhattan distance as its heuristic and accounts for dynamically blocked tiles such as NPCs. The navigator then executes the path step by step, pressing directional buttons and advancing frames between each tile.
+
+Navigation is designed for interruption safety. At each step, the navigator checks whether a battle has started, dialogue has appeared, or the player has warped to a new map. If a battle interrupts navigation, the pending POI is preserved and navigation resumes after the battle is resolved, since the original destination was never reached. A map transition triggers a wait period for the game to stabilize before continuing.
+
+The path is recalculated before each step rather than computed once upfront, because NPCs move between tiles and can block previously valid routes. This per-step recalculation ensures the navigator always works with the current state of the map.
+
+Different POI types require different approach strategies: warps activate by walking onto the tile, signs and NPCs require facing the target and pressing A, and map connections require walking to the edge and stepping off.
+
+\subsection{Battle Menu Driver}
+
+The battle menu driver translates the LLM's decisions into the specific button sequences needed to navigate Pok\'{e}mon Red's nested menu system. When the battle agent outputs \texttt{MOVE:Bubble}, the driver reads the current cursor position from memory, calculates the minimal sequence of directional presses to reach the correct move slot, and confirms the selection.
+
+The same mechanism handles item usage, Pok\'{e} Ball throwing, and party switching --- each requiring navigation through different sub-menus. By tracking the cursor position in WRAM rather than assuming a fixed starting point, the driver minimizes unnecessary button presses.
+
+\subsection{Dialogue Advancement}
+
+A dialogue advancer detects when a text box appears on screen by reading the tilemap from WRAM. It waits for the letter-by-letter text animation to complete, captures the text content, and presses A to advance. When text scrolls, the module detects overlap with previously captured lines and extracts only the new content.
+
+The captured dialogue serves a dual purpose: it drives the game forward mechanically, and it provides context to the LLM for reflection and sub-goal discovery (Section~\ref{sec:reflection}). An NPC saying ``Please deliver this parcel'' is both a text box to dismiss and a potential quest trigger for the agent.
+
+The advancer stops based on configurable conditions: the appearance of a battle menu, a YES/NO choice prompt, a naming keyboard, or a prolonged silence indicating a scene transition.
+
+\subsection{Event Processing}
+
+An event processor sits between the navigator and the game, handling contextual interactions that arise during gameplay. When the player interacts with a Pok\'{e} Center nurse and a YES/NO prompt appears, the event processor automatically accepts. When a shop menu appears, it delegates to the shop agent. When a naming keyboard appears after catching a Pok\'{e}mon, it delegates to the naming agent.
+
+This module acts as a dispatcher: it detects the type of event from WRAM state and routes it to the appropriate handler, whether that is an automated response (accepting healing) or an LLM agent (deciding what to buy).
+
+\subsection{Name Entry}
+
+When the naming agent produces a nickname, a name entry module translates the string into cursor movements on the in-game keyboard. The keyboard is a 9-column, 3-row grid of uppercase characters. For each character, the module calculates the row and column offset from the current cursor position, issues the corresponding directional presses, and confirms with A. Entry is finalized by pressing START.
+
+\subsection{Design Rationale}
+
+Every component in this layer shares a common property: given the same input, it will always produce the same output. There is no decision to be made about \emph{how} to walk from tile A to tile B, or \emph{how} to press down twice to reach the third move in a menu. Automating these tasks is not an assistance to the LLM --- it is the removal of noise that would otherwise consume tokens on trivially deterministic problems, freeing the model's limited context window for decisions that genuinely benefit from reasoning.
+
+% --------------------------------------------------------------------------- %
+
+\section{Experiments}
+\label{sec:experiments}
+
+\subsection{Setup}
+
+All experiments are conducted on a MacBook Pro 14-inch (November 2024) with an Apple M4 Pro chip and 24~GB of unified memory. The LLM is Qwen 2.5 14B, an open-weight model served locally via MLX with no cloud-based inference. The game runs on PyBoy, an open-source Game Boy emulator written in Python, at normal emulation speed. Each run starts from the beginning of the game (New Game) with no prior state.
+
+We conduct \texttt{[N]} independent runs from the start of the game. Runs are not time-limited; each continues until the agent becomes stuck or reaches \texttt{[ENDPOINT]}.
+
+% TODO: Fill in N (number of runs) and ENDPOINT (how far each run goes)
+
+\subsection{Metrics}
+
+We collect the following metrics across all runs:
+
+\begin{itemize}
+  \item \textbf{Narrative progression}: The number of gym badges obtained and the furthest area reached in each run, providing a coarse measure of overall game completion.
+  \item \textbf{Battle win rate}: The proportion of battles won versus lost, reported separately for wild encounters and trainer battles.
+  \item \textbf{Invalid action rate}: The number of actions rejected by the validation layer per agent, broken down by error type (e.g., nonexistent POI, unavailable move). This measures how often the LLM produces decisions that are syntactically valid but semantically illegal given the current game state.
+  \item \textbf{Capture efficiency}: The number of Pok\'{e}mon successfully captured versus the number of wild encounters where the scout agent recommended catching, measuring the battle agent's effectiveness in catch mode.
+\end{itemize}
+
+% --------------------------------------------------------------------------- %
+
+\section{Results}
+\label{sec:results}
+
+\subsection{Game Progression}
+
+% TODO: Fill in with actual data
+% Table template:
+% \begin{table}[h]
+% \centering
+% \begin{tabular}{lccc}
+% \toprule
+% Run & Badges & Furthest Area & Total Battles \\
+% \midrule
+% 1 & & & \\
+% 2 & & & \\
+% 3 & & & \\
+% \bottomrule
+% \end{tabular}
+% \caption{Game progression across independent runs.}
+% \label{tab:progression}
+% \end{table}
+
+\texttt{[TODO: Report game progression per run --- badges obtained, furthest area reached, total battles fought.]}
+
+\subsection{Battle Performance}
+
+% TODO: Fill in with actual data
+% Table template:
+% \begin{table}[h]
+% \centering
+% \begin{tabular}{lcc}
+% \toprule
+% Battle Type & Wins & Losses \\
+% \midrule
+% Wild (defeat mode) & & \\
+% Wild (catch mode) & & \\
+% Trainer & & \\
+% \bottomrule
+% \end{tabular}
+% \caption{Battle outcomes by encounter type.}
+% \label{tab:battles}
+% \end{table}
+
+\texttt{[TODO: Report win/loss rates for wild battles (defeat mode), wild battles (catch mode), and trainer battles.]}
+
+\subsection{Decision Quality}
+
+% TODO: Fill in with actual data
+% Table template:
+% \begin{table}[h]
+% \centering
+% \begin{tabular}{lcc}
+% \toprule
+% Agent & Invalid Actions & Most Common Error \\
+% \midrule
+% Overworld & & \\
+% Battle & & \\
+% Scout & & \\
+% Shop & & \\
+% \bottomrule
+% \end{tabular}
+% \caption{Invalid action rates by agent.}
+% \label{tab:invalid}
+% \end{table}
+
+\texttt{[TODO: Report invalid action rates per agent, with breakdown of most common error types.]}
+
+\subsection{Capture Efficiency}
+
+\texttt{[TODO: Report number of catch attempts vs successful captures, and scout recommendation accuracy.]}
+
+% --------------------------------------------------------------------------- %
+
+\section{Discussion}
+\label{sec:discussion}
+
+% TODO: Key insights
+% - What decisions can the LLM reliably make?
+% - Where does it consistently fail?
+% - Minimal guardrails needed
+% - Small model (14B) vs frontier model trade-offs
+
+% --------------------------------------------------------------------------- %
+
+\section{Limitations and Future Work}
+\label{sec:limitations}
+
+% TODO:
+% - Current game progression limits
+% - Model size experiments
+% - Generalization to other games
+% - Vision-based state reading vs WRAM
+
+% --------------------------------------------------------------------------- %
+
+\section{Conclusion}
+\label{sec:conclusion}
+
+% TODO: Summarize contributions
+
+% --------------------------------------------------------------------------- %
+
+\bibliographystyle{plainnat}
+\bibliography{references}
+
+\end{document}
