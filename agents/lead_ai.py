@@ -72,6 +72,10 @@ class LeadAI:
     def _parse_response(self, text, party, alive):
         """Parse LLM response. Returns party index or None."""
         for line in text.strip().split("\n"):
+            if line.strip().startswith("THINK:"):
+                _log.log_think(line.strip()[6:].strip())
+
+        for line in text.strip().split("\n"):
             line = line.strip()
             if line.startswith("ACTION:"):
                 action = line[7:].strip().upper()
