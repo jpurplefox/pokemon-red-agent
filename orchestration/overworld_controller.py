@@ -119,9 +119,11 @@ class OverworldAIController:
         )
         self._log.update_hud(hud)
 
+        money = self._bag.read_money()
         result = self._ai.decide(
             map_name, pois, grid=grid, player_y=py, player_x=px,
             party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
+            money=money, badges=mem[ADDR_BADGES],
         )
 
         # Update HUD again after decide (think time + action count updated)

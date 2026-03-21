@@ -16,7 +16,13 @@ No Pokémon yet!
 {%- endif %}
 
 --- Inventory ---
+💰 Money: ¥{{ money }}
 Poké Balls: {{ pokeballs }}{% if pokeballs < 3 %} ⚠️ LOW{% endif %}
+
+--- Badges ({{ badge_count }}/8) ---
+{%- for b in badge_list %}
+{{ loop.index }}. {{ b.name }} ({{ b.leader }}, {{ b.city }}) — {% if b.obtained %}✅{% else %}❌{% endif %}
+{%- endfor %}
 {%- if active_subgoal %}
 
 --- ⚡ Active Sub-Goal ---

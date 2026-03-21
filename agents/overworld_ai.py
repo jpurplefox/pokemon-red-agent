@@ -34,6 +34,26 @@ def _render(template_name, **kwargs):
     return _env.get_template(template_name).render(**kwargs)
 
 
+_BADGES = [
+    {"name": "Boulder Badge", "leader": "Brock", "city": "Pewter City"},
+    {"name": "Cascade Badge", "leader": "Misty", "city": "Cerulean City"},
+    {"name": "Thunder Badge", "leader": "Lt. Surge", "city": "Vermilion City"},
+    {"name": "Rainbow Badge", "leader": "Erika", "city": "Celadon City"},
+    {"name": "Soul Badge", "leader": "Koga", "city": "Fuchsia City"},
+    {"name": "Marsh Badge", "leader": "Sabrina", "city": "Saffron City"},
+    {"name": "Volcano Badge", "leader": "Blaine", "city": "Cinnabar Island"},
+    {"name": "Earth Badge", "leader": "Giovanni", "city": "Viridian City"},
+]
+
+
+def _build_badge_list(badges_byte):
+    """Convert badge bitmask to list of dicts with obtained status."""
+    return [
+        {**b, "obtained": bool(badges_byte & (1 << i))}
+        for i, b in enumerate(_BADGES)
+    ]
+
+
 class OverworldAI:
     def __init__(self, llm, goal="Become Pokemon Champion"):
         self._llm = llm
@@ -195,7 +215,8 @@ class OverworldAI:
     # ------------------------------------------------------------------
 
     def decide(self, map_name, pois, grid=None, player_y=0, player_x=0,
-               party=None, pokeballs=0, has_pokedex=False):
+               party=None, pokeballs=0, has_pokedex=False,
+               money=0, badges=0):
         """Ask the LLM what to do next in the overworld."""
         self._iteration += 1
         _log._action_count = self._iteration
@@ -236,7 +257,10 @@ class OverworldAI:
                               ],
                               party=party or [],
                               pokeballs=pokeballs,
-                              has_pokedex=has_pokedex)
+                              has_pokedex=has_pokedex,
+                              money=money,
+                              badge_list=_build_badge_list(badges),
+                              badge_count=bin(badges).count("1"))
 
         if _DEBUG_PROMPTS:
             _log.log_prompt("DECIDE", system_prompt, user_prompt)
