@@ -25,7 +25,7 @@
 \begin{abstract}
 We present an autonomous agent capable of playing Pok\'{e}mon Red, a classic role-playing game for the Game Boy, using a large language model as its sole decision-making engine. Unlike prior work that applies reinforcement learning or targets isolated game mechanics such as competitive battling, our agent attempts to play the full RPG experience: navigating an open world, engaging in combat, capturing Pok\'{e}mon, managing resources, and pursuing narrative objectives --- all through natural language reasoning over structured game state, with no task-specific training or fine-tuning.
 
-The system is built around five specialized LLM-based agents --- overworld navigation, battle strategy, catch-or-defeat evaluation, shop optimization, and nickname generation --- each operating on prompts constructed from direct memory reads of the emulator's working RAM. A minimal layer of mechanical automation handles low-level execution (menu traversal, pathfinding, dialogue advancement), while a feedback-based validation mechanism allows the LLM to self-correct when it attempts invalid actions rather than relying on hard-coded overrides. This separation between strategic reasoning and mechanical execution allows us to study which decisions an LLM can reliably make and how effectively it recovers from errors through feedback.
+The system is built around six specialized LLM-based agents --- overworld navigation, battle strategy, catch-or-defeat evaluation, shop optimization, party lead selection, and nickname generation --- each operating on prompts constructed from direct memory reads of the emulator's working RAM. A minimal layer of mechanical automation handles low-level execution (menu traversal, pathfinding, dialogue advancement), while a feedback-based validation mechanism allows the LLM to self-correct when it attempts invalid actions rather than relying on hard-coded overrides. This separation between strategic reasoning and mechanical execution allows us to study which decisions an LLM can reliably make and how effectively it recovers from errors through feedback.
 
 We run our experiments using Qwen 2.5 14B, a relatively small open-weight model running locally on consumer hardware via MLX, demonstrating that complex game-playing behavior does not necessarily require frontier-scale models. Early experiments show the agent is able to autonomously navigate the game's opening areas, including reaching Viridian Forest within 30 minutes of gameplay. We discuss the design trade-offs involved in building a viable LLM-based game agent, the failure modes we observe, and the minimal set of interventions needed to keep the agent on track.
 \end{abstract}
@@ -43,7 +43,7 @@ The dominant paradigm for game-playing AI has been reinforcement learning, which
 
 We choose Pok\'{e}mon Red (1996) for the Game Boy as our testbed for several reasons. First, its mechanics are extensively documented by the fan community, including full maps of working RAM (WRAM) addresses, which enables precise programmatic access to game state without relying on computer vision. Second, the game offers a gradually increasing complexity curve: early routes are largely linear and forgiving, while later areas introduce branching paths, puzzle-based dungeons, and tougher opponents. Third, Pok\'{e}mon Red requires all the core RPG skills simultaneously --- exploration, combat, resource management, and quest tracking --- making it a comprehensive benchmark for evaluating an LLM's ability to coordinate multiple reasoning modes.
 
-In this work, we present an autonomous agent that plays Pok\'{e}mon Red using a large language model as its sole decision-making engine, with no reinforcement learning, fine-tuning, or task-specific training. The system is organized around five specialized LLM-based agents, each responsible for a distinct aspect of gameplay: overworld navigation, battle strategy, catch-or-defeat evaluation, shop optimization, and nickname generation. Each agent operates on structured prompts constructed from direct reads of the emulator's working RAM, and produces decisions in a constrained format that a mechanical execution layer translates into button presses.
+In this work, we present an autonomous agent that plays Pok\'{e}mon Red using a large language model as its sole decision-making engine, with no reinforcement learning, fine-tuning, or task-specific training. The system is organized around six specialized LLM-based agents, each responsible for a distinct aspect of gameplay: overworld navigation, battle strategy, catch-or-defeat evaluation, shop optimization, party lead selection, and nickname generation. Each agent operates on structured prompts constructed from direct reads of the emulator's working RAM, and produces decisions in a constrained format that a mechanical execution layer translates into button presses.
 
 A key design principle of our approach is the explicit separation between \emph{strategic reasoning} and \emph{mechanical execution}. The LLM is responsible for all high-level decisions --- where to go, what move to use, whether to catch a Pok\'{e}mon --- while a thin automation layer handles low-level tasks that require no intelligence: pathfinding via A*, menu traversal, and dialogue advancement. When the LLM attempts an invalid action, the system provides feedback explaining the failure and requests a new decision, preserving the LLM as the sole decision-maker. This separation allows us to study a focused question: \emph{which decisions can an LLM reliably make in an RPG, and how effectively does it self-correct when given feedback on invalid actions?}
 
@@ -99,13 +99,14 @@ The emulator runs synchronously with the agent: after each decision, the executi
 
 \subsection{Multi-Agent Architecture}
 
-Rather than using a single monolithic prompt, we decompose gameplay into five specialized agents, each responsible for a distinct aspect of the game:
+Rather than using a single monolithic prompt, we decompose gameplay into six specialized agents, each responsible for a distinct aspect of the game:
 
 \begin{itemize}
-  \item \textbf{Overworld Agent}: Decides where to go next by examining a list of nearby points of interest (POIs) --- warps, NPCs, and signs --- extracted from the current map, along with the party's health status and a history of recent actions. Outputs a target POI for the Navigator to reach via pathfinding.
+  \item \textbf{Overworld Agent}: Decides where to go next by examining a list of nearby points of interest (POIs) --- warps, NPCs, signs, and tall grass patches --- extracted from the current map, along with the party's health status, badge progress, available money, and a history of recent actions. Outputs a target POI for the Navigator to reach via pathfinding.
   \item \textbf{Battle Agent}: Selects combat actions (attack, use item, switch Pok\'{e}mon) based on the current battle state, including both combatants' types, HP, available moves, and status conditions.
   \item \textbf{Scout Agent}: Evaluates whether a newly encountered wild Pok\'{e}mon should be caught or defeated, considering the current party composition and whether the species (or its evolution line) is already represented.
   \item \textbf{Shop Agent}: Decides what items to purchase at Pok\'{e} Marts based on current inventory, available funds, and party needs.
+  \item \textbf{Lead Agent}: After each battle, evaluates the party and decides which Pok\'{e}mon should lead the team for the next encounter, considering HP status, level distribution, and training needs.
   \item \textbf{Naming Agent}: Generates creative nicknames for newly caught Pok\'{e}mon. While this agent does not affect gameplay outcomes, it illustrates the LLM's ability to perform creative tasks within the same architecture used for strategic reasoning.
 \end{itemize}
 
@@ -156,9 +157,10 @@ The overworld agent is the most frequently invoked and the most complex, respons
 
 \begin{itemize}
   \item The current map name and a list of previously visited maps, with newly entered maps flagged to encourage exploration.
-  \item A list of POIs on the current map, each annotated with an icon (warp, NPC, sign), a descriptive label, a cardinal direction relative to the player, and a \emph{visit counter} showing how many times the agent has recently visited that POI.
+  \item A list of POIs on the current map, each annotated with an icon (warp, NPC, sign, tall grass), a descriptive label, a cardinal direction relative to the player, and a \emph{visit counter} showing how many times the agent has recently visited that POI. Tall grass patches are included as POIs, allowing the agent to deliberately seek wild encounters when it decides to train or catch Pok\'{e}mon.
   \item The party roster with nicknames, species, levels, and HP status.
   \item Pok\'{e} Ball count with a low-stock indicator.
+  \item Current money and badge progress, providing context for resource management and narrative progression.
   \item The active sub-goal and completed sub-goals list.
   \item A rolling history of the last 15 actions taken, providing short-term memory of recent decisions.
 \end{itemize}
@@ -201,6 +203,14 @@ The shop agent is invoked when the player enters a Pok\'{e} Mart. It receives th
 
 The prompt includes a budget constraint: the agent is instructed not to spend more than 70\% of available funds, maintaining a reserve for future needs. This is one of the few strategic constraints we impose through the prompt rather than leaving it entirely open-ended, motivated by early observations that the agent would otherwise spend all available money on the first shop visit.
 
+\subsection{Lead Agent}
+
+After each battle, the lead agent evaluates the party and decides which Pok\'{e}mon should be in the first position for the next encounter. The agent receives the full party roster with each member's nickname, species, level, current HP, and health status.
+
+The prompt instructs the agent to balance two competing concerns: keeping a healthy Pok\'{e}mon in front to avoid immediate fainting, and rotating lower-level team members into the lead position so they gain experience. This prevents the common failure mode where a single overleveled Pok\'{e}mon carries the team while the rest fall increasingly behind.
+
+The agent outputs \texttt{KEEP} to retain the current lead or \texttt{SWITCH:<number>} to promote a different party member.
+
 \subsection{Naming Agent}
 
 The naming agent generates nicknames for newly caught Pok\'{e}mon. It receives the species name, the full evolution line, and the current team's nicknames to avoid duplicates. The prompt instructs the agent to choose a name that remains fitting across all evolutionary stages --- for instance, a name for a Charmander should still suit a Charizard.
@@ -219,7 +229,7 @@ While the LLM handles all strategic decisions, a set of automated modules handle
 
 When the overworld agent selects a POI, the navigator module computes a path using the A* algorithm over a 2D walkability grid of the current map. A* uses Manhattan distance as its heuristic and accounts for dynamically blocked tiles such as NPCs. The navigator then executes the path step by step, pressing directional buttons and advancing frames between each tile.
 
-Navigation is designed for interruption safety. At each step, the navigator checks whether a battle has started, dialogue has appeared, or the player has warped to a new map. If a battle interrupts navigation, the pending POI is preserved and navigation resumes after the battle is resolved, since the original destination was never reached. A map transition triggers a wait period for the game to stabilize before continuing.
+Navigation is designed for interruption safety. At each step, the navigator checks whether a battle has started, dialogue has appeared, or the player has warped to a new map. If a battle interrupts navigation, the pending POI is preserved and navigation resumes automatically after the battle is resolved, since the original destination was never reached. This is important for maintaining coherence: without resumption, the agent would observe that its last decision produced no visible result --- it chose to go to a POI but arrived somewhere unexpected --- leading to confusion in subsequent reasoning. By completing the interrupted action, the system ensures that the agent's decisions have the outcomes it intended. A map transition triggers a wait period for the game to stabilize before continuing.
 
 The path is recalculated before each step rather than computed once upfront, because NPCs move between tiles and can block previously valid routes. This per-step recalculation ensures the navigator always works with the current state of the map.
 
@@ -243,7 +253,7 @@ The advancer stops based on configurable conditions: the appearance of a battle 
 
 An event processor sits between the navigator and the game, handling contextual interactions that arise during gameplay. When the player interacts with a Pok\'{e} Center nurse and a YES/NO prompt appears, the event processor automatically accepts. When a shop menu appears, it delegates to the shop agent. When a naming keyboard appears after catching a Pok\'{e}mon, it delegates to the naming agent.
 
-This module acts as a dispatcher: it detects the type of event from WRAM state and routes it to the appropriate handler, whether that is an automated response (accepting healing) or an LLM agent (deciding what to buy).
+This module acts as a dispatcher: it detects the type of event from WRAM state and routes it to the appropriate handler, whether that is an automated response (accepting healing) or an LLM agent (deciding what to buy). When the agent encounters an unrecognized menu --- such as a PC terminal --- the event processor automatically dismisses it, preventing the agent from getting stuck in interfaces it was not designed to handle.
 
 \subsection{Name Entry}
 
