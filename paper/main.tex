@@ -82,6 +82,12 @@ Our agent's decision-making process draws on the ReAct framework \citep{yao2023r
 
 Several works have explored reflection and sub-goal management in LLM agents. Reflexion \citep{shinn2023reflexion} introduces verbal reinforcement learning, where an agent reflects on failed attempts to improve on subsequent trials of the same task. Agent-Pro \citep{zhang2024agentpro} extends this with policy-level reflection to evolve agent behavior over time. Voyager's automatic curriculum \citep{wang2023voyager} proactively generates sub-goals to maximize exploration in Minecraft. Our agent also reflects after each action and manages sub-goals (Section~\ref{sec:reflection}), but unlike these approaches, its sub-goals are not pre-generated or designed to optimize exploration --- they emerge reactively from in-game events, particularly NPC dialogue. This is closer to how a human player discovers quests: an NPC mentions a task, and the player infers a new objective.
 
+\subsection{Multi-Agent LLM Architectures}
+
+Recent frameworks such as MetaGPT \citep{hong2024metagpt} and AutoGen \citep{wu2023autogen} coordinate multiple LLM agents through inter-agent communication: agents with different roles converse, debate, and negotiate to solve complex tasks collaboratively. These architectures are well suited for open-ended problems where the task decomposition itself is ambiguous and benefits from discussion --- such as software engineering or multi-step reasoning.
+
+Our system takes a different approach. Rather than having agents communicate with each other, we use a state-driven dispatcher that invokes exactly one specialized agent at a time based on the current game state. This design is motivated by two domain-specific constraints. First, Pok\'{e}mon Red's game states are mutually exclusive by design: the player is either in battle, navigating the overworld, in a shop, or naming a Pok\'{e}mon --- never in two contexts simultaneously. There is no ambiguity about which agent should act, making inter-agent negotiation unnecessary. Second, our model runs locally on consumer hardware with multi-second inference latency per call; a collaborative architecture that requires multiple rounds of agent-to-agent conversation would multiply this cost significantly. The result is a system where each agent receives only the information relevant to its domain, produces a single decision, and yields control back to the dispatcher.
+
 % --------------------------------------------------------------------------- %
 
 \section{System Overview}
