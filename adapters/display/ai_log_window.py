@@ -44,12 +44,13 @@ def ai_log(text: str, kind: str = ""):
 
 def ai_update_hud(team=None, goal="", subgoal="", think_time=0.0,
                    action_count=0, badges=0, map_name="", player_name="",
-                   play_time=""):
+                   play_time="", retries=0):
     """Update the persistent HUD data."""
     if not _started:
         start()
     _queue.put(("hud", team or [], goal, subgoal, think_time,
-                action_count, badges, map_name, player_name, play_time))
+                action_count, badges, map_name, player_name, play_time,
+                retries))
 
 
 def ai_set_thinking(is_thinking: bool):
@@ -116,6 +117,7 @@ def _run(q: mp.Queue):
     hud_map_name = ""
     hud_player_name = ""
     hud_play_time = ""
+    hud_retries = 0
     is_thinking = False
     think_start = 0.0
 
@@ -142,7 +144,7 @@ def _run(q: mp.Queue):
             if msg[0] == "hud":
                 _, hud_team, hud_goal, hud_subgoal, hud_think_time, \
                     hud_action_count, hud_badges, hud_map_name, \
-                    hud_player_name, hud_play_time = msg
+                    hud_player_name, hud_play_time, hud_retries = msg
                 continue
 
             if msg[0] == "thinking":
@@ -210,7 +212,8 @@ def _run(q: mp.Queue):
         hud_h = _render_hud(screen, font_hud, font_bold, w,
                             hud_team, hud_goal, hud_subgoal, hud_think_time,
                             hud_action_count, hud_badges, thinking_elapsed,
-                            hud_map_name, hud_player_name, hud_play_time)
+                            hud_map_name, hud_player_name, hud_play_time,
+                            hud_retries)
 
         # Separator line
         pygame.draw.line(screen, _SEPARATOR, (0, hud_h), (w, hud_h), 1)
@@ -283,7 +286,7 @@ _BADGE_MISSING = (40, 38, 50)      # very dim
 
 def _render_hud(screen, font, font_bold, w, team, goal, subgoal, think_time,
                 action_count=0, badges=0, thinking_elapsed=0.0, map_name="",
-                player_name="", play_time=""):
+                player_name="", play_time="", retries=0):
     """Render the persistent HUD at the top. Returns the total HUD height."""
     import pygame
 
@@ -368,12 +371,18 @@ def _render_hud(screen, font, font_bold, w, team, goal, subgoal, think_time,
     surf = font_bold.render(goal_text, True, _FG_GOAL)
     screen.blit(surf, (pad, y))
 
-    # Timer + count on the right
+    # Timer + retries + count on the right
     right_x = w - pad
     if action_count > 0:
         count_surf = font.render(f"#{action_count}", True, _FG_DIM)
         right_x -= count_surf.get_width()
         screen.blit(count_surf, (right_x, y))
+        right_x -= 10
+    if retries > 0:
+        retry_color = (255, 100, 100) if retries > 5 else (255, 180, 80)
+        retry_surf = font.render(f"R:{retries}", True, retry_color)
+        right_x -= retry_surf.get_width()
+        screen.blit(retry_surf, (right_x, y))
         right_x -= 10
 
     if thinking_elapsed > 0:

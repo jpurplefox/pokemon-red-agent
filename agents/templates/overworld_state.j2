@@ -39,9 +39,9 @@ Poké Balls: {{ pokeballs }}{% if pokeballs < 3 %} ⚠️ LOW{% endif %}
 {%- endfor %}
 {%- endif %}
 
---- Points of Interest ---
+--- Points of Interest (use GO:<number> with the number below) ---
 {%- for poi in pois %}
-{{ loop.index }}. {{ poi.icon }} {{ poi.label }} — {{ poi.dir }}
+[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dir }})
   {%- if poi.times_recent > 0 %} ⚠️ VISITED ({{ poi.times_recent }}x recently){% endif %}
 {%- endfor %}
 {%- if not pois %}

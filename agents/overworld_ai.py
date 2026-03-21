@@ -7,6 +7,7 @@ chooses actions: go to a POI, move, interact, or look around.
 Prompts are managed as Jinja2 templates in the templates/ directory.
 """
 
+import json
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -24,7 +25,6 @@ _env = Environment(loader=FileSystemLoader(_TEMPLATES),
                    keep_trailing_newline=True)
 
 _MAX_HISTORY = 30
-_SUBGOAL_EXPIRE = 25  # expire after N iterations without completion
 _DEBUG_PROMPTS = True
 
 _log = AILogger("OW")
@@ -35,14 +35,15 @@ def _render(template_name, **kwargs):
 
 
 class OverworldAI:
-    def __init__(self, llm, goal="Reach Viridian Forest"):
+    def __init__(self, llm, goal="Become Pokemon Champion"):
         self._llm = llm
         self.goal = goal
         self.shop_ai = ShopAI(llm=self._llm)
         self._history = []
         self._visited_maps = set()
         self._visited_pois = set()
-        self._subgoals = []
+        self._subgoals_file = Path("overworld_subgoals.json")
+        self._subgoals = self._load_subgoals()
         self._iteration = 0
 
     @property
@@ -57,20 +58,20 @@ class OverworldAI:
                 return sg
         return None
 
-    def _expire_subgoals(self):
-        """Remove sub-goals that have been active too long."""
-        expired = []
-        for sg in self._subgoals:
-            if sg["status"] == "active":
-                age = self._iteration - sg["added_at"]
-                if age >= _SUBGOAL_EXPIRE:
-                    sg["status"] = "expired"
-                    expired.append(sg)
-        if expired:
-            for sg in expired:
-                msg = f"⏰ Sub-goal expired: {sg['description']}"
-                print(f"  {_YELLOW}OW: {msg}{_RESET}")
-                _log.log_event(msg, "memory")
+    def _load_subgoals(self):
+        """Load sub-goals from disk."""
+        if self._subgoals_file.exists():
+            try:
+                data = json.loads(self._subgoals_file.read_text())
+                print(f"  Loaded {len(data)} sub-goals from {self._subgoals_file}")
+                return data
+            except (json.JSONDecodeError, KeyError):
+                pass
+        return []
+
+    def _save_subgoals(self):
+        """Persist sub-goals to disk."""
+        self._subgoals_file.write_text(json.dumps(self._subgoals, indent=2))
 
     # ------------------------------------------------------------------
     # Reflect — detect and manage sub-goals
@@ -132,6 +133,7 @@ class OverworldAI:
                 "added_at": self._iteration,
             }
             self._subgoals.append(new_sg)
+            self._save_subgoals()
             msg = f"🎯 New sub-goal: {subgoal_desc}"
             print(f"  {_GREEN}OW: {msg}{_RESET}")
             _log.log_event(msg, "memory")
@@ -139,6 +141,7 @@ class OverworldAI:
         elif subgoal_action == "done" and active:
             active["status"] = "done"
             active["done_at"] = self._iteration
+            self._save_subgoals()
             msg = f"✅ Sub-goal completed: {active['description']}"
             print(f"  {_GREEN}OW: {msg}{_RESET}")
             _log.log_event(msg, "memory")
@@ -193,24 +196,10 @@ class OverworldAI:
 
     def decide(self, map_name, pois, grid=None, player_y=0, player_x=0,
                party=None, pokeballs=0, has_pokedex=False):
-        """Ask the LLM what to do next in the overworld.
-
-        Returns ("goal_reached", None) when the main goal is completed.
-        """
-        # Check if main goal is reached (goal name appears in map name)
-        goal_keywords = self.goal.lower().replace("reach ", "").strip()
-        if goal_keywords in map_name.lower():
-            msg = f"🏆 GOAL REACHED: {self.goal} (arrived at {map_name})"
-            print(f"\n  {_GREEN}{'='*50}")
-            print(f"  {msg}")
-            print(f"  {'='*50}{_RESET}\n")
-            _log.log_event(msg, "memory")
-            return ("goal_reached", None)
-
+        """Ask the LLM what to do next in the overworld."""
         self._iteration += 1
         _log._action_count = self._iteration
         self._visited_maps.add(map_name)
-        self._expire_subgoals()
 
         # Build POI data with visit counts and directions
         recent = self._history[-15:]
@@ -257,7 +246,9 @@ class OverworldAI:
             HumanMessage(content=user_prompt),
         ]
 
-        for attempt in range(3):
+        max_retries = 3
+        attempt = 0
+        while attempt <= max_retries:
             _log.start_thinking()
             response = self._llm.invoke(messages)
             _log.stop_thinking()
@@ -265,20 +256,19 @@ class OverworldAI:
             result = self._parse_response(text, pois)
             if result is not None:
                 return result
-            _log.log_think(f"(retry {attempt + 1}: couldn't parse response)")
+            attempt += 1
+            _log.log_retry()
+            _log.log_think(f"(retry {attempt}: couldn't parse response)")
             _log.log_think(f"  raw: {text.strip()[:120]}")
             messages.append(response)
             messages.append(HumanMessage(
-                content="ERROR: Invalid action. Use the exact format."
+                content=f"ERROR: Invalid action. Valid POI numbers are 1 to {len(pois)}. "
+                        f"Respond with exactly: ACTION: GO:<number>"
             ))
 
-        # Fallback: pick first unvisited POI, or just look
-        for i, poi in enumerate(pois):
-            poi_id = f"{map_name}:{poi['label']}"
-            if poi_id not in self._visited_pois:
-                _log.log_think(f"(fallback) Going to {poi['label']}")
-                return ("go", i)
-        return ("look", None)
+        # Max retries exhausted — return None to signal control back to user
+        _log.log_think("(max retries — returning control to user)")
+        return None
 
     def _parse_response(self, text, pois):
         """Parse LLM response into an action tuple."""

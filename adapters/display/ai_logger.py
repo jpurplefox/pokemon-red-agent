@@ -25,6 +25,7 @@ class AILogger:
         self._think_start = 0.0
         self._last_think_time = 0.0
         self._action_count = 0
+        self._retries = 0
 
     def start_thinking(self):
         """Mark the start of an LLM call to measure think time."""
@@ -42,6 +43,14 @@ class AILogger:
     @property
     def last_think_time(self) -> float:
         return self._last_think_time
+
+    def log_retry(self):
+        """Increment the retry counter."""
+        self._retries += 1
+
+    @property
+    def retries(self) -> int:
+        return self._retries
 
     def log_prompt(self, label: str, system: str, user: str):
         """Print system+user prompts in grey."""
@@ -95,7 +104,7 @@ class AILogger:
         ai_update_hud(team_data, state.goal, state.subgoal,
                       self._last_think_time, state.action_count,
                       state.badges, state.map_name, state.player_name,
-                      state.play_time)
+                      state.play_time, self._retries)
 
     def _to_window(self, msg: str, kind: str = ""):
         """Send to the AI thoughts pygame window (if running)."""

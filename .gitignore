@@ -3,3 +3,4 @@ rom.gb.ram
 venv/
 __pycache__/
 *.pyc
+overworld_subgoals.json

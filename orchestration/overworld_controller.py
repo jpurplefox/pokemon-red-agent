@@ -33,6 +33,8 @@ class OverworldAIController:
         self._handle_game_menu = handle_game_menu_fn
         self._log = logger or AILogger("OW")
         self._paused = False
+        self._pending_poi = None  # POI to resume after battle interrupt
+        self._pending_map = None  # Map ID where the interrupt happened
 
     @property
     def paused(self):
@@ -63,7 +65,23 @@ class OverworldAIController:
             "acted"        — action taken normally
         """
         if self.check_user_interrupt():
+            self._pending_poi = None
             return "paused"
+
+        # Resume interrupted action (e.g. after wild battle)
+        if self._pending_poi is not None:
+            mem = self._pyboy.memory
+            if mem[ADDR_MAP_N] == self._pending_map:
+                poi = self._pending_poi
+                self._pending_poi = None
+                self._pending_map = None
+                self._log.log_event(f"Resuming: GO to {poi['label']}")
+                map_name = MAP_NAMES.get(mem[ADDR_MAP_N], f"Map {mem[ADDR_MAP_N]}")
+                self._handle_go_with_poi(poi, map_name, mem)
+                return "acted"
+            else:
+                self._pending_poi = None
+                self._pending_map = None
 
         mem = self._pyboy.memory
         map_id = mem[ADDR_MAP_N]
@@ -101,7 +119,7 @@ class OverworldAIController:
         )
         self._log.update_hud(hud)
 
-        action_type, detail = self._ai.decide(
+        result = self._ai.decide(
             map_name, pois, grid=grid, player_y=py, player_x=px,
             party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
         )
@@ -111,9 +129,11 @@ class OverworldAIController:
         hud.subgoal = (self._ai.active_subgoal() or {}).get("description", "")
         self._log.update_hud(hud)
 
-        if action_type == "goal_reached":
-            print("AI has reached its goal — returning control to you.")
-            return "goal_reached"
+        if result is None:
+            print("AI couldn't decide — returning control to you.")
+            return "pause"
+
+        action_type, detail = result
 
         if action_type == "go":
             self._handle_go(pois, detail, map_name, mem)
@@ -134,8 +154,18 @@ class OverworldAIController:
     def _handle_go(self, pois, detail, map_name, mem):
         """Navigate to a POI and record the result."""
         poi = pois[detail]
+        self._handle_go_with_poi(poi, map_name, mem)
+
+    def _handle_go_with_poi(self, poi, map_name, mem):
+        """Navigate to a specific POI dict and record the result."""
         self._ai.record_poi_visited(map_name, poi["label"])
         result = self._navigator.go_to(poi, self._print_surroundings)
+
+        # If a battle interrupted the walk, save POI to resume after
+        if self._battle.is_in_battle():
+            self._pending_poi = poi
+            self._pending_map = mem[ADDR_MAP_N]
+            return
 
         new_map_id = mem[ADDR_MAP_N]
         new_map_name = MAP_NAMES.get(new_map_id, f"Map {new_map_id}")
@@ -151,7 +181,6 @@ class OverworldAIController:
         self._ai.record_action(
             action_desc, map_name, result_desc,
             poi_label=poi['label'], poi_kind=poi['kind'],
-            poi_num=detail + 1,
         )
 
         # Reflect only when there was dialogue

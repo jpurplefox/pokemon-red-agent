@@ -24,9 +24,6 @@ Having 2 Pokemon of the same type is wasteful.
 A Magikarp evolves into Gyarados! A Caterpie into Butterfree.
 3. AVOID DUPLICATES: Never catch a Pokemon you already have (same species or \
 same evolution line).
-4. TEAM SIZE: A full team is 6 Pokemon. If you have fewer than 6, lean toward catching.
-5. UPGRADE POTENTIAL: If the wild Pokemon is strictly better than a team member \
-of the same type, consider catching as a replacement.
 
 Respond with EXACTLY this format:
 THINK: <1-2 sentences analyzing the Pokemon's value for the team>
@@ -48,19 +45,6 @@ class ScoutAI:
         Returns:
             bool: True if the AI recommends catching
         """
-        # Hard override: never catch duplicates from the same evolution line
-        if team:
-            enemy_evo = EVOLUTION_LINES.get(enemy_name.upper())
-            if enemy_evo:
-                enemy_line = tuple(enemy_evo)
-                for mon in team:
-                    team_evo = EVOLUTION_LINES.get(mon['name'].upper())
-                    if team_evo and tuple(team_evo) == enemy_line:
-                        _log.log_think(f"Already have {mon['name']} from the "
-                                  f"{' → '.join(enemy_evo)} line. SKIP!")
-                        _log.log_think("Decision: DEFEAT ⚔️")
-                        return False
-
         prompt = self._build_prompt(enemy_name, enemy_level, team)
         messages = [
             SystemMessage(content=SYSTEM_PROMPT),
@@ -101,15 +85,18 @@ class ScoutAI:
         if team:
             lines.append(f"\nYour team ({len(team)}/6):")
             for mon in team:
-                t = POKEMON_TYPES.get(mon['name'].upper(), "?")
-                evo = EVOLUTION_LINES.get(mon['name'].upper())
+                name = mon.name if hasattr(mon, 'name') else mon['name']
+                level = mon.level if hasattr(mon, 'level') else mon['level']
+                t = POKEMON_TYPES.get(name.upper(), "?")
+                evo = EVOLUTION_LINES.get(name.upper())
                 evo_str = f" (evolves: {' → '.join(evo)})" if evo else ""
-                lines.append(f"  - {mon['name']} Lv{mon['level']} — Type: {t}{evo_str}")
+                lines.append(f"  - {name} Lv{level} — Type: {t}{evo_str}")
 
             # Summarize types on team
             team_types = set()
             for mon in team:
-                t = POKEMON_TYPES.get(mon['name'].upper(), "")
+                name = mon.name if hasattr(mon, 'name') else mon['name']
+                t = POKEMON_TYPES.get(name.upper(), "")
                 for single_type in t.split("/"):
                     if single_type.strip():
                         team_types.add(single_type.strip())
@@ -118,7 +105,8 @@ class ScoutAI:
             # Check for duplicate evolution lines
             team_evo_lines = set()
             for mon in team:
-                evo = EVOLUTION_LINES.get(mon['name'].upper())
+                name = mon.name if hasattr(mon, 'name') else mon['name']
+                evo = EVOLUTION_LINES.get(name.upper())
                 if evo:
                     team_evo_lines.add(tuple(evo))
             enemy_evo = EVOLUTION_LINES.get(enemy_name.upper())

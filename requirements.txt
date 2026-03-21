@@ -1,5 +1,5 @@
 pyboy
 jinja2
-langchain-ollama
 langchain-core
+mlx-lm
 pygame

@@ -183,23 +183,31 @@ class NamingAI:
         ]
 
         _log.log_prompt("NAMING", SYSTEM_PROMPT, prompt)
-        response = self._llm.invoke(messages)
-        name = self._parse_name(response.content)
-        _log.log_response("NAMING", response.content)
-        _log.log_think(f"Nickname → {name}")
-        return name
+
+        for attempt in range(3):
+            response = self._llm.invoke(messages)
+            name = self._parse_name(response.content)
+            _log.log_response("NAMING", response.content)
+            if name:
+                _log.log_think(f"Nickname → {name}")
+                return name
+            _log.log_retry()
+            messages.append(response)
+            messages.append(HumanMessage(
+                content="ERROR: Invalid response. Respond with exactly: NAME: <nickname>"
+            ))
+
+        # All retries failed — return None for manual naming
+        _log.log_think("(couldn't generate name — asking user)")
+        return None
 
     def _parse_name(self, text):
-        """Extract the name from the LLM response."""
+        """Extract the name from the LLM response. Returns empty string on failure."""
         for line in text.strip().split("\n"):
             line = line.strip()
             if line.startswith("NAME:"):
                 name = line[5:].strip().upper()
-                # Remove any non-allowed characters
                 allowed = set("ABCDEFGHIJKLMNOPQRSTUVWXYZ ")
                 name = "".join(c for c in name if c in allowed)
-                # Enforce 10 char limit
                 return name[:10].strip()
-
-        # Fallback: return species name
         return ""

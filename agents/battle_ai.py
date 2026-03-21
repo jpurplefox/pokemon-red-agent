@@ -199,11 +199,21 @@ class BattleAI:
             HumanMessage(content=user_prompt),
         ]
 
-        response = self._llm.invoke(messages)
-        choice_idx = self._parse_switch_response(
-            response.content, party, alive_indices, is_wild
-        )
-        return choice_idx
+        for attempt in range(3):
+            response = self._llm.invoke(messages)
+            choice_idx = self._parse_switch_response(
+                response.content, party, alive_indices, is_wild
+            )
+            if choice_idx is not None:
+                return choice_idx
+            _log.log_retry()
+            messages.append(response)
+            names = [f"{party[i].nickname}" for i in alive_indices]
+            messages.append(HumanMessage(
+                content=f"ERROR: Invalid choice. Use SWITCH:<name>. "
+                        f"Available: {', '.join(names)}"
+            ))
+        return None
 
     def _parse_switch_response(self, text, party, alive_indices, is_wild):
         """Parse LLM response for switch-in decision."""
@@ -235,18 +245,9 @@ class BattleAI:
                             _log.log_think(f"=> Sending out {label} Lv{mon.level}!")
                             return i
 
-        # Fallback: highest level
-        best_idx = alive_indices[0]
-        best_level = 0
-        for i in alive_indices:
-            if party[i].level > best_level:
-                best_level = party[i].level
-                best_idx = i
-        label = party[best_idx].nickname
-        if party[best_idx].nickname != party[best_idx].name:
-            label = f"{party[best_idx].name} ({party[best_idx].nickname})"
-        _log.log_think(f"=> Sending out {label} Lv{best_level}!")
-        return best_idx
+        # Retry — return None to signal manual control needed
+        _log.log_think("(couldn't parse switch response)")
+        return None
 
     def choose_switch_offer(self, party, active_idx, alive_indices):
         """Decide whether to switch when given the chance between trainer mons.
@@ -359,6 +360,7 @@ class BattleAI:
             )
             if action is not None:
                 break
+            _log.log_retry()
             _log.log_think(f"(retry {attempt + 1}/{max_retries}: {error})")
             if attempt < max_retries:
                 messages.append(response)
@@ -366,31 +368,20 @@ class BattleAI:
                     content=f"ERROR: {error}\nTry again."
                 ))
 
-        # Final fallback if all retries failed
+        # All retries failed — return None for manual control
         if action is None:
-            available = [m.name for m in player.moves if m.pp > 0]
-            if available:
-                _log.log_think("(all retries failed, using first move)")
-                action = ("move", available[0])
-            else:
-                action = ("run", None)
+            _log.log_think("(all retries failed — returning control to user)")
+            return None
 
-        # Hard override: never RUN in trainer battles
-        if not is_wild and action[0] == "run":
-            available = [m.name for m in player.moves if m.pp > 0]
-            if available:
-                _log.log_think("(can't run from trainer, forcing attack)")
-                action = ("move", available[0])
-
-        # Hard override: if catching and enemy HP <= 50%, force ball throw
-        if self._goal == "catch" and action[0] != "ball" and balls:
-            hp_pct = round(enemy.hp / enemy.max_hp * 100) if enemy.max_hp else 100
-            if hp_pct <= 50:
-                for name, count, bag_idx in balls:
-                    if count > 0:
-                        _log.log_think("(enemy HP low, forcing Poke Ball!)")
-                        action = ("ball", bag_idx)
-                        break
+        # Retry loop if LLM tries to RUN in a trainer battle
+        while not is_wild and action[0] == "run":
+            error_msg = "ERROR: You CANNOT run from trainer battles. Pick a MOVE instead."
+            _log.log_retry()
+            _log.log_think("(retry: tried to run from trainer)")
+            messages.append(HumanMessage(content=error_msg))
+            response = self._llm.invoke(messages)
+            text = response.content
+            action, _ = self._parse_response(text, player, enemy, is_wild, balls)
 
         self._log_action(action)
         return action

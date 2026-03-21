@@ -131,9 +131,10 @@ class EventProcessor:
 
     def _handle_naming_keyboard(self):
         """Handle the in-game naming keyboard."""
+        name = None
         if self.auto_accept and self.auto_name_fn:
             name = self.auto_name_fn()
-        else:
+        if name is None:
             name = prompt_name()
         if name:
             self._naming.enter(name)

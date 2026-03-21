@@ -371,7 +371,7 @@ class Game:
     def _handle_overworld_ai(self):
         """Delegate to the OverworldAIController."""
         result = self._ow_controller.tick()
-        if result == "goal_reached":
+        if result == "pause":
             self._ow_controller = None
             self._overworld_ai = None
             self._show_pois = True

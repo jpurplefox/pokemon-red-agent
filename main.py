@@ -3,7 +3,7 @@ from pyboy import PyBoy
 from adapters.pyboy_wrapper import PyBoyWrapper
 from adapters.display.ai_log_window import start as start_ai_window
 from adapters.ticking_llm import TickingLLM
-from langchain_ollama import ChatOllama
+from adapters.mlx_llm import MLXLLM
 from agents.naming_ai import NamingAI
 from agents.battle_ai import BattleAI
 from agents.scout_ai import ScoutAI
@@ -20,21 +20,21 @@ if __name__ == "__main__":
     shop_ai = None
     flags = set(sys.argv[1:])
 
-    raw_pyboy = PyBoy(ROM, sound_emulated=True)
+    raw_pyboy = PyBoy(ROM, sound_emulated="--mute" not in flags)
     pyboy = PyBoyWrapper(raw_pyboy)
     pyboy.set_speed(fast="--fast" in flags)
 
     start_ai_window()
 
     if flags & {"--ai", "--naming", "--shop"}:
-        raw_llm = ChatOllama(
-            base_url="http://localhost:11434",
-            model="qwen2.5:14b",
+        print("Loading MLX model...")
+        raw_llm = MLXLLM(
+            model_name="mlx-community/Qwen2.5-14B-Instruct-4bit",
             temperature=0.3,
         )
         llm = TickingLLM(raw_llm, pyboy)
         naming_ai = NamingAI(llm=llm)
-        print("Naming AI enabled")
+        print("Naming AI enabled (MLX)")
 
     if "--ai" in flags:
         scout = ScoutAI(llm=llm)

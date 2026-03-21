@@ -215,9 +215,17 @@ class BattleHandler:
         # Refresh party data so strategy has current info
         self._strategy.set_team(self._state.read_party(), active_idx)
 
-        action_type, detail = self._strategy.decide(
+        result = self._strategy.decide(
             player, enemy, self.is_wild(), balls
         )
+
+        if result is None:
+            # AI couldn't decide — press B to cancel and let user take over
+            self._pyboy.button("b")
+            self._pyboy.tick(10)
+            return
+
+        action_type, detail = result
 
         if action_type == "cancel":
             self._pyboy.button("b")
