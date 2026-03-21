@@ -6,7 +6,7 @@ turn sequencing, switch handling, and strategy dispatch.
 Dependencies injected via constructor (DIP).
 """
 
-from data.constants import ADDR_PLAYER_MON_NUMBER, ADDR_CURRENT_MENU
+from data.constants import ADDR_PLAYER_MON_NUMBER
 from adapters.display.console import prompt_menu, _input_fn
 from adapters.state.battle_state_reader import BattleStateReader
 from adapters.state.bag_reader import BagReader
@@ -324,18 +324,7 @@ class BattleHandler:
             self._pyboy.tick(40)
 
         # Navigate the party select screen to the chosen pokemon
-        current = self._pyboy.memory[ADDR_CURRENT_MENU]
-        diff = choice_idx - current
-        if diff > 0:
-            for _ in range(diff):
-                self._pyboy.button("down")
-                self._pyboy.tick(10)
-        elif diff < 0:
-            for _ in range(-diff):
-                self._pyboy.button("up")
-                self._pyboy.tick(10)
-        self._pyboy.button("a")
-        self._pyboy.tick(30)
+        self._driver.navigate_party_menu(choice_idx)
 
         # Game resets move cursor to 0 when a new pokemon enters battle
         self._last_move_idx = 0
@@ -404,18 +393,7 @@ class BattleHandler:
             self._pyboy.tick(40)
 
             # Navigate party screen to chosen pokemon
-            current = self._pyboy.memory[ADDR_CURRENT_MENU]
-            diff = choice_idx - current
-            if diff > 0:
-                for _ in range(diff):
-                    self._pyboy.button("down")
-                    self._pyboy.tick(10)
-            elif diff < 0:
-                for _ in range(-diff):
-                    self._pyboy.button("up")
-                    self._pyboy.tick(10)
-            self._pyboy.button("a")
-            self._pyboy.tick(30)
+            self._driver.navigate_party_menu(choice_idx)
 
             self._last_move_idx = 0
 

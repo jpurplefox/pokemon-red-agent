@@ -4,7 +4,7 @@ Pure output adapter: translates domain-level intents into button sequences.
 No WRAM reading for game state — only reads cursor position for navigation.
 """
 
-from data.constants import ADDR_CURRENT_MENU
+from data.constants import ADDR_CURRENT_MENU, ADDR_MENU_WATCHED_KEYS
 
 
 # Naming keyboard grid layout (uppercase)
@@ -125,17 +125,7 @@ class BattleMenuDriver:
                 break
         self._pyboy.tick(40)
 
-        current = self._pyboy.memory[ADDR_CURRENT_MENU]
-        diff = party_idx - current
-
-        if diff > 0:
-            for _ in range(diff):
-                self._pyboy.button("down")
-                self._pyboy.tick(10)
-        elif diff < 0:
-            for _ in range(-diff):
-                self._pyboy.button("up")
-                self._pyboy.tick(10)
+        self._navigate_to_party_slot(party_idx)
 
         self._pyboy.button("a")
         self._pyboy.tick(20)
@@ -146,8 +136,27 @@ class BattleMenuDriver:
 
     def navigate_party_menu(self, target_idx: int):
         """Navigate to a party member in the party selection screen."""
-        current = self._pyboy.memory[ADDR_CURRENT_MENU]
+        self._navigate_to_party_slot(target_idx)
+        self._pyboy.button("a")
+        self._pyboy.tick(20)
+
+    def _navigate_to_party_slot(self, target_idx: int):
+        """Move cursor to a specific party slot reliably.
+
+        Waits for menu to be ready, reads actual cursor position,
+        then navigates the minimum number of steps.
+        """
+        mem = self._pyboy.memory
+
+        # Wait for menu to accept input
+        for _ in range(60):
+            self._pyboy.tick(5)
+            if mem[ADDR_MENU_WATCHED_KEYS] != 0:
+                break
+
+        current = mem[ADDR_CURRENT_MENU]
         diff = target_idx - current
+
         if diff > 0:
             for _ in range(diff):
                 self._pyboy.button("down")
@@ -156,8 +165,6 @@ class BattleMenuDriver:
             for _ in range(-diff):
                 self._pyboy.button("up")
                 self._pyboy.tick(10)
-        self._pyboy.button("a")
-        self._pyboy.tick(20)
 
     def type_name(self, name: str):
         """Type a name on the Pokemon Red naming keyboard."""
