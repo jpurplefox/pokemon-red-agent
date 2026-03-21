@@ -301,7 +301,7 @@ class BattleAI:
                 action = line[7:].strip()
                 if action == "STAY":
                     _log.log_think("=> STAY")
-                    return None
+                    return -1
                 if action.startswith("SWITCH:"):
                     target = action[7:].strip()
                     for i in alive_indices:

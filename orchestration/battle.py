@@ -370,8 +370,11 @@ class BattleHandler:
             choice_idx = self._strategy.choose_switch_offer(
                 party, active_idx, indices
             )
-            if choice_idx is None:
-                # Manual: ask the player
+            if choice_idx == -1:
+                # AI explicitly chose STAY
+                choice_idx = None
+            elif choice_idx is None:
+                # No AI — ask the player
                 print("\n--- Switch POKéMON before next opponent? ---")
                 options.append("NO")
                 choice = prompt_menu(options)
