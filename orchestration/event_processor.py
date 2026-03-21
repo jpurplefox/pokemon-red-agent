@@ -45,7 +45,6 @@ class EventProcessor:
         pending_lines = []
         all_dialogue = []
 
-        _debug = self.auto_accept  # debug only when AI is driving
         while idle < 20:
             self._pyboy.tick(10)
 
@@ -86,8 +85,6 @@ class EventProcessor:
                 if text != last_text:
                     last_text = text
                     pending_lines.append(text)
-                    if _debug:
-                        print(f"  [EVT] text: {text[:80]}")
 
                 # Brief wait for choice menu to appear after text
                 self._pyboy.tick(30)
@@ -97,8 +94,6 @@ class EventProcessor:
                 # for cursor tile, no WRAM dependency
                 choice_options = self._menu.read_choice_menu()
                 if choice_options:
-                    if _debug:
-                        print(f"  [EVT] menu: {choice_options}")
                     self._flush_dialogue(pending_lines, all_dialogue)
                     pending_lines = []
                     self._handle_choice_menu(choice_options)
@@ -107,8 +102,6 @@ class EventProcessor:
                     continue
 
                 # Not a menu — press A to advance dialogue
-                if _debug:
-                    print(f"  [EVT] pressing A (no menu)")
                 self._pyboy.button("a", delay=8)
                 self._pyboy.tick(20)
                 idle = 0
@@ -123,8 +116,6 @@ class EventProcessor:
             # without text box content — just a cursor + options
             choice_options = self._menu.read_choice_menu()
             if choice_options:
-                if _debug:
-                    print(f"  [EVT] standalone menu: {choice_options}")
                 self._handle_choice_menu(choice_options)
                 idle = 0
                 continue
