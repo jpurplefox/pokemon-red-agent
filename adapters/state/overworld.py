@@ -25,6 +25,12 @@ _OAK_LAB_STARTERS = {
     8: "Poké Ball (BULBASAUR)",
 }
 
+# Broken warps: (map_id, warp_index) — warps that are reachable but don't work
+_BROKEN_WARPS = {
+    (0x2F, 0),  # Viridian Forest North Gate — left door to Route 2
+    (0x32, 0),  # Viridian Forest South Gate — left door to Viridian Forest
+}
+
 
 class OverworldScanner:
     # Quadrant tile indices within a 4x4 tile block (row-major layout).
@@ -283,8 +289,11 @@ class OverworldScanner:
         W = mem[ADDR_MAP_WIDTH]
         row_width = W + 2 * MAP_BORDER
 
+        map_id = mem[ADDR_MAP_N]
         results = []
         for i in range(count):
+            if (map_id, i) in _BROKEN_WARPS:
+                continue
             base = ADDR_WARP_ENTRIES + i * 4
             wy = mem[base]
             wx = mem[base + 1]

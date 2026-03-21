@@ -103,7 +103,9 @@ def find_interaction_targets(poi, grid, blocked=None):
         return [(ty, tx, None)]
 
     if kind == "exit":
-        return [(ty, tx, "down")]
+        # Top-edge exits activate by pressing up, others by pressing down
+        face = "up" if ty <= 1 else "down"
+        return [(ty, tx, face)]
 
     if kind == "connection":
         # Walk to any walkable edge tile, then step off the map
