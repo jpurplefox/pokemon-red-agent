@@ -566,6 +566,8 @@ class ManualStrategy:
     def decide(self, player, enemy, is_wild, balls=None):
         actions = []
         for m in player.moves:
+            if m.disabled:
+                continue
             actions.append(f"{m.name} ({m.pp}/{m.max_pp} PP)")
         if balls:
             for ball_name, count, _ in balls:

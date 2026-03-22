@@ -450,7 +450,7 @@ BMON_MAX_HP = 0x0F             # 2 bytes big-endian
 BMON_PP = 0x19                 # 4 bytes: PP remaining (lower 6 bits)
 
 # Disable status
-ADDR_DISABLED_MOVE = 0xD06D    # wDisabledMove: bits 0-2 = move slot (1-4), bits 4-7 = turns left
+ADDR_DISABLED_MOVE = 0xD07A    # wPlayerDisabledMoveNumber: 1-4 (move slot, 1-based), 0 = none
 
 # Bag / inventory
 ADDR_NUM_BAG_ITEMS = 0xD31D    # wNumBagItems: count of item types in bag

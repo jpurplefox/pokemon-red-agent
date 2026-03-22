@@ -38,12 +38,16 @@ class BattleStateReader:
 
     def read_player(self) -> BattleMon:
         mon = self._read_mon(ADDR_BATTLE_MON)
-        # Mark disabled move (from DISABLE status effect)
-        disabled_byte = self._pyboy.memory[ADDR_DISABLED_MOVE]
-        if disabled_byte:
-            disabled_slot = (disabled_byte & 0x07) - 1  # 1-based → 0-based
-            if 0 <= disabled_slot < len(mon.moves):
-                mon.moves[disabled_slot].disabled = True
+        # Check for DISABLE status effect
+        # 0xD06D = disable counter (non-zero = active)
+        # 0xD07A = which move slot is disabled (1-4)
+        disable_active = self._pyboy.memory[0xD06D]
+        if disable_active:
+            disabled_slot = self._pyboy.memory[ADDR_DISABLED_MOVE]
+            if 1 <= disabled_slot <= 4:
+                idx = disabled_slot - 1
+                if idx < len(mon.moves):
+                    mon.moves[idx].disabled = True
         return mon
 
     def read_enemy(self) -> BattleMon:
