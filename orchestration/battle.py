@@ -237,6 +237,7 @@ class BattleHandler:
             self._driver.use_ball(detail)
         elif action_type == "switch":
             self._driver.switch_pokemon(detail)
+            self._driver.reset_move_cursor()
         else:
             move_idx = next(
                 (i for i, m in enumerate(player.moves)

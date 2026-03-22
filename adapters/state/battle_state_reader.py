@@ -41,9 +41,10 @@ class BattleStateReader:
         # Check for DISABLE status effect
         # 0xD06D = disable counter (non-zero = active)
         # 0xD07A = which move slot is disabled (1-4)
-        disable_active = self._pyboy.memory[0xD06D]
-        if disable_active:
-            disabled_slot = self._pyboy.memory[ADDR_DISABLED_MOVE]
+        mem = self._pyboy.memory
+        disable_counter = mem[0xD06D]
+        if disable_counter:
+            disabled_slot = mem[ADDR_DISABLED_MOVE]
             if 1 <= disabled_slot <= 4:
                 idx = disabled_slot - 1
                 if idx < len(mon.moves):
