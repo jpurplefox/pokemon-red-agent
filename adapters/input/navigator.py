@@ -50,7 +50,7 @@ class Navigator:
                    all_pois=None, known_blocked=None):
         """Walk to a POI and interact. Retries if NPC moved."""
         mem = self._pyboy.memory
-        grid, _, _ = self._scanner.get_walkable_grid()
+        grid, _, _, ledges = self._scanner.get_walkable_grid()
         blocked = self._scanner.get_npc_tiles()
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
@@ -72,7 +72,7 @@ class Navigator:
                     other_poi_tiles.add((p["ty"], p["tx"]))
 
         path, face = find_best_path(grid, (py, px), poi, blocked,
-                                    other_poi_tiles)
+                                    other_poi_tiles, ledges)
         if path is None:
             print(f"Cannot reach {poi['label']}.")
             return
@@ -91,14 +91,14 @@ class Navigator:
                 if updated:
                     poi = updated
             # Recalculate path from current position
-            grid, _, _ = self._scanner.get_walkable_grid()
+            grid, _, _, ledges = self._scanner.get_walkable_grid()
             for by, bx in known_blocked:
                 if 0 <= by < len(grid) and 0 <= bx < len(grid[0]):
                     grid[by][bx] = False
             blocked = self._scanner.get_npc_tiles()
             py, px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
             new_path, new_face = find_best_path(grid, (py, px), poi, blocked,
-                                                other_poi_tiles)
+                                                other_poi_tiles, ledges)
             if new_path is not None:
                 path = new_path
                 face = new_face

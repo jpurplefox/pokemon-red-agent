@@ -87,7 +87,7 @@ class OverworldAIController:
         map_id = mem[ADDR_MAP_N]
         map_name = MAP_NAMES.get(map_id, f"Map {map_id}")
         pois = self._scanner.get_pois()
-        grid, _, _ = self._scanner.get_walkable_grid()
+        grid, _, _, _ = self._scanner.get_walkable_grid()
         py, px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
 
         party = self._battle.read_party()

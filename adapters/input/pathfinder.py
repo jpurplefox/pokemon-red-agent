@@ -14,7 +14,7 @@ _NEIGHBORS = [(-1, 0, "up"), (1, 0, "down"), (0, -1, "left"), (0, 1, "right")]
 _FACE_DIR = {(-1, 0): "down", (1, 0): "up", (0, -1): "right", (0, 1): "left"}
 
 
-def find_path(grid, start, goal, blocked=None):
+def find_path(grid, start, goal, blocked=None, ledges=None):
     """Find shortest path from start to goal using A*.
 
     Args:
@@ -22,12 +22,15 @@ def find_path(grid, start, goal, blocked=None):
         start:   (y, x) tuple.
         goal:    (y, x) tuple.
         blocked: set of (y, x) dynamically blocked tiles (NPCs).
+        ledges:  set of (y, x) one-way-down tiles (only enterable from above).
 
     Returns:
         List of direction strings ["up", "down", "left", ...], or None.
     """
     if blocked is None:
         blocked = set()
+    if ledges is None:
+        ledges = set()
 
     h = len(grid)
     w = len(grid[0]) if h else 0
@@ -68,6 +71,9 @@ def find_path(grid, start, goal, blocked=None):
             if (ny, nx) != goal and not grid[ny][nx]:
                 continue
             if (ny, nx) != goal and (ny, nx) in blocked:
+                continue
+            # Ledge tiles can only be entered going down
+            if (ny, nx) in ledges and direction != "down":
                 continue
 
             tentative_g = g_score[current] + 1
@@ -183,7 +189,8 @@ def find_interaction_targets(poi, grid, blocked=None, other_poi_tiles=None):
     return targets
 
 
-def find_best_path(grid, start, poi, blocked=None, other_poi_tiles=None):
+def find_best_path(grid, start, poi, blocked=None, other_poi_tiles=None,
+                   ledges=None):
     """Find the shortest path to any valid interaction tile for a POI.
 
     Returns (path, face_direction) or (None, None) if unreachable.
@@ -192,6 +199,8 @@ def find_best_path(grid, start, poi, blocked=None, other_poi_tiles=None):
     """
     if blocked is None:
         blocked = set()
+    if ledges is None:
+        ledges = set()
 
     targets = find_interaction_targets(poi, grid, blocked, other_poi_tiles)
     if not targets:
@@ -201,7 +210,7 @@ def find_best_path(grid, start, poi, blocked=None, other_poi_tiles=None):
     best_face = None
 
     for goal_y, goal_x, face in targets:
-        path = find_path(grid, start, (goal_y, goal_x), blocked)
+        path = find_path(grid, start, (goal_y, goal_x), blocked, ledges)
         if path is not None:
             if best_path is None or len(path) < len(best_path):
                 best_path = path

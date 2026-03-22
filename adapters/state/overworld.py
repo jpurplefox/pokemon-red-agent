@@ -72,17 +72,17 @@ class OverworldScanner:
         all_pois.extend(self._scan_connections(py, px))
 
         # Filter out unreachable POIs
-        grid, _, _ = self.get_walkable_grid()
+        grid, _, _, ledges = self.get_walkable_grid()
         reachable = []
         for poi in all_pois:
-            path, _ = find_best_path(grid, (py, px), poi)
+            path, _ = find_best_path(grid, (py, px), poi, ledges=ledges)
             if path is not None:
                 reachable.append(poi)
 
         # Add a single grass POI if there's tall grass on this map
         grass_poi = self._find_nearest_grass(py, px, grid)
         if grass_poi:
-            path, _ = find_best_path(grid, (py, px), grass_poi)
+            path, _ = find_best_path(grid, (py, px), grass_poi, ledges=ledges)
             if path is not None:
                 reachable.append(grass_poi)
 
@@ -224,6 +224,9 @@ class OverworldScanner:
         h_tiles = H * 2
         w_tiles = W * 2
         grid = [[False] * w_tiles for _ in range(h_tiles)]
+        ledges = set()  # (ty, tx) tiles that are one-way down ledges
+
+        LEDGE_TILE = 0x37  # collision tile for jump-down ledge
 
         # Try ROM auto-detection first
         coll = self.get_collision_tiles()
@@ -243,6 +246,17 @@ class OverworldScanner:
                     if bt is None:
                         continue
                     tl, tr, bl, br = self.block_walkability(bt, coll)
+
+                    # Detect ledge tiles — force walkable + mark as one-way
+                    ty = row * 2
+                    tx = col * 2
+                    walkability = [tl, tr, bl, br]
+                    for qi, (qy, qx) in enumerate([(ty, tx), (ty, tx+1),
+                                                     (ty+1, tx), (ty+1, tx+1)]):
+                        if bt[self._QUAD_REP_TILE[qi]] == LEDGE_TILE:
+                            ledges.add((qy, qx))
+                            walkability[qi] = True  # force walkable
+                    tl, tr, bl, br = walkability
                 else:
                     if block_id not in walkable:
                         continue
@@ -261,7 +275,7 @@ class OverworldScanner:
         if 0 <= py < h_tiles and 0 <= px < w_tiles:
             grid[py][px] = True
 
-        return grid, h_tiles, w_tiles
+        return grid, h_tiles, w_tiles, ledges
 
     def get_npc_tiles(self):
         """Return set of (ty, tx) tiles currently blocked by NPCs."""

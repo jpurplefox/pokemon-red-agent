@@ -121,7 +121,7 @@ class Game:
         map_name = MAP_NAMES.get(map_id, f"Map {map_id}")
         print(f"\n--- {map_name} ---")
         pois = self._scanner.get_pois()
-        grid, _, _ = self._scanner.get_walkable_grid()
+        grid, _, _, _ = self._scanner.get_walkable_grid()
         print_map(pois, mem[ADDR_Y_COORD], mem[ADDR_X_COORD], grid)
 
     def _update_hud(self, map_name=""):
