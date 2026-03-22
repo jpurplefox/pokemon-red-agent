@@ -14,7 +14,7 @@ from jinja2 import Environment, FileSystemLoader
 from langchain_core.messages import SystemMessage, HumanMessage
 from agents.shop_ai import ShopAI
 from adapters.display.ai_logger import AILogger
-from adapters.display.console import _poi_icon
+from adapters.display.console import _poi_icon, render_map
 
 _GREEN = "\033[32m"
 _YELLOW = "\033[33m"
