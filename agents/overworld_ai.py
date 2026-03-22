@@ -275,7 +275,8 @@ class OverworldAI:
                               has_pokedex=has_pokedex,
                               money=money,
                               badge_list=_build_badge_list(badges),
-                              badge_count=bin(badges).count("1"))
+                              badge_count=bin(badges).count("1"),
+                              ascii_map=render_map(pois, player_y, player_x, grid) if grid else "")
 
         if _DEBUG_PROMPTS:
             _log.log_prompt("DECIDE", system_prompt, user_prompt)

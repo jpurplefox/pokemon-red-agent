@@ -46,6 +46,12 @@ Poké Balls: {{ pokeballs }}{% if pokeballs < 3 %} ⚠️ LOW{% endif %}
 {%- endfor %}
 {%- endif %}
 
+{%- if ascii_map %}
+
+--- Map (@ = you, # = wall, · = walkable, numbers = POIs) ---
+{{ ascii_map }}
+{%- endif %}
+
 --- Points of Interest (use GO:<number> with the number below) ---
 {%- for poi in pois %}
 [{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away)
