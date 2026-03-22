@@ -221,7 +221,9 @@ class Navigator:
         """Perform the appropriate interaction for a POI kind."""
         mem = self._pyboy.memory
 
-        if face is None:
+        if poi["kind"] == "grass":
+            self._walk_in_grass()
+        elif face is None:
             # Warp (stairs) — walking onto the tile activates it;
             # transition is handled by the walking loop's map-change check
             self._pyboy.tick(300)
@@ -234,8 +236,6 @@ class Navigator:
         elif poi["kind"] == "exit":
             self._pyboy.button(face, delay=8)
             self._pyboy.tick(60)
-        elif poi["kind"] == "grass":
-            self._walk_in_grass()
         else:
             # Sign/Sprite — face the POI and press A
             self._pyboy.button(face, delay=8)

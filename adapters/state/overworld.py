@@ -82,7 +82,9 @@ class OverworldScanner:
         # Add a single grass POI if there's tall grass on this map
         grass_poi = self._find_nearest_grass(py, px, grid)
         if grass_poi:
-            reachable.append(grass_poi)
+            path, _ = find_best_path(grid, (py, px), grass_poi)
+            if path is not None:
+                reachable.append(grass_poi)
 
         return reachable
 
