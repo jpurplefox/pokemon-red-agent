@@ -75,26 +75,31 @@ class BattleMenuDriver:
                     text = self._screen.decode_tiles(row, 1, 12)
                     if first_move in text:
                         self._pyboy.tick(5)
-                        # Sync our tracker with the game's actual cursor
-                        self._last_move_idx = self._pyboy.memory[ADDR_CURRENT_MENU]
                         return
                 self._pyboy.tick(10)
 
     def select_move(self, move_idx: int):
-        """Select a move by index (0-3) from the move menu."""
+        """Select a move by index (0-3) from the move list menu."""
+        # Wait for the move menu to be fully ready for input
+        for _ in range(30):
+            if self._pyboy.memory[ADDR_MENU_WATCHED_KEYS] != 0:
+                break
+            self._pyboy.tick(5)
+        self._pyboy.tick(15)  # settle time after menu ready
         current = self._last_move_idx
         diff = move_idx - current
         if diff > 0:
             for _ in range(diff):
-                self._pyboy.button("down")
-                self._pyboy.tick(8)
+                self._pyboy.button("down", delay=8)
+                self._pyboy.tick(10)
         elif diff < 0:
             for _ in range(-diff):
-                self._pyboy.button("up")
-                self._pyboy.tick(8)
+                self._pyboy.button("up", delay=8)
+                self._pyboy.tick(10)
 
         self._pyboy.button("a")
         self._pyboy.tick(10)
+        self._last_move_idx = move_idx
 
     def use_ball(self, bag_index: int):
         """Select ITEM from battle menu, then select the ball by bag index."""

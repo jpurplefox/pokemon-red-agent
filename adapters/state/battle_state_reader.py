@@ -6,7 +6,7 @@ Returns domain objects (BattleMon, PartyMember, Move) from models.py.
 
 from data.constants import (
     ADDR_IS_IN_BATTLE, ADDR_BATTLE_MON, ADDR_ENEMY_MON,
-    ADDR_PLAYER_MON_NUMBER, ADDR_DISABLED_MOVE,
+    ADDR_PLAYER_MON_NUMBER,
     BMON_SPECIES, BMON_HP, BMON_STATUS, BMON_MOVES,
     BMON_PP, BMON_LEVEL, BMON_MAX_HP,
     ADDR_PARTY_COUNT, ADDR_PARTY_SPECIES, ADDR_PARTY_MONS,
@@ -39,12 +39,12 @@ class BattleStateReader:
     def read_player(self) -> BattleMon:
         mon = self._read_mon(ADDR_BATTLE_MON)
         # Check for DISABLE status effect
-        # 0xD06D = disable counter (non-zero = active)
-        # 0xD07A = which move slot is disabled (1-4)
+        # 0xD06D format: high nibble = disabled move slot (1-4), low nibble = turns remaining
+        # Source: pret/pokered wram.asm — wPlayerDisabledMove
         mem = self._pyboy.memory
-        disable_counter = mem[0xD06D]
-        if disable_counter:
-            disabled_slot = mem[ADDR_DISABLED_MOVE]
+        disable_byte = mem[0xD06D]
+        if disable_byte:
+            disabled_slot = (disable_byte >> 4) & 0x0F  # high nibble = slot (1-based)
             if 1 <= disabled_slot <= 4:
                 idx = disabled_slot - 1
                 if idx < len(mon.moves):
