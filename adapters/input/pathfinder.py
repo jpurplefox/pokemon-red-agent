@@ -154,12 +154,10 @@ def find_interaction_targets(poi, grid, blocked=None, other_poi_tiles=None):
                     if (ny, nx) not in poi_tiles and (ny, nx) not in other_poi_tiles:
                         targets.append((ny, nx, face))
 
-    # Across-counter: for sprites only, also try 2 tiles away when there's
-    # a non-walkable tile in between (counter/ledge).  Pokemon Red
-    # allows interaction across counter tiles with A button.
-    # Only for sprites — items (Poké Balls) and other POIs don't work
-    # across counters and would cause wrong POI selection.
-    if kind == "sprite":
+    # Across-counter: only for Clerk/Nurse behind counters.
+    # Pokemon Red allows interaction across counter tiles with A button.
+    label = poi.get("label", "")
+    if kind == "sprite" and any(k in label for k in ("Clerk", "Nurse")):
         for pty, ptx in poi_tiles:
             for (dy, dx), face in _FACE_DIR.items():
                 # Only if intermediate tile is NOT walkable (= counter)

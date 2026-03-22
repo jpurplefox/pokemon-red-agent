@@ -176,9 +176,9 @@ class EventProcessor:
             print("  [AUTO] Selecting HEAL")
         elif self.auto_accept:
             # Check if it's a PC or similar menu — dismiss with B
-            if any(opt in ("LOG OFF", "WITHDRAW", "DEPOSIT", "ITEM STORAGE",
-                           "BILL's PC", "SOMEONE's PC", "PROF.OAK's PC")
-                   for opt in options):
+            opts_text = " ".join(options).upper()
+            if any(kw in opts_text for kw in ("LOG OFF", "WITHDRAW", "DEPOSIT",
+                                               "BILL", "SOMEONE", "PROF.OAK")):
                 print(f"  [AUTO] Closing menu: {options}")
                 self._pyboy.button("b")
                 self._pyboy.tick(30)

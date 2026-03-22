@@ -19,11 +19,13 @@ class _Response:
 class MLXLLM:
     """Local LLM inference using MLX on Apple Silicon."""
 
-    def __init__(self, model_name: str = "mlx-community/Qwen2.5-14B-Instruct-4bit",
-                 max_tokens: int = 256, temperature: float = 0.3):
+    def __init__(self, model_name: str = "mlx-community/Qwen3.5-9B-4bit",
+                 max_tokens: int = 256, temperature: float = 0.3,
+                 enable_thinking: bool = False):
         self._model, self._tokenizer = load(model_name)
         self._max_tokens = max_tokens
         self._temperature = temperature
+        self._enable_thinking = enable_thinking
 
     def invoke(self, messages: list) -> _Response:
         """Send messages to the local MLX model and return a response."""
@@ -38,8 +40,13 @@ class MLXLLM:
                 role = "user"
             chat_messages.append({"role": role, "content": msg.content})
 
+        template_kwargs = dict(
+            tokenize=False, add_generation_prompt=True,
+        )
+        if not self._enable_thinking:
+            template_kwargs["enable_thinking"] = False
         prompt = self._tokenizer.apply_chat_template(
-            chat_messages, tokenize=False, add_generation_prompt=True,
+            chat_messages, **template_kwargs,
         )
 
         sampler = make_sampler(temp=self._temperature)

@@ -40,15 +40,16 @@ Poké Balls: {{ pokeballs }}{% if pokeballs < 3 %} ⚠️ LOW{% endif %}
 --- Recent History ---
 {%- for entry in history %}
 • [{{ entry.map }}]
-  {%- if entry.poi %} GO:{{ entry.poi_num | default("?") }} [{{ entry.poi_kind | default("?") }}] {{ entry.poi }}:{% endif %} {{ entry.action }}
+  {%- if entry.poi %} GO:{{ entry.poi_num | default("?") }} [{% if entry.poi_kind in ("connection", "exit", "warp") %}warp{% else %}{{ entry.poi_kind | default("?") }}{% endif %}] {{ entry.poi }}:{% endif %} {{ entry.action }}
   {%- if entry.result %} → {{ entry.result }}{% endif %}
+  {%- if entry.reason %} (reason: {{ entry.reason }}){% endif %}
 {%- endfor %}
 {%- endif %}
 
 --- Points of Interest (use GO:<number> with the number below) ---
 {%- for poi in pois %}
-[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dir }})
-  {%- if poi.times_recent > 0 %} ⚠️ VISITED ({{ poi.times_recent }}x recently){% endif %}
+[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away)
+  {%- if poi.times_recent > 5 %} 🚫 STOP VISITING THIS ({{ poi.times_recent }}x — nothing new here!){% elif poi.times_recent > 0 %} ⚠️ VISITED ({{ poi.times_recent }}x recently){% endif %}
 {%- endfor %}
 {%- if not pois %}
 Nothing nearby.

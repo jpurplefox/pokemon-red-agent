@@ -31,7 +31,7 @@ if __name__ == "__main__":
     if flags & {"--ai", "--naming", "--shop"}:
         print("Loading MLX model...")
         raw_llm = MLXLLM(
-            model_name="mlx-community/Qwen2.5-14B-Instruct-4bit",
+            model_name="mlx-community/Qwen3.5-9B-4bit",
             temperature=0.3,
         )
         llm = TickingLLM(raw_llm, pyboy)

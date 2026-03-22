@@ -60,6 +60,7 @@ class OverworldAI:
         self.goal = goal
         self.shop_ai = ShopAI(llm=self._llm)
         self._history = []
+        self._last_think = ""
         self._visited_maps = set()
         self._visited_pois = set()
         self._subgoals_file = Path("overworld_subgoals.json")
@@ -171,7 +172,7 @@ class OverworldAI:
     # ------------------------------------------------------------------
 
     def record_action(self, action_desc, map_name, result_text="",
-                      poi_label="", poi_kind="", poi_num=0):
+                      poi_label="", poi_kind="", poi_num=0, reason=""):
         """Record an action in the exploration history."""
         self._visited_maps.add(map_name)
         entry = {
@@ -179,6 +180,8 @@ class OverworldAI:
             "map": map_name,
             "result": result_text,
         }
+        if reason:
+            entry["reason"] = reason
         if poi_label:
             entry["poi"] = poi_label
         if poi_kind:
@@ -223,9 +226,9 @@ class OverworldAI:
         self._visited_maps.add(map_name)
 
         # Build POI data with visit counts and directions
-        recent = self._history[-15:]
+        recent = self._history[-25:]
         poi_data = []
-        for poi in pois:
+        for i, poi in enumerate(pois):
             times = sum(1 for e in recent
                         if e.get("map") == map_name
                         and e.get("poi") == poi["label"])
@@ -233,12 +236,24 @@ class OverworldAI:
             kind = poi["kind"]
             if kind in ("exit", "warp", "connection"):
                 label = f"[Warp] \u2192 {label}"
+            dist = abs(poi["ty"] - player_y) + abs(poi["tx"] - player_x)
             poi_data.append({
                 "icon": _poi_icon(poi),
                 "label": label,
-                "dir": poi["dir"],
+                "dist": dist,
                 "times_recent": times,
+                "_orig_idx": i,
             })
+        # Deduplicate warps with the same label (keep closest)
+        poi_data.sort(key=lambda p: p["dist"])
+        seen_labels = set()
+        deduped = []
+        for p in poi_data:
+            if p["label"] in seen_labels:
+                continue
+            seen_labels.add(p["label"])
+            deduped.append(p)
+        poi_data = deduped
 
         active = self.active_subgoal()
 
@@ -249,7 +264,7 @@ class OverworldAI:
                               map_name=map_name,
                               pois=poi_data,
                               visited_maps=sorted(self._visited_maps),
-                              history=self._history[-15:],
+                              history=self._history[-25:],
                               active_subgoal=active,
                               completed_subgoals=[
                                   sg for sg in self._subgoals
@@ -277,7 +292,7 @@ class OverworldAI:
             response = self._llm.invoke(messages)
             _log.stop_thinking()
             text = response.content
-            result = self._parse_response(text, pois)
+            result = self._parse_response(text, poi_data)
             if result is not None:
                 return result
             attempt += 1
@@ -294,8 +309,12 @@ class OverworldAI:
         _log.log_think("(max retries — returning control to user)")
         return None
 
-    def _parse_response(self, text, pois):
-        """Parse LLM response into an action tuple."""
+    def _parse_response(self, text, poi_data):
+        """Parse LLM response into an action tuple.
+
+        poi_data is sorted by distance and contains _orig_idx for mapping
+        back to the original pois array.
+        """
         think = ""
         for line in text.strip().split("\n"):
             if line.strip().startswith("THINK:"):
@@ -311,11 +330,13 @@ class OverworldAI:
                 try:
                     num = int(action[3:].strip())
                     idx = num - 1  # 1-indexed in prompt
-                    if 0 <= idx < len(pois):
+                    if 0 <= idx < len(poi_data):
+                        orig_idx = poi_data[idx]["_orig_idx"]
                         if think:
                             _log.log_think(think)
-                        _log.log_think(f"=> GO to {pois[idx]['label']}")
-                        return ("go", idx)
+                        _log.log_think(f"=> GO to {poi_data[idx]['label']}")
+                        self._last_think = think
+                        return ("go", orig_idx)
                 except ValueError:
                     pass
 

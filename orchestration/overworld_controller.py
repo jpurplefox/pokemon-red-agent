@@ -156,9 +156,11 @@ class OverworldAIController:
     def _handle_go(self, pois, detail, map_name, mem):
         """Navigate to a POI and record the result."""
         poi = pois[detail]
-        self._handle_go_with_poi(poi, map_name, mem, all_pois=pois)
+        self._handle_go_with_poi(poi, map_name, mem, all_pois=pois,
+                                 poi_num=detail + 1)
 
-    def _handle_go_with_poi(self, poi, map_name, mem, all_pois=None):
+    def _handle_go_with_poi(self, poi, map_name, mem, all_pois=None,
+                                poi_num=0):
         """Navigate to a specific POI dict and record the result."""
         self._ai.record_poi_visited(map_name, poi["label"])
         result = self._navigator.go_to(poi, self._print_surroundings,
@@ -184,6 +186,8 @@ class OverworldAIController:
         self._ai.record_action(
             action_desc, map_name, result_desc,
             poi_label=poi['label'], poi_kind=poi['kind'],
+            poi_num=poi_num,
+            reason=getattr(self._ai, '_last_think', ''),
         )
 
         # Reflect only when there was dialogue

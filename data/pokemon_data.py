@@ -141,10 +141,10 @@ MOVE_BASE_PP = {
 # Status condition bit masks
 STATUS_NAMES = {
     0x00: None,         # healthy
-    0x04: "PSN",        # poisoned
-    0x08: "BRN",        # burned
-    0x10: "FRZ",        # frozen
-    0x20: "PAR",        # paralyzed
+    0x08: "PSN",        # poisoned  (bit 3)
+    0x10: "BRN",        # burned    (bit 4)
+    0x20: "FRZ",        # frozen    (bit 5)
+    0x40: "PAR",        # paralyzed (bit 6)
 }
 
 

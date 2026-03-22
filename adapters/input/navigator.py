@@ -17,6 +17,7 @@ class Navigator:
         self._screen = screen
         self._scanner = scanner
         self._event_processor = event_processor
+        self._blocked_by_map = {}  # map_id → set of (y, x)
 
     def go(self, print_surroundings):
         """Select a POI, pathfind to it, walk there, and interact.
@@ -46,13 +47,22 @@ class Navigator:
         return result
 
     def _go_to_poi(self, poi, print_surroundings, result, attempt=1,
-                   all_pois=None):
+                   all_pois=None, known_blocked=None):
         """Walk to a POI and interact. Retries if NPC moved."""
         mem = self._pyboy.memory
         grid, _, _ = self._scanner.get_walkable_grid()
         blocked = self._scanner.get_npc_tiles()
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
+
+        # Apply known blocked tiles from previous attempts + persisted
+        map_id = mem[ADDR_MAP_N]
+        if known_blocked is None:
+            known_blocked = set()
+        known_blocked |= self._blocked_by_map.get(map_id, set())
+        for by, bx in known_blocked:
+            if 0 <= by < len(grid) and 0 <= bx < len(grid[0]):
+                grid[by][bx] = False
 
         # Tiles of other POIs — avoid standing on them to interact
         other_poi_tiles = set()
@@ -73,6 +83,7 @@ class Navigator:
         else:
             print(f"Retrying... ({len(path)} steps)")
         start_map = mem[ADDR_MAP_N]
+        consecutive_fails = 0
         while path:
             # Re-scan NPC position if target is a sprite
             if poi["kind"] == "sprite":
@@ -81,6 +92,9 @@ class Navigator:
                     poi = updated
             # Recalculate path from current position
             grid, _, _ = self._scanner.get_walkable_grid()
+            for by, bx in known_blocked:
+                if 0 <= by < len(grid) and 0 <= bx < len(grid[0]):
+                    grid[by][bx] = False
             blocked = self._scanner.get_npc_tiles()
             py, px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
             new_path, new_face = find_best_path(grid, (py, px), poi, blocked,
@@ -94,7 +108,7 @@ class Navigator:
             direction = path.pop(0)
             old_py, old_px = py, px
             self._pyboy.button(direction, delay=8)
-            self._pyboy.tick(30)
+            self._pyboy.tick(50)  # Extra frames for walk animation to finish
 
             # Verify the player actually moved — if not, check why
             new_py, new_px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
@@ -110,9 +124,18 @@ class Navigator:
                 dy = {"up": -1, "down": 1}.get(direction, 0)
                 dx = {"left": -1, "right": 1}.get(direction, 0)
                 bad_tile = (old_py + dy, old_px + dx)
+                known_blocked.add(bad_tile)
+                self._blocked_by_map.setdefault(start_map, set()).add(bad_tile)
                 if 0 <= bad_tile[0] < len(grid) and 0 <= bad_tile[1] < len(grid[0]):
                     grid[bad_tile[0]][bad_tile[1]] = False
+                consecutive_fails += 1
+                if consecutive_fails >= 5:
+                    print("Too many blocked tiles — aborting navigation.")
+                    result["interrupted"] = True
+                    print_surroundings()
+                    return
                 continue
+            consecutive_fails = 0
 
             if self._screen.read_text_box():
                 print("Interrupted!")
