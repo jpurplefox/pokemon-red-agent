@@ -20,7 +20,7 @@ class MLXLLM:
     """Local LLM inference using MLX on Apple Silicon."""
 
     def __init__(self, model_name: str = "mlx-community/Qwen3.5-9B-4bit",
-                 max_tokens: int = 256, temperature: float = 0.3,
+                 max_tokens: int = 512, temperature: float = 0.3,
                  enable_thinking: bool = False):
         self._model, self._tokenizer = load(model_name)
         self._max_tokens = max_tokens
