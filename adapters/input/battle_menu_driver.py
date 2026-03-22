@@ -80,7 +80,13 @@ class BattleMenuDriver:
 
     def select_move(self, move_idx: int):
         """Select a move by index (0-3) from the move menu."""
-        current = self._last_move_idx
+        # Wait for menu to be ready, then read actual cursor position
+        for _ in range(20):
+            if self._pyboy.memory[ADDR_MENU_WATCHED_KEYS] != 0:
+                break
+            self._pyboy.tick(5)
+
+        current = self._pyboy.memory[ADDR_CURRENT_MENU]
         diff = move_idx - current
         if diff > 0:
             for _ in range(diff):
@@ -93,7 +99,6 @@ class BattleMenuDriver:
 
         self._pyboy.button("a")
         self._pyboy.tick(10)
-        self._last_move_idx = move_idx
 
     def use_ball(self, bag_index: int):
         """Select ITEM from battle menu, then select the ball by bag index."""
