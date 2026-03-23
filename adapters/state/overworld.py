@@ -83,10 +83,6 @@ class OverworldScanner:
         # Filter out unreachable POIs
         grid, _, _, ledges = self.get_walkable_grid()
         npc_blocked = self.get_npc_tiles()
-        print(f"  [debug] {len(ledges)} ledge tiles, grid {len(grid)}x{len(grid[0]) if grid else 0}")
-        if ledges:
-            for ly, lx, ld in sorted(ledges):
-                print(f"    ledge ({ly},{lx}) dir={ld}")
         reachable = []
         for poi in all_pois:
             # Exclude this POI's own warp from the avoid set (it's the goal)
@@ -96,7 +92,7 @@ class OverworldScanner:
             if path is not None:
                 reachable.append(poi)
             else:
-                print(f"  [unreachable] {poi['label']} at ({poi['ty']},{poi['tx']}) kind={poi['kind']}")
+                pass
 
         # Add a single grass POI if there's tall grass on this map
         grass_poi = self._find_nearest_grass(py, px, grid)
