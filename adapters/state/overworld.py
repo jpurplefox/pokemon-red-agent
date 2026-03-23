@@ -71,22 +71,120 @@ class OverworldScanner:
         all_pois.extend(self._scan_sprites(py, px))
         all_pois.extend(self._scan_connections(py, px))
 
+        # Deduplicate adjacent warps with the same label (keep closest)
+        all_pois = self._dedup_warps(all_pois, py, px)
+
+        # Disambiguate duplicate labels by compass direction
+        all_pois = self._disambiguate_labels(all_pois, py, px)
+
+        # Collect warp tiles to avoid walking through them accidentally
+        warp_tiles = {(p["ty"], p["tx"]) for p in all_pois if p["kind"] == "warp"}
+
         # Filter out unreachable POIs
         grid, _, _, ledges = self.get_walkable_grid()
+        npc_blocked = self.get_npc_tiles()
+        print(f"  [debug] {len(ledges)} ledge tiles, grid {len(grid)}x{len(grid[0]) if grid else 0}")
+        if ledges:
+            for ly, lx, ld in sorted(ledges):
+                print(f"    ledge ({ly},{lx}) dir={ld}")
         reachable = []
         for poi in all_pois:
-            path, _ = find_best_path(grid, (py, px), poi, ledges=ledges)
+            # Exclude this POI's own warp from the avoid set (it's the goal)
+            avoid = warp_tiles - {(poi["ty"], poi["tx"])}
+            path, _ = find_best_path(grid, (py, px), poi, blocked=npc_blocked,
+                                     ledges=ledges, warps=avoid)
             if path is not None:
                 reachable.append(poi)
+            else:
+                print(f"  [unreachable] {poi['label']} at ({poi['ty']},{poi['tx']}) kind={poi['kind']}")
 
         # Add a single grass POI if there's tall grass on this map
         grass_poi = self._find_nearest_grass(py, px, grid)
         if grass_poi:
-            path, _ = find_best_path(grid, (py, px), grass_poi, ledges=ledges)
+            path, _ = find_best_path(grid, (py, px), grass_poi, blocked=npc_blocked,
+                                     ledges=ledges, warps=warp_tiles)
             if path is not None:
                 reachable.append(grass_poi)
 
         return reachable
+
+    @staticmethod
+    def _dedup_warps(pois, py, px):
+        """Merge adjacent warps that share the same label.
+
+        Only warps within 2 tiles of each other AND with the same label
+        are considered duplicates (e.g. a two-tile-wide staircase).
+        Distant warps to the same map are kept as separate POIs.
+        """
+        warp_kinds = ("warp", "exit", "connection")
+        warps = [p for p in pois if p["kind"] in warp_kinds]
+        others = [p for p in pois if p["kind"] not in warp_kinds]
+
+        # Group nearby warps with same label using union-find
+        used = [False] * len(warps)
+        clusters = []
+        for i, w in enumerate(warps):
+            if used[i]:
+                continue
+            cluster = [w]
+            used[i] = True
+            for j in range(i + 1, len(warps)):
+                if used[j] or warps[j]["label"] != w["label"]:
+                    continue
+                # Check if adjacent to any warp already in the cluster
+                for c in cluster:
+                    if abs(warps[j]["ty"] - c["ty"]) + abs(warps[j]["tx"] - c["tx"]) <= 2:
+                        cluster.append(warps[j])
+                        used[j] = True
+                        break
+            clusters.append(cluster)
+
+        # Keep closest warp from each cluster
+        for cluster in clusters:
+            best = min(cluster, key=lambda w: abs(w["ty"] - py) + abs(w["tx"] - px))
+            others.append(best)
+
+        return others
+
+    @staticmethod
+    def _disambiguate_labels(pois, py, px):
+        """Add compass directions to POIs that share the same label."""
+        from collections import Counter
+
+        def _compass(p):
+            dy = p["ty"] - py
+            dx = p["tx"] - px
+            ns = "south" if dy > 0 else "north" if dy < 0 else ""
+            ew = "east" if dx > 0 else "west" if dx < 0 else ""
+            if abs(dy) >= abs(dx):
+                return ns or ew
+            return ew or ns
+
+        def _compass_full(p):
+            dy = p["ty"] - py
+            dx = p["tx"] - px
+            ns = "north" if dy < 0 else "south" if dy > 0 else ""
+            ew = "west" if dx < 0 else "east" if dx > 0 else ""
+            if ns and ew:
+                return f"{ns}-{ew}"
+            return ns or ew or "nearby"
+
+        # First pass: simple compass
+        label_counts = Counter(p["label"] for p in pois)
+        if any(c > 1 for c in label_counts.values()):
+            for p in pois:
+                if label_counts[p["label"]] > 1:
+                    p["label"] = f"{p['label']} ({_compass(p)})"
+
+        # Second pass: if still duplicated, use full compass
+        label_counts = Counter(p["label"] for p in pois)
+        if any(c > 1 for c in label_counts.values()):
+            for p in pois:
+                if label_counts[p["label"]] > 1:
+                    base = p["label"].rsplit(" (", 1)[0]
+                    p["label"] = f"{base} ({_compass_full(p)})"
+
+        return pois
 
     # ------------------------------------------------------------------
     # ROM-based tileset data (auto-detect walkability for any tileset)
@@ -224,9 +322,27 @@ class OverworldScanner:
         h_tiles = H * 2
         w_tiles = W * 2
         grid = [[False] * w_tiles for _ in range(h_tiles)]
-        ledges = set()  # (ty, tx) tiles that are one-way down ledges
+        ledges = set()  # (ty, tx, direction) tiles that are one-way ledges
 
-        LEDGE_TILE = 0x37  # collision tile for jump-down ledge
+        # Ledge tile pairs from pokered: data/tilesets/ledge_tiles.asm
+        # Format: (standing_tile, ledge_tile) -> direction
+        # A tile is only a ledge if the player stands on a matching
+        # "standing tile" and the adjacent tile is the "ledge tile".
+        LEDGE_PAIRS = {
+            # (standing_on, ledge_tile): direction
+            (0x2C, 0x37): "down",
+            (0x39, 0x36): "down",
+            (0x39, 0x37): "down",
+            (0x2C, 0x27): "left",
+            (0x39, 0x27): "left",
+            (0x2C, 0x0D): "right",
+            (0x2C, 0x1D): "right",
+            (0x39, 0x0D): "right",
+        }
+        # Quick lookup: which tile IDs can be ledge targets
+        LEDGE_TARGET_TILES = {lt for (_, lt) in LEDGE_PAIRS}
+        # Quick lookup: which tile IDs are valid standing tiles
+        LEDGE_STANDING_TILES = {st for (st, _) in LEDGE_PAIRS}
 
         # Try ROM auto-detection first
         coll = self.get_collision_tiles()
@@ -247,16 +363,8 @@ class OverworldScanner:
                         continue
                     tl, tr, bl, br = self.block_walkability(bt, coll)
 
-                    # Detect ledge tiles — force walkable + mark as one-way
                     ty = row * 2
                     tx = col * 2
-                    walkability = [tl, tr, bl, br]
-                    for qi, (qy, qx) in enumerate([(ty, tx), (ty, tx+1),
-                                                     (ty+1, tx), (ty+1, tx+1)]):
-                        if bt[self._QUAD_REP_TILE[qi]] == LEDGE_TILE:
-                            ledges.add((qy, qx))
-                            walkability[qi] = True  # force walkable
-                    tl, tr, bl, br = walkability
                 else:
                     if block_id not in walkable:
                         continue
@@ -274,6 +382,31 @@ class OverworldScanner:
         px = mem[ADDR_X_COORD]
         if 0 <= py < h_tiles and 0 <= px < w_tiles:
             grid[py][px] = True
+
+        # Detect ledge tiles using walkability patterns.
+        # Ledges only exist on tileset 0 (OVERWORLD).
+        # A ledge-down exists when a block has [✓✓/✗✗] pattern:
+        # the top tiles are walkable but the bottom tiles are not.
+        # The bottom tiles become one-way "down" ledges.
+        tileset = mem[ADDR_TILESET]
+        if tileset == 0 and use_rom:
+            row_width = W + 2 * MAP_BORDER
+            for row in range(H):
+                for col in range(W):
+                    addr = ADDR_OVERWORLD_MAP + (row + MAP_BORDER) * row_width + (col + MAP_BORDER)
+                    block_id = mem[addr]
+                    bt = self.get_block_tiles(block_id)
+                    if bt is None:
+                        continue
+                    tl, tr, bl, br = self.block_walkability(bt, coll)
+                    ty = row * 2
+                    tx = col * 2
+                    # Pattern [✓✓/✗✗] or [✓✗/✗✗] or [✗✓/✗✗] = ledge down
+                    if (tl or tr) and not bl and not br:
+                        for ly, lx in [(ty + 1, tx), (ty + 1, tx + 1)]:
+                            if 0 <= ly < h_tiles and 0 <= lx < w_tiles:
+                                ledges.add((ly, lx, "down"))
+                                grid[ly][lx] = True
 
         return grid, h_tiles, w_tiles, ledges
 
@@ -710,15 +843,15 @@ class OverworldScanner:
 
             map_name = MAP_NAMES.get(dest_map_id, f"Map {dest_map_id}")
 
-            # Place POI at the center of the corresponding edge
+            # Place POI at the center of the corresponding edge (tile coords)
             if btn == "up":
-                ey, ex = 0, W - 1
+                ey, ex = 0, W
             elif btn == "down":
-                ey, ex = H * 2 - 1, W - 1
+                ey, ex = H * 2 - 1, W
             elif btn == "left":
-                ey, ex = H - 1, 0
+                ey, ex = H, 0
             else:  # right
-                ey, ex = H - 1, W * 2 - 1
+                ey, ex = H, W * 2 - 1
 
             results.append({
                 "label": map_name,

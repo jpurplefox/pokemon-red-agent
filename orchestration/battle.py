@@ -329,6 +329,7 @@ class BattleHandler:
 
         # Game resets move cursor to 0 when a new pokemon enters battle
         self._last_move_idx = 0
+        self._driver.reset_move_cursor()
 
         return self.is_in_battle()
 
@@ -400,6 +401,7 @@ class BattleHandler:
             self._driver.navigate_party_menu(choice_idx)
 
             self._last_move_idx = 0
+            self._driver.reset_move_cursor()
 
         return True
 

@@ -46,16 +46,9 @@ Poké Balls: {{ pokeballs }}{% if pokeballs < 3 %} ⚠️ LOW{% endif %}
 {%- endfor %}
 {%- endif %}
 
-{%- if ascii_map %}
-
---- Map (@ = you, # = wall, · = walkable, numbers = POIs) ---
-{{ ascii_map }}
-{%- endif %}
-
 --- Points of Interest (use GO:<number> with the number below) ---
 {%- for poi in pois %}
-[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away)
-  {%- if poi.times_recent > 5 %} 🚫 STOP VISITING THIS ({{ poi.times_recent }}x — nothing new here!){% elif poi.times_recent > 0 %} ⚠️ VISITED ({{ poi.times_recent }}x recently){% endif %}
+[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away){% if poi.times_recent > 0 and not poi.is_warp %} ⚠️ VISITED x{{ poi.times_recent }}{% endif %}
 {%- endfor %}
 {%- if not pois %}
 Nothing nearby.

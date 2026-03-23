@@ -4,7 +4,10 @@ Handles the 'go' command: selecting a POI, finding a path, walking
 step-by-step with interrupt detection, and interacting on arrival.
 """
 
-from data.constants import ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD
+import sys
+import select
+
+from data.constants import ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD, ADDR_IS_IN_BATTLE
 from adapters.input.pathfinder import find_best_path
 from adapters.display.console import prompt_poi_selection
 
@@ -17,7 +20,7 @@ class Navigator:
         self._screen = screen
         self._scanner = scanner
         self._event_processor = event_processor
-        self._blocked_by_map = {}  # map_id → set of (y, x)
+        self._pending_blocked = set()  # blocked tiles for current action (survives resume)
 
     def go(self, print_surroundings):
         """Select a POI, pathfind to it, walk there, and interact.
@@ -46,6 +49,10 @@ class Navigator:
         self._go_to_poi(poi, print_surroundings, result, all_pois=all_pois)
         return result
 
+    def clear_blocked(self):
+        """Clear discovered blocked tiles (call when action completes)."""
+        self._pending_blocked.clear()
+
     def _go_to_poi(self, poi, print_surroundings, result, attempt=1,
                    all_pois=None, known_blocked=None):
         """Walk to a POI and interact. Retries if NPC moved."""
@@ -55,27 +62,42 @@ class Navigator:
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
 
-        # Apply known blocked tiles from previous attempts + persisted
-        map_id = mem[ADDR_MAP_N]
         if known_blocked is None:
             known_blocked = set()
-        known_blocked |= self._blocked_by_map.get(map_id, set())
+        known_blocked |= self._pending_blocked
         for by, bx in known_blocked:
             if 0 <= by < len(grid) and 0 <= bx < len(grid[0]):
                 grid[by][bx] = False
 
         # Tiles of other POIs — avoid standing on them to interact
         other_poi_tiles = set()
+        # Warp tiles — avoid walking through them to prevent accidental warps
+        warp_tiles = set()
         if all_pois:
             for p in all_pois:
                 if p is not poi:
                     other_poi_tiles.add((p["ty"], p["tx"]))
+                if p["kind"] == "warp" and p is not poi:
+                    warp_tiles.add((p["ty"], p["tx"]))
 
         path, face = find_best_path(grid, (py, px), poi, blocked,
-                                    other_poi_tiles, ledges)
+                                    other_poi_tiles, ledges, warp_tiles)
         if path is None:
             print(f"Cannot reach {poi['label']}.")
             return
+
+        # If already standing on a warp tile (0 steps), step off first then walk back
+        if not path and poi["kind"] in ("warp", "exit") and (py, px) == (poi["ty"], poi["tx"]):
+            dirs = {(-1, 0): "up", (1, 0): "down",
+                    (0, -1): "left", (0, 1): "right"}
+            for (dy, dx), direction in dirs.items():
+                ny, nx = py + dy, px + dx
+                if 0 <= ny < len(grid) and 0 <= nx < len(grid[0]) and grid[ny][nx]:
+                    self._pyboy.button(direction, delay=8)
+                    self._pyboy.tick(50)
+                    path = [(py, px)]  # walk back to the warp tile
+                    face = None
+                    break
 
         # Walk step by step, recalculating path before each move
         if attempt == 1:
@@ -85,6 +107,12 @@ class Navigator:
         start_map = mem[ADDR_MAP_N]
         consecutive_fails = 0
         while path:
+            # Check if user pressed Enter to interrupt
+            if select.select([sys.stdin], [], [], 0)[0]:
+                sys.stdin.readline()
+                result["user_interrupt"] = True
+                return
+
             # Re-scan NPC position if target is a sprite
             if poi["kind"] == "sprite":
                 updated = self._find_same_npc(poi)
@@ -98,7 +126,8 @@ class Navigator:
             blocked = self._scanner.get_npc_tiles()
             py, px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
             new_path, new_face = find_best_path(grid, (py, px), poi, blocked,
-                                                other_poi_tiles, ledges)
+                                                other_poi_tiles, ledges,
+                                                warp_tiles)
             if new_path is not None:
                 path = new_path
                 face = new_face
@@ -113,6 +142,9 @@ class Navigator:
             # Verify the player actually moved — if not, check why
             new_py, new_px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
             if (new_py, new_px) == (old_py, old_px) and mem[ADDR_MAP_N] == start_map:
+                # Battle started — not a blocked tile
+                if mem[ADDR_IS_IN_BATTLE] != 0:
+                    return
                 # Check if a trainer stopped us (text on screen)
                 if self._screen.read_text_box():
                     print("Interrupted!")
@@ -125,7 +157,7 @@ class Navigator:
                 dx = {"left": -1, "right": 1}.get(direction, 0)
                 bad_tile = (old_py + dy, old_px + dx)
                 known_blocked.add(bad_tile)
-                self._blocked_by_map.setdefault(start_map, set()).add(bad_tile)
+                self._pending_blocked.add(bad_tile)
                 if 0 <= bad_tile[0] < len(grid) and 0 <= bad_tile[1] < len(grid[0]):
                     grid[bad_tile[0]][bad_tile[1]] = False
                 consecutive_fails += 1

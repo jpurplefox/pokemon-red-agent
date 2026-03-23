@@ -1,13 +1,17 @@
 import sys
+from dotenv import load_dotenv
+load_dotenv()
 from pyboy import PyBoy
 from adapters.pyboy_wrapper import PyBoyWrapper
 from adapters.display.ai_log_window import start as start_ai_window
 from adapters.ticking_llm import TickingLLM
 from adapters.mlx_llm import MLXLLM
+from adapters.openai_llm import OpenAILLM
 from agents.naming_ai import NamingAI
 from agents.battle_ai import BattleAI
 from agents.scout_ai import ScoutAI
 from agents.overworld_ai import OverworldAI
+from agents.reflect_ai import ReflectAI
 from agents.lead_ai import LeadAI
 from agents.shop_ai import ShopAI
 from orchestration.game import Game
@@ -41,9 +45,10 @@ if __name__ == "__main__":
     if "--ai" in flags:
         scout = ScoutAI(llm=llm)
         strategy = BattleAI(llm=llm, scout=scout)
-        overworld_ai = OverworldAI(llm=llm)
+        reflect_ai = ReflectAI(llm=llm)
+        overworld_ai = OverworldAI(llm=llm, reflect_ai=reflect_ai)
         lead_ai = LeadAI(llm=llm)
-        print("Battle AI + Scout AI + Overworld AI + Lead AI enabled")
+        print("Battle AI + Scout AI + Overworld AI (local MLX) + Lead AI enabled")
     elif "--shop" in flags:
         shop_ai = ShopAI(llm=llm)
         print("Shop AI enabled (manual overworld control)")

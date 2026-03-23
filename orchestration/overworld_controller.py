@@ -14,6 +14,7 @@ from data.constants import (
     ADDR_PLAY_SECONDS, MAP_NAMES, POKEMON_CHARMAP,
 )
 from adapters.display.ai_logger import AILogger
+from adapters.openai_llm import CloudLLMError
 from domain.models import HUDState
 
 
@@ -71,7 +72,11 @@ class OverworldAIController:
         # Resume interrupted action (e.g. after wild battle)
         if self._pending_poi is not None:
             mem = self._pyboy.memory
-            if mem[ADDR_MAP_N] == self._pending_map:
+            # Don't resume grass POIs — the battle already fulfilled the goal
+            if self._pending_poi.get("kind") == "grass":
+                self._pending_poi = None
+                self._pending_map = None
+            elif mem[ADDR_MAP_N] == self._pending_map:
                 poi = self._pending_poi
                 self._pending_poi = None
                 self._pending_map = None
@@ -120,11 +125,15 @@ class OverworldAIController:
         self._log.update_hud(hud)
 
         money = self._bag.read_money()
-        result = self._ai.decide(
-            map_name, pois, grid=grid, player_y=py, player_x=px,
-            party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
-            money=money, badges=mem[ADDR_BADGES],
-        )
+        try:
+            result = self._ai.decide(
+                map_name, pois, grid=grid, player_y=py, player_x=px,
+                party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
+                money=money, badges=mem[ADDR_BADGES],
+            )
+        except CloudLLMError:
+            self.pause()
+            return "paused"
 
         # Update HUD again after decide (think time + action count updated)
         hud.action_count = self._ai.iteration
@@ -166,11 +175,20 @@ class OverworldAIController:
         result = self._navigator.go_to(poi, self._print_surroundings,
                                        all_pois=all_pois)
 
+        # User pressed Enter during navigation — pause immediately
+        if result.get("user_interrupt"):
+            self.pause()
+            return
+
         # If a battle interrupted the walk, save POI to resume after
+        # (keep blocked tiles for the resume)
         if self._battle.is_in_battle():
             self._pending_poi = poi
             self._pending_map = mem[ADDR_MAP_N]
             return
+
+        # Action completed — clear blocked tiles
+        self._navigator.clear_blocked()
 
         new_map_id = mem[ADDR_MAP_N]
         new_map_name = MAP_NAMES.get(new_map_id, f"Map {new_map_id}")

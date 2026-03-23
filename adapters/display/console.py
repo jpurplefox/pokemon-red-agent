@@ -117,10 +117,11 @@ def _poi_icon(poi):
     return _POI_KIND_ICONS.get(poi.get("kind"), "🚪")
 
 
-def render_map(pois, py, px, grid, visit_counts=None):
+def render_map(pois, py, px, grid, visit_counts=None, legend=True):
     """Return an ASCII map string with numbered POI markers and a legend.
 
     visit_counts: optional list parallel to pois with visit counts per POI.
+    legend: if False, omit the text legend below the map (grid only).
     """
     if not pois:
         return "Nothing nearby."
@@ -149,13 +150,14 @@ def render_map(pois, py, px, grid, visit_counts=None):
                 row += " #"
         lines.append(row)
 
-    lines.append("")
-    for i, poi in enumerate(pois):
-        icon = _poi_icon(poi)
-        suffix = ""
-        if visit_counts and visit_counts[i] > 0:
-            suffix = f" (visited {visit_counts[i]}x)"
-        lines.append(f"  {i + 1:>2}. {icon} {poi['label']}{suffix}")
+    if legend:
+        lines.append("")
+        for i, poi in enumerate(pois):
+            icon = _poi_icon(poi)
+            suffix = ""
+            if visit_counts and visit_counts[i] > 0:
+                suffix = f" (visited {visit_counts[i]}x)"
+            lines.append(f"  {i + 1:>2}. {icon} {poi['label']}{suffix}")
 
     return "\n".join(lines)
 

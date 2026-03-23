@@ -14,7 +14,7 @@ _NEIGHBORS = [(-1, 0, "up"), (1, 0, "down"), (0, -1, "left"), (0, 1, "right")]
 _FACE_DIR = {(-1, 0): "down", (1, 0): "up", (0, -1): "right", (0, 1): "left"}
 
 
-def find_path(grid, start, goal, blocked=None, ledges=None):
+def find_path(grid, start, goal, blocked=None, ledges=None, warps=None):
     """Find shortest path from start to goal using A*.
 
     Args:
@@ -22,7 +22,11 @@ def find_path(grid, start, goal, blocked=None, ledges=None):
         start:   (y, x) tuple.
         goal:    (y, x) tuple.
         blocked: set of (y, x) dynamically blocked tiles (NPCs).
-        ledges:  set of (y, x) one-way-down tiles (only enterable from above).
+        ledges:  set of (y, x, direction) one-way tiles — can only be
+                 entered moving in the specified direction.
+        warps:   set of (y, x) warp tiles (stairs, doors) — avoided as
+                 intermediate steps to prevent accidental warps, but
+                 allowed as the goal tile.
 
     Returns:
         List of direction strings ["up", "down", "left", ...], or None.
@@ -31,6 +35,18 @@ def find_path(grid, start, goal, blocked=None, ledges=None):
         blocked = set()
     if ledges is None:
         ledges = set()
+    if warps is None:
+        warps = set()
+
+    # Build lookup: (y, x) -> allowed direction for ledge tiles
+    ledge_dir = {}
+    for item in ledges:
+        if len(item) == 3:
+            ly, lx, ld = item
+            ledge_dir[(ly, lx)] = ld
+        else:
+            # Legacy (y, x) format — default to down
+            ledge_dir[item] = "down"
 
     h = len(grid)
     w = len(grid[0]) if h else 0
@@ -72,8 +88,11 @@ def find_path(grid, start, goal, blocked=None, ledges=None):
                 continue
             if (ny, nx) != goal and (ny, nx) in blocked:
                 continue
-            # Ledge tiles can only be entered going down
-            if (ny, nx) in ledges and direction != "down":
+            # Warp tiles are avoided unless they are the goal
+            if (ny, nx) != goal and (ny, nx) in warps:
+                continue
+            # Ledge tiles can only be entered in their allowed direction
+            if (ny, nx) in ledge_dir and direction != ledge_dir[(ny, nx)]:
                 continue
 
             tentative_g = g_score[current] + 1
@@ -190,7 +209,7 @@ def find_interaction_targets(poi, grid, blocked=None, other_poi_tiles=None):
 
 
 def find_best_path(grid, start, poi, blocked=None, other_poi_tiles=None,
-                   ledges=None):
+                   ledges=None, warps=None):
     """Find the shortest path to any valid interaction tile for a POI.
 
     Returns (path, face_direction) or (None, None) if unreachable.
@@ -201,16 +220,38 @@ def find_best_path(grid, start, poi, blocked=None, other_poi_tiles=None,
         blocked = set()
     if ledges is None:
         ledges = set()
+    if warps is None:
+        warps = set()
 
     targets = find_interaction_targets(poi, grid, blocked, other_poi_tiles)
     if not targets:
         return None, None
 
+    # First pass: find paths WITHOUT using ledges
     best_path = None
     best_face = None
-
+    # Extract (y, x) positions from ledges to block them entirely
+    ledge_positions = set()
+    for item in ledges:
+        if len(item) == 3:
+            ledge_positions.add((item[0], item[1]))
+        else:
+            ledge_positions.add(item)
     for goal_y, goal_x, face in targets:
-        path = find_path(grid, start, (goal_y, goal_x), blocked, ledges)
+        no_ledge_blocked = blocked | ledge_positions
+        path = find_path(grid, start, (goal_y, goal_x), no_ledge_blocked,
+                         ledges=None, warps=warps)
+        if path is not None:
+            if best_path is None or len(path) < len(best_path):
+                best_path = path
+                best_face = face
+
+    if best_path is not None:
+        return best_path, best_face
+
+    # Second pass: allow ledges if no ledge-free path exists
+    for goal_y, goal_x, face in targets:
+        path = find_path(grid, start, (goal_y, goal_x), blocked, ledges, warps)
         if path is not None:
             if best_path is None or len(path) < len(best_path):
                 best_path = path

@@ -3,3 +3,5 @@ jinja2
 langchain-core
 mlx-lm
 pygame
+openai
+python-dotenv
