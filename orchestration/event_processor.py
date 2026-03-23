@@ -168,6 +168,15 @@ class EventProcessor:
             self._handle_mart_menu(options)
             return
 
+        # Always dismiss PC menus with B — regardless of auto_accept
+        opts_text = " ".join(options).upper()
+        if any(kw in opts_text for kw in ("LOG OFF", "WITHDRAW", "DEPOSIT",
+                                           "BILL", "SOMEONE", "PROF.OAK")):
+            print(f"  [AUTO] Closing menu: {options}")
+            self._pyboy.button("b")
+            self._pyboy.tick(30)
+            return
+
         if self.auto_accept and "YES" in options:
             choice = "YES"
             print("  [AUTO] Selecting YES")
@@ -175,15 +184,7 @@ class EventProcessor:
             choice = "HEAL"
             print("  [AUTO] Selecting HEAL")
         elif self.auto_accept:
-            # Check if it's a PC or similar menu — dismiss with B
-            opts_text = " ".join(options).upper()
-            if any(kw in opts_text for kw in ("LOG OFF", "WITHDRAW", "DEPOSIT",
-                                               "BILL", "SOMEONE", "PROF.OAK")):
-                print(f"  [AUTO] Closing menu: {options}")
-                self._pyboy.button("b")
-                self._pyboy.tick(30)
-                return
-            # Otherwise select first option (safer than B for dialogues)
+            # Select first option (safer than B for dialogues)
             print(f"  [AUTO] Selecting first option: {options[0]}")
             choice = options[0]
         else:

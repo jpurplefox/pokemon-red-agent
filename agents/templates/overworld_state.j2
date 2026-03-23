@@ -33,7 +33,7 @@ Poké Balls: {{ pokeballs }}{% if pokeballs < 3 %} ⚠️ LOW{% endif %}
 --- Recent History ---
 {%- for entry in history %}
 • [{{ entry.map }}]
-  {%- if entry.poi %} GO:{{ entry.poi_num | default("?") }} [{% if entry.poi_kind in ("connection", "exit", "warp") %}warp{% else %}{{ entry.poi_kind | default("?") }}{% endif %}] {{ entry.poi }}:{% endif %} {{ entry.action }}
+  {%- if entry.poi %} {% if entry.poi_kind in ("connection", "exit", "warp") %}GO{% else %}INTERACT{% endif %}:{{ entry.poi_num | default("?") }} {{ entry.poi }}:{% endif %} {{ entry.action }}
   {%- if entry.result %} → {{ entry.result }}{% endif %}
   {%- if entry.reason %} (reason: {{ entry.reason }}){% endif %}
 {%- endfor %}
@@ -46,10 +46,19 @@ Map: {{ map_name }}
 {%- endif %}
 Maps visited so far: {{ visited_maps | join(", ") if visited_maps else "None" }}
 
---- Points of Interest (use GO:<number> with the number below) ---
-{%- for poi in pois %}
-[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away){% if poi.times_recent > 0 and not poi.is_warp %} ⚠️ VISITED x{{ poi.times_recent }}{% endif %}
+{%- if interactables %}
+--- Interactables (use INTERACT:<number>) ---
+{%- for poi in interactables %}
+[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away){% if poi.times_recent >= 3 %} 🚫 VISITED x{{ poi.times_recent }} — DO NOT interact again{% elif poi.times_recent > 0 %} ⚠️ VISITED x{{ poi.times_recent }}{% endif %}
 {%- endfor %}
-{%- if not pois %}
+{%- endif %}
+{%- if warps %}
+
+--- Warps (use GO:<number>) ---
+{%- for w in warps %}
+[{{ loop.index }}] {{ w.icon }} {{ w.label }} ({{ w.dist }} steps away)
+{%- endfor %}
+{%- endif %}
+{%- if not interactables and not warps %}
 Nothing nearby.
 {%- endif %}

@@ -13,7 +13,7 @@ from data.constants import (
     ADDR_BADGES, ADDR_PLAYER_NAME, ADDR_PLAY_HOURS, ADDR_PLAY_MINUTES,
     ADDR_PLAY_SECONDS, MAP_NAMES, POKEMON_CHARMAP,
 )
-from adapters.display.ai_logger import AILogger
+from adapters.display.ai_logger import AILogger, print_metrics
 from adapters.openai_llm import CloudLLMError
 from domain.models import HUDState
 
@@ -125,6 +125,7 @@ class OverworldAIController:
         self._log.update_hud(hud)
 
         money = self._bag.read_money()
+        print_metrics()
         try:
             result = self._ai.decide(
                 map_name, pois, grid=grid, player_y=py, player_x=px,

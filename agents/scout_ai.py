@@ -51,8 +51,9 @@ class ScoutAI:
             HumanMessage(content=prompt),
         ]
 
-        _log.log_think(f"[Scout prompt]\n{prompt}")
+        _log.start_thinking()
         response = self._llm.invoke(messages)
+        _log.stop_thinking()
         decision = self._parse_decision(response.content)
 
         # Print reasoning
@@ -62,6 +63,7 @@ class ScoutAI:
 
         if decision:
             _log.log_think("Decision: CATCH! 🔴")
+            _log.log_stat("catch")
         else:
             _log.log_think("Decision: DEFEAT ⚔️")
 

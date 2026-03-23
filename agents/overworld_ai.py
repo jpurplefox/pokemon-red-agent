@@ -146,28 +146,31 @@ class OverworldAI:
         _log._action_count = self._iteration
         self._visited_maps.add(map_name)
 
-        # Build POI data with visit counts and directions
+        # Build POI data split into interactables and warps
         recent = self._history[-25:]
-        poi_data = []
+        interact_data = []
+        warp_data = []
         for i, poi in enumerate(pois):
             times = sum(1 for e in recent
                         if e.get("map") == map_name
                         and e.get("poi") == poi["label"])
             label = poi["label"]
             kind = poi["kind"]
-            if kind in ("exit", "warp", "connection"):
-                label = f"[Warp] \u2192 {label}"
-            dist = abs(poi["ty"] - player_y) + abs(poi["tx"] - player_x)
             is_warp = kind in ("exit", "warp", "connection")
-            poi_data.append({
+            dist = abs(poi["ty"] - player_y) + abs(poi["tx"] - player_x)
+            entry = {
                 "icon": _poi_icon(poi),
                 "label": label,
                 "dist": dist,
                 "times_recent": times,
                 "is_warp": is_warp,
                 "_orig_idx": i,
-            })
-        poi_data.sort(key=lambda p: p["dist"])
+            }
+            if is_warp:
+                warp_data.append(entry)
+            else:
+                interact_data.append(entry)
+        poi_data = interact_data + warp_data
 
         active = self.active_subgoal()
         completed = (self._reflect_ai.completed_subgoals()
@@ -178,7 +181,8 @@ class OverworldAI:
                                 active_subgoal=active)
         user_prompt = _render("overworld_state.j2",
                               map_name=map_name,
-                              pois=poi_data,
+                              interactables=interact_data,
+                              warps=warp_data,
                               visited_maps=sorted(self._visited_maps),
                               history=self._history[-25:],
                               active_subgoal=active,
@@ -209,7 +213,8 @@ class OverworldAI:
             response = self._llm.invoke(messages)
             _log.stop_thinking()
             text = response.content
-            result = self._parse_response(text, poi_data)
+            _log.log_console(text.strip())
+            result = self._parse_response(text, interact_data, warp_data)
             if result is not None:
                 return result
             attempt += 1
@@ -218,18 +223,20 @@ class OverworldAI:
             _log.log_think(f"  raw: {text.strip()}")
             messages.append(response)
             messages.append(HumanMessage(
-                content=f"ERROR: Invalid action. Valid POI numbers are 1 to {len(pois)}. "
-                        f"Respond with exactly: ACTION: GO:<number>"
+                content=f"ERROR: Invalid action. "
+                        f"Use INTERACT:1-{len(interact_data)} for NPCs/signs/items, "
+                        f"or GO:1-{len(warp_data)} for warps. "
+                        f"Respond with exactly: ACTION: INTERACT:<number> or ACTION: GO:<number>"
             ))
 
         # Max retries exhausted — return None to signal control back to user
         _log.log_think("(max retries — returning control to user)")
         return None
 
-    def _parse_response(self, text, poi_data):
+    def _parse_response(self, text, interact_data, warp_data):
         """Parse LLM response into an action tuple.
 
-        poi_data is sorted by distance and contains _orig_idx for mapping
+        interact_data/warp_data contain _orig_idx for mapping
         back to the original pois array.
         """
         think = ""
@@ -243,15 +250,31 @@ class OverworldAI:
                 continue
             action = line[7:].strip()
 
+            # INTERACT:<n> — interactable POI (NPC, sign, item)
+            if action.startswith("INTERACT:"):
+                try:
+                    num = int(action[9:].strip())
+                    idx = num - 1
+                    if 0 <= idx < len(interact_data):
+                        orig_idx = interact_data[idx]["_orig_idx"]
+                        if think:
+                            _log.log_think(think)
+                        _log.log_think(f"=> INTERACT with {interact_data[idx]['label']}")
+                        self._last_think = think
+                        return ("go", orig_idx)
+                except ValueError:
+                    pass
+
+            # GO:<n> — warp (exit, connection, stairs)
             if action.startswith("GO:"):
                 try:
                     num = int(action[3:].strip())
-                    idx = num - 1  # 1-indexed in prompt
-                    if 0 <= idx < len(poi_data):
-                        orig_idx = poi_data[idx]["_orig_idx"]
+                    idx = num - 1
+                    if 0 <= idx < len(warp_data):
+                        orig_idx = warp_data[idx]["_orig_idx"]
                         if think:
                             _log.log_think(think)
-                        _log.log_think(f"=> GO to {poi_data[idx]['label']}")
+                        _log.log_think(f"=> GO to {warp_data[idx]['label']}")
                         self._last_think = think
                         return ("go", orig_idx)
                 except ValueError:

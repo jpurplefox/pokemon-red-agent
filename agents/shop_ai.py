@@ -68,6 +68,7 @@ class ShopAI:
             _log.log_think(f"🛒 {think}")
 
         if purchases:
+            _log.log_stat("buys")
             for idx, qty in purchases:
                 _log.log_think(f"=> BUY {qty}x {items[idx]['name']}")
         else:

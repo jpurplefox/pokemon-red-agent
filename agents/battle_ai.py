@@ -26,10 +26,11 @@ def _render(template_name, **kwargs):
 
 
 class BattleAI:
-    def __init__(self, llm, scout=None):
+    def __init__(self, llm, scout=None, battle_reflect=None):
         self._llm = llm
         self._goal = None  # "defeat" or "catch"
         self._scout = scout
+        self._battle_reflect = battle_reflect
         self._team = []  # [{name, level, ...}] — updated from battle data
         self._history = []  # list of {"text": str, "player_hp": str, "enemy_hp": str}
 
@@ -95,46 +96,21 @@ class BattleAI:
                 _log.log_think("No Poke Balls — going for the win!")
 
     def on_battle_end(self, is_wild, result="unknown"):
-        """Called when a battle ends. Analyzes history for lessons learned."""
+        """Called when a battle ends. Delegates to BattleReflectAI."""
+        if result == "victory":
+            _log.log_stat("W")
+        elif result == "defeat":
+            _log.log_stat("L")
+        elif result == "caught":
+            _log.log_stat("C")
         if not self._history:
             return
-
-        battle_type = "Wild" if is_wild else "Trainer"
-        system_prompt = _render("battle_recap.j2")
-        user_prompt = _render("battle_recap_state.j2",
-                              battle_type=battle_type,
-                              result=result,
-                              history=self._history)
-
-        messages = [
-            SystemMessage(content=system_prompt),
-            HumanMessage(content=user_prompt),
-        ]
-        response = self._llm.invoke(messages)
-        text = response.content.strip()
-
-        # Parse LESSONS
-        _log.log_think("--- Lessons Learned ---")
-        in_lessons = False
-        has_lessons = False
-        for line in text.split("\n"):
-            stripped = line.strip()
-            if stripped.startswith("LESSONS:"):
-                rest = stripped[8:].strip()
-                if rest.lower() == "none":
-                    _log.log_think("Nothing new learned.")
-                    return
-                in_lessons = True
-                if rest.startswith("-"):
-                    _log.log_think(rest)
-                    has_lessons = True
-                continue
-            if in_lessons and stripped.startswith("-"):
-                _log.log_think(stripped)
-                has_lessons = True
-
-        if not has_lessons:
-            _log.log_think("Nothing new learned.")
+        if self._battle_reflect:
+            battle_type = "Wild" if is_wild else "Trainer"
+            self._battle_reflect.reflect(
+                self._history, battle_type, result,
+                enemy_name="",
+            )
 
     def choose_switch_in(self, party, alive_indices, is_wild, enemy=None):
         """Choose which pokemon to send after one fainted.
@@ -200,7 +176,9 @@ class BattleAI:
         ]
 
         for attempt in range(3):
+            _log.start_thinking()
             response = self._llm.invoke(messages)
+            _log.stop_thinking()
             choice_idx = self._parse_switch_response(
                 response.content, party, alive_indices, is_wild
             )
@@ -288,7 +266,9 @@ class BattleAI:
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
+        _log.start_thinking()
         response = self._llm.invoke(messages)
+        _log.stop_thinking()
         text = response.content
 
         for line in text.strip().split("\n"):
@@ -350,6 +330,7 @@ class BattleAI:
         last_text = ""
         for attempt in range(max_retries + 1):
             response = self._llm.invoke(messages)
+            _log.stop_thinking()
             last_text = response.content
             # Print reasoning to console for every attempt
             for line in last_text.strip().split("\n"):
@@ -379,7 +360,9 @@ class BattleAI:
             _log.log_retry()
             _log.log_think("(retry: tried to run from trainer)")
             messages.append(HumanMessage(content=error_msg))
+            _log.start_thinking()
             response = self._llm.invoke(messages)
+            _log.stop_thinking()
             text = response.content
             action, _ = self._parse_response(text, player, enemy, is_wild, balls)
 
@@ -469,11 +452,17 @@ class BattleAI:
         battle_type = "Wild" if is_wild else "Trainer (CANNOT RUN)"
         goal = self._goal.upper() if self._goal else None
 
+        # Get known type matchups from battle memory
+        known_matchups = []
+        if self._battle_reflect:
+            known_matchups = self._battle_reflect.get_memory_text()
+
         return _render("battle_state.j2",
                        battle_type=battle_type, goal=goal,
                        enemy=enemy_data, player=player_data,
                        balls=ball_strs, switchable=switchable,
-                       history=self._history)
+                       history=self._history,
+                       known_matchups=known_matchups)
 
     # ------------------------------------------------------------------
     # Response parsing

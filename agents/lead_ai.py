@@ -88,6 +88,7 @@ class LeadAI:
                         idx = int(action[7:].strip()) - 1
                         if idx in alive and idx != 0:
                             mon = party[idx]
+                            _log.log_stat("swap")
                             _log.log_think(f"=> New lead: {mon.nickname} Lv{mon.level}")
                             return idx
                     except ValueError:

@@ -34,3 +34,9 @@ Party (available to switch):
 {% for mon in switchable %}  - {{ mon.label }}{% if mon.types %} ({{ mon.types }}){% endif %} Lv{{ mon.level }} HP: {{ mon.hp }}/{{ mon.max_hp }}
 {% endfor %}
 {% endif %}
+{% if known_matchups %}
+--- Known Type Matchups ---
+{% for fact in known_matchups %}
+{{ fact }}
+{% endfor %}
+{% endif %}

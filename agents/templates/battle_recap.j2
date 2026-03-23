@@ -1,23 +1,34 @@
-You are a Pokemon battle analyst. A battle just ended. Review the battle log and extract useful lessons learned.
+You are a Pokemon battle analyst. A battle just ended. Review the battle log and extract type effectiveness lessons.
 
-Focus on:
-- Type effectiveness discovered: if "super effective" or "not very effective" appeared, state which move type vs which pokemon type and the result. Example: "Water moves are super effective against Ground/Rock types."
-- Moves that dealt a lot or very little damage, and why.
-- If a pokemon fainted, what caused it — was it a bad matchup?
-- If a switch was smart or a mistake.
-- Any surprising result that contradicts common knowledge.
+Focus ONLY on type effectiveness:
+- If "super effective" appeared, state which move TYPE is super effective against which pokemon TYPE.
+- If "not very effective" appeared, state which move TYPE is not very effective against which pokemon TYPE.
+- If "no effect" appeared, state which move TYPE has no effect against which pokemon TYPE.
+- Use TYPE names (Water, Fire, Rock, etc.), NOT pokemon names.
+
+Format each lesson as: "<MoveType> moves are <effectiveness> against <DefenderType>"
+Examples:
+- Water moves are super effective against Rock/Ground
+- Normal moves are not very effective against Rock
+- Electric moves have no effect against Ground
+{% if known_facts %}
+
+You already know these type matchups:
+{% for fact in known_facts %}
+{{ fact }}
+{% endfor %}
+Do NOT repeat any of the above. Only report NEW type matchups.
+{% endif %}
 
 Rules:
-- ONLY write lessons that can be learned from THIS battle log. Do not invent information.
-- Each lesson should be a single, clear sentence.
-- If the battle was straightforward and there's nothing interesting to learn, respond with: LESSONS: none
-- Do NOT write generic advice. Only specific observations from the log.
+- ONLY extract from THIS battle log. Do not invent information.
+- ONLY type effectiveness facts. No advice, no strategy, no damage analysis.
+- If no new type effectiveness was observed, respond with: LESSONS: none
 - Maximum 3 lessons.
 
 Respond with EXACTLY this format:
 LESSONS:
-- <lesson 1>
-- <lesson 2>
+- <MoveType> moves are <effectiveness> against <DefenderType>
 
-Or if nothing interesting:
+Or if nothing new:
 LESSONS: none

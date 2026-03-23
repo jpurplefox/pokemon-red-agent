@@ -6,28 +6,27 @@ You MUST focus on completing this sub-goal before working on your main goal.
 {% endif %}
 
 Rules:
-- Use GO:<number> to interact with a POI — talk to NPCs, read signs, or enter warps.
-- Warps (marked [Warp]) take you to other maps — use them to progress.
+- Use INTERACT:<number> to talk to NPCs, read signs, or pick up items.
+- Use GO:<number> to enter a warp and travel to another map.
 {%- if active_subgoal %}
 - Your sub-goal takes priority — choose actions that advance it.
 {%- else %}
 - Prioritize progressing toward your main goal after you've explored the current area.
 {%- endif %}
-- The game path: Pallet Town -> Route 1 -> Viridian City -> Route 2 -> Viridian Forest -> Pewter City (GYM 1) -> Route 3 -> Route 4 -> Mt. Moon -> Cerulean City (GYM 2) -> Route 24 -> Route 25 -> Route 5 -> Underground Path -> Route 6 -> Vermilion City (GYM 3) -> Route 11 -> Diglett's Cave -> Route 2 -> Cerulean City -> Route 9 -> Route 10 -> Rock Tunnel -> Lavender Town -> Route 8 -> Underground Path -> Celadon City (GYM 4) -> Rocket Hideout -> Pokémon Tower -> Saffron City (GYM 6) -> Route 12 -> Route 13 -> Route 14 -> Route 15 -> Fuchsia City (GYM 5) -> Safari Zone -> Route 19 -> Route 20 -> Seafoam Islands -> Cinnabar Island (GYM 7) -> Route 21 -> Pallet Town -> Viridian City (GYM 8) -> Route 22 -> Route 23 -> Victory Road -> Indigo Plateau (Elite Four).
-- POIs marked ⚠️ VISITED have been interacted with recently — skip them, they will say the same thing again.
-- Before using a warp to leave the current map, interact with any unvisited NPCs, signs, or items nearby — they may have useful info or rewards.
-- When choosing between warps, prefer the one that is FARTHER away — it likely leads to a new area you haven't explored yet.
+- Interactables marked ⚠️ VISITED have been interacted with recently — skip them, they will say the same thing again.
+- Before using GO to leave the current map, INTERACT with any unvisited NPCs, signs, or items first — they may have useful info or rewards.
+- When choosing between warps, prefer the one that is farther away — it likely leads to a new area you haven't explored yet.
 - If you're unsure where to go, talk to NPCs and read signs — they often give directions and hints.
 - If your team's HP is low (⚠️ LOW or ⚠️ CRITICAL), go to a Pokémon Center and talk to the Nurse to heal your team before continuing.
-- If Poké Balls are ⚠️ LOW and you have enough money, go to a Poké Mart and talk to the Clerk to buy more.
+- If Poké Balls are ⚠️ LOW and you have enough money, consider visiting a Poké Mart and talk to the Clerk to buy more.
 
 Respond with EXACTLY two lines (no extra text):
 THINK: <1-2 sentences about what you want to do and why>
-ACTION: GO:<number>
+ACTION: INTERACT:<number> or GO:<number>
 
 Examples:
 THINK: I see an exit to Route 1 which leads toward my goal. I've explored everything here.
 ACTION: GO:1
 
 THINK: There's an NPC I haven't talked to yet. They might have useful info.
-ACTION: GO:3
+ACTION: INTERACT:2

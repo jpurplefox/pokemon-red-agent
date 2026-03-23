@@ -125,6 +125,7 @@ class ReflectAI:
             }
             self._subgoals.append(new_sg)
             self._save_subgoals()
+            _log.log_stat("goals")
             msg = f"🎯 New sub-goal: {subgoal_desc}"
             print(f"  {_GREEN}OW: {msg}{_RESET}")
             _log.log_event(msg, "memory")
