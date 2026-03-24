@@ -54,10 +54,11 @@ class ScoutAI:
         _log.start_thinking()
         response = self._llm.invoke(messages)
         _log.stop_thinking()
-        decision = self._parse_decision(response.content)
+        content = response.content or ""
+        decision = self._parse_decision(content)
 
         # Print reasoning
-        for line in response.content.strip().split("\n"):
+        for line in content.strip().split("\n"):
             if line.strip().startswith("THINK:"):
                 _log.log_think(line.strip()[6:].strip())
 

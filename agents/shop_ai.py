@@ -42,7 +42,7 @@ class ShopAI:
 
         messages = [HumanMessage(content=user_prompt)]
         response = self._llm.invoke(messages)
-        text = response.content
+        text = response.content or ""
 
         if _DEBUG_PROMPTS:
             _log.log_response("SHOP", text)

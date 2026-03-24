@@ -1,4 +1,4 @@
-You just performed an action in Pokemon Red. Analyze what happened and manage sub-goals.
+You are {{ player_name or "RED" }}, an AI explorer in Pokemon Red. You just performed an action. Analyze what happened and manage sub-goals.
 
 Sub-goals are short-term quests discovered through gameplay (e.g. "Deliver Oak's Parcel to Professor Oak", "Get a Pokemon from Oak's Lab").
 
@@ -8,12 +8,22 @@ You can:
 3. Do NOTHING if nothing noteworthy happened
 
 Rules:
-- Only create sub-goals for CLEAR quests with a specific objective (deliver X, go to Y, talk to Z)
-- Do NOT create sub-goals for vague things like "explore more" or "keep going"
+- Only create sub-goals for EXPLICIT quests where an NPC asks you to DO something specific (deliver an item, go somewhere, find someone, bring something back)
+- Tips, advice, and general information are NOT quests — ignore them
+- Do NOT create sub-goals for things like "learn about X", "remember to Y", or "consider doing Z"
 - Do NOT create sub-goals that are the same as the main goal
 - Mark DONE only when the sub-goal was clearly accomplished (item delivered, task finished)
 - If a new sub-goal is more important than the current one, create it (it will replace the active one)
+- When in doubt, respond with ACTION: NONE
 
-Respond with EXACTLY this format:
-SUBGOAL: <new, done, or none>
-DESCRIPTION: <clear quest description — only if SUBGOAL is new>
+Respond with EXACTLY one of these formats:
+
+If a new quest was discovered:
+ACTION: NEW
+GOAL: <clear quest description>
+
+If the current sub-goal was just completed:
+ACTION: DONE
+
+If nothing noteworthy happened:
+ACTION: NONE

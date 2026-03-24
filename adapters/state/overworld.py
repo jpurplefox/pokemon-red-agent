@@ -144,12 +144,25 @@ class OverworldScanner:
 
     @staticmethod
     def _disambiguate_labels(pois, py, px):
-        """Add compass directions to POIs that share the same label."""
+        """Add compass directions to POIs that share the same label.
+
+        Uses the map center as reference (not the player) so labels stay
+        stable as the player moves around the map.
+        """
         from collections import Counter
 
+        # Use map center as reference so labels don't change with player position
+        if pois:
+            all_y = [p["ty"] for p in pois]
+            all_x = [p["tx"] for p in pois]
+            cy = (min(all_y) + max(all_y)) // 2
+            cx = (min(all_x) + max(all_x)) // 2
+        else:
+            cy, cx = py, px
+
         def _compass(p):
-            dy = p["ty"] - py
-            dx = p["tx"] - px
+            dy = p["ty"] - cy
+            dx = p["tx"] - cx
             ns = "south" if dy > 0 else "north" if dy < 0 else ""
             ew = "east" if dx > 0 else "west" if dx < 0 else ""
             if abs(dy) >= abs(dx):
@@ -157,8 +170,8 @@ class OverworldScanner:
             return ew or ns
 
         def _compass_full(p):
-            dy = p["ty"] - py
-            dx = p["tx"] - px
+            dy = p["ty"] - cy
+            dx = p["tx"] - cx
             ns = "north" if dy < 0 else "south" if dy > 0 else ""
             ew = "west" if dx < 0 else "east" if dx > 0 else ""
             if ns and ew:

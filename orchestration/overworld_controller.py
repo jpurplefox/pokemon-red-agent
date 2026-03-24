@@ -36,6 +36,7 @@ class OverworldAIController:
         self._paused = False
         self._pending_poi = None  # POI to resume after battle interrupt
         self._pending_map = None  # Map ID where the interrupt happened
+        self._last_player_name = ""
 
     @property
     def paused(self):
@@ -106,6 +107,7 @@ class OverworldAIController:
             if tile == 0x50:
                 break
             player_name += POKEMON_CHARMAP.get(tile, "")
+        self._last_player_name = player_name
         hours = mem[ADDR_PLAY_HOURS] | (mem[ADDR_PLAY_HOURS + 1] << 8)
         minutes = mem[ADDR_PLAY_MINUTES]
         seconds = mem[ADDR_PLAY_SECONDS]
@@ -131,6 +133,7 @@ class OverworldAIController:
                 map_name, pois, grid=grid, player_y=py, player_x=px,
                 party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
                 money=money, badges=mem[ADDR_BADGES],
+                player_name=player_name,
             )
         except CloudLLMError:
             self.pause()
@@ -214,6 +217,7 @@ class OverworldAIController:
             self._ai.reflect(
                 map_name, action_desc,
                 result=result_desc, dialogue=dialogue,
+                player_name=self._last_player_name,
             )
 
     def record_battle(self, summary, map_name):
@@ -226,4 +230,5 @@ class OverworldAIController:
         self._ai.reflect(
             map_name, action_desc,
             result=summary['result'],
+            player_name=self._last_player_name,
         )

@@ -87,7 +87,7 @@ class BattleReflectAI:
             HumanMessage(content=user_prompt),
         ]
         response = self._llm.invoke(messages)
-        text = response.content.strip()
+        text = (response.content or "").strip()
 
         _log.log_response("BATTLE-REFLECT", text)
 

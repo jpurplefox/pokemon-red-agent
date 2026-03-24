@@ -180,7 +180,7 @@ class BattleAI:
             response = self._llm.invoke(messages)
             _log.stop_thinking()
             choice_idx = self._parse_switch_response(
-                response.content, party, alive_indices, is_wild
+                response.content or "", party, alive_indices, is_wild
             )
             if choice_idx is not None:
                 return choice_idx
@@ -269,7 +269,7 @@ class BattleAI:
         _log.start_thinking()
         response = self._llm.invoke(messages)
         _log.stop_thinking()
-        text = response.content
+        text = response.content or ""
 
         for line in text.strip().split("\n"):
             if line.strip().startswith("THINK:"):
@@ -331,7 +331,7 @@ class BattleAI:
         for attempt in range(max_retries + 1):
             response = self._llm.invoke(messages)
             _log.stop_thinking()
-            last_text = response.content
+            last_text = response.content or ""
             # Print reasoning to console for every attempt
             for line in last_text.strip().split("\n"):
                 if line.strip().startswith("THINK:"):
@@ -363,7 +363,7 @@ class BattleAI:
             _log.start_thinking()
             response = self._llm.invoke(messages)
             _log.stop_thinking()
-            text = response.content
+            text = response.content or ""
             action, _ = self._parse_response(text, player, enemy, is_wild, balls)
 
         self._log_action(action)

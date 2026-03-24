@@ -51,22 +51,20 @@ class BattleHandler:
 
     def notify_battle_end(self):
         """Notify the strategy that the battle ended so it can recap."""
-        # Determine result from last turn context
         result = "unknown"
+
+        # Scan full history text for result clues
         history = self._strategy.get_history()
-        if history:
-            last_text = history[-1].get("text", "").lower()
-            if "got" in last_text and "for winning" in last_text:
-                result = "victory"
-            elif "fainted" in last_text:
-                if "enemy" in last_text:
-                    result = "victory"
-                else:
-                    result = "defeat"
-            elif "got away" in last_text or "ran" in last_text:
-                result = "fled"
-            elif "gotcha" in last_text or "was caught" in last_text:
-                result = "caught"
+        full_text = " ".join(h.get("text", "") for h in history).lower()
+
+        if self._was_defeat or "blacked out" in full_text:
+            result = "defeat"
+        elif "gotcha" in full_text or "was caught" in full_text:
+            result = "caught"
+        elif "got away" in full_text or "ran away" in full_text:
+            result = "fled"
+        else:
+            result = "victory"
 
         is_wild = self._last_was_wild
         enemy_pokemon = self._enemy_name
@@ -108,6 +106,7 @@ class BattleHandler:
         active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
         self._strategy.set_team(self._state.read_party(), active_idx)
         self._last_was_wild = self.is_wild()
+        self._was_defeat = False
         enemy = self._state.read_enemy()
         self._enemy_name = enemy.name
         # Extract trainer name from intro text (e.g. "FOLAGOR wants to fight!")
@@ -281,7 +280,8 @@ class BattleHandler:
             indices.append(i)
 
         if not options:
-            # No alive pokemon left — select NO to end
+            # No alive pokemon left — battle is a defeat
+            self._was_defeat = True
             self._pyboy.button("down")
             self._pyboy.tick(10)
             self._pyboy.button("a")

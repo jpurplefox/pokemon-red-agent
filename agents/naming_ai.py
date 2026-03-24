@@ -186,8 +186,9 @@ class NamingAI:
 
         for attempt in range(3):
             response = self._llm.invoke(messages)
-            name = self._parse_name(response.content)
-            _log.log_response("NAMING", response.content)
+            content = response.content or ""
+            name = self._parse_name(content)
+            _log.log_response("NAMING", content)
             if name:
                 _log.log_think(f"Nickname → {name}")
                 return name

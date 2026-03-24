@@ -29,20 +29,34 @@ CLOUD_MODELS = {
 }
 
 
-def _parse_model_flag(args):
-    """Extract --model <name> from args. Returns (model_id, remaining_flags)."""
+LOCAL_MODELS = {
+    "qwen2.5-7b":  "mlx-community/Qwen2.5-7B-Instruct-4bit",
+    "qwen2.5-14b": "mlx-community/Qwen2.5-14B-Instruct-4bit",
+    "qwen3-14b":   "mlx-community/Qwen3-14B-4bit",
+    "qwen3.5-9b":  "mlx-community/Qwen3.5-9B-4bit",
+}
+
+DEFAULT_LOCAL_MODEL = "mlx-community/Qwen2.5-7B-Instruct-4bit"
+
+
+def _parse_flags(args):
+    """Extract --model <name> and --local <name> from args."""
     flags = set()
-    model = None
+    cloud_model = None
+    local_model = None
     args_list = list(args)
     i = 0
     while i < len(args_list):
         if args_list[i] == "--model" and i + 1 < len(args_list):
-            model = args_list[i + 1]
+            cloud_model = args_list[i + 1]
+            i += 2
+        elif args_list[i] == "--local" and i + 1 < len(args_list):
+            local_model = args_list[i + 1]
             i += 2
         else:
             flags.add(args_list[i])
             i += 1
-    return model, flags
+    return cloud_model, local_model, flags
 
 
 if __name__ == "__main__":
@@ -51,7 +65,7 @@ if __name__ == "__main__":
     overworld_ai = None
     lead_ai = None
     shop_ai = None
-    model_name, flags = _parse_model_flag(sys.argv[1:])
+    cloud_model, local_model, flags = _parse_flags(sys.argv[1:])
 
     raw_pyboy = PyBoy(ROM, sound_emulated="--mute" not in flags)
     pyboy = PyBoyWrapper(raw_pyboy)
@@ -60,9 +74,10 @@ if __name__ == "__main__":
     start_ai_window()
 
     if flags & {"--ai", "--naming", "--shop"}:
-        print("Loading MLX model...")
+        local_id = LOCAL_MODELS.get(local_model, local_model) if local_model else DEFAULT_LOCAL_MODEL
+        print(f"Loading local model: {local_id}")
         raw_llm = MLXLLM(
-            model_name="mlx-community/Qwen3-14B-4bit",
+            model_name=local_id,
             temperature=0.3,
         )
         llm = TickingLLM(raw_llm, pyboy)
@@ -76,8 +91,8 @@ if __name__ == "__main__":
         reflect_ai = ReflectAI(llm=llm)
 
         # Overworld LLM: cloud via --model, or local MLX by default
-        if model_name:
-            model_id = CLOUD_MODELS.get(model_name, model_name)
+        if cloud_model:
+            model_id = CLOUD_MODELS.get(cloud_model, cloud_model)
             cloud_llm = OpenAILLM(
                 model=model_id,
                 base_url="https://openrouter.ai/api/v1",

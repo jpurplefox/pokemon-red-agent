@@ -73,11 +73,13 @@ class ReflectAI:
         """Persist sub-goals to disk."""
         self._subgoals_file.write_text(json.dumps(self._subgoals, indent=2))
 
-    def reflect(self, map_name, action, result="", dialogue=""):
+    def reflect(self, map_name, action, result="", dialogue="",
+                player_name=""):
         """Ask the LLM to reflect and detect/complete sub-goals."""
         active = self.active_subgoal()
 
-        system_prompt = _render("overworld_reflect.j2")
+        system_prompt = _render("overworld_reflect.j2",
+                                player_name=player_name)
         user_prompt = _render("overworld_reflect_state.j2",
                               map_name=map_name,
                               action=action,
@@ -95,7 +97,7 @@ class ReflectAI:
             HumanMessage(content=user_prompt),
         ]
         response = self._llm.invoke(messages)
-        text = response.content
+        text = response.content or ""
 
         if _DEBUG_PROMPTS:
             _log.log_response("REFLECT", text)
@@ -105,10 +107,10 @@ class ReflectAI:
         subgoal_desc = ""
         for line in text.strip().split("\n"):
             line = line.strip()
-            if line.startswith("SUBGOAL:"):
-                subgoal_action = line[8:].strip().lower()
-            elif line.startswith("DESCRIPTION:"):
-                subgoal_desc = line[12:].strip()
+            if line.startswith("ACTION:"):
+                subgoal_action = line[7:].strip().lower()
+            elif line.startswith("GOAL:"):
+                subgoal_desc = line[5:].strip()
 
         if subgoal_action == "new" and subgoal_desc:
             if active and active["description"].lower() == subgoal_desc.lower():

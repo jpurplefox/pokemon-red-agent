@@ -56,8 +56,9 @@ class LeadAI:
 
         for attempt in range(3):
             response = self._llm.invoke(messages)
-            _log.log_response("LEAD", response.content)
-            result = self._parse_response(response.content, party, alive)
+            content = response.content or ""
+            _log.log_response("LEAD", content)
+            result = self._parse_response(content, party, alive)
             if result is not None:
                 return result
             _log.log_retry()

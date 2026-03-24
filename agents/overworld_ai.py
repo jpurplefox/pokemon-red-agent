@@ -82,11 +82,13 @@ class OverworldAI:
     # Reflect — delegated to ReflectAI
     # ------------------------------------------------------------------
 
-    def reflect(self, map_name, action, result="", dialogue=""):
+    def reflect(self, map_name, action, result="", dialogue="",
+                player_name=""):
         """Delegate reflection to the ReflectAI agent."""
         if self._reflect_ai:
             self._reflect_ai.iteration = self._iteration
-            self._reflect_ai.reflect(map_name, action, result, dialogue)
+            self._reflect_ai.reflect(map_name, action, result, dialogue,
+                                     player_name=player_name)
 
     # ------------------------------------------------------------------
     # History
@@ -140,7 +142,7 @@ class OverworldAI:
 
     def decide(self, map_name, pois, grid=None, player_y=0, player_x=0,
                party=None, pokeballs=0, has_pokedex=False,
-               money=0, badges=0):
+               money=0, badges=0, player_name=""):
         """Ask the LLM what to do next in the overworld."""
         self._iteration += 1
         _log._action_count = self._iteration
@@ -178,7 +180,8 @@ class OverworldAI:
 
         system_prompt = _render("overworld_system.j2",
                                 goal=self.goal,
-                                active_subgoal=active)
+                                active_subgoal=active,
+                                player_name=player_name)
         user_prompt = _render("overworld_state.j2",
                               map_name=map_name,
                               interactables=interact_data,
@@ -212,7 +215,7 @@ class OverworldAI:
             _log.start_thinking()
             response = self._llm.invoke(messages)
             _log.stop_thinking()
-            text = response.content
+            text = response.content or ""
             _log.log_console(text.strip())
             result = self._parse_response(text, interact_data, warp_data)
             if result is not None:

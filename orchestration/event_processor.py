@@ -147,6 +147,7 @@ class EventProcessor:
 
     def _handle_choice_menu(self, options):
         """Prompt the user for a choice menu detected on screen."""
+        print(f"  [debug-menu] options={options} auto_accept={self.auto_accept}")
         # Exiting mart — dismiss any remaining menus (item list or BUY/SELL)
         if self._exiting_mart:
             self._pyboy.button("b")
