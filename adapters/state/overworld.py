@@ -20,6 +20,13 @@ from adapters.state.walkability import WalkabilityGrid
 from adapters.state.poi_disambiguator import dedup_warps, disambiguate_labels
 from adapters.state.sprite_resolver import SpriteResolver
 
+# Fixed POIs for maps where interactables can't be auto-detected
+_FIXED_POIS = {
+    0x58: [  # Bill's House — PC on the desk
+        {"label": "PC", "ty": 4, "tx": 1, "kind": "sign"},
+    ],
+}
+
 # Broken warps: (map_id, warp_index) — warps that are reachable but don't work
 _BROKEN_WARPS = {
     (0x2F, 0),  # Viridian Forest North Gate — left door to Route 2
@@ -49,6 +56,12 @@ class OverworldScanner:
         all_pois = []
         all_pois.extend(self._scan_warps(py, px))
         all_pois.extend(self._scan_blocks(py, px))
+        # Fixed POIs for maps with non-detectable interactables
+        map_id = self._pyboy.memory[ADDR_MAP_N]
+        for fp in _FIXED_POIS.get(map_id, []):
+            poi = dict(fp)
+            poi["dir"] = self._relative_dir(py, px, poi["ty"], poi["tx"])
+            all_pois.append(poi)
         all_pois.extend(self._scan_sprites(py, px))
         all_pois.extend(self._scan_connections(py, px))
 
