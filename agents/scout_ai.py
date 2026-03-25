@@ -7,7 +7,7 @@ and avoid redundancy.
 
 from langchain_core.messages import SystemMessage, HumanMessage
 from data.pokemon_data import POKEMON_TYPES
-from agents.naming_ai import EVOLUTION_LINES
+from data.constants import EVOLUTION_LINES
 from adapters.display.ai_logger import AILogger
 
 _log = AILogger("SCOUT")

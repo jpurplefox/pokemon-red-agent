@@ -6,7 +6,6 @@ turn sequencing, switch handling, and strategy dispatch.
 Dependencies injected via constructor (DIP).
 """
 
-from data.constants import ADDR_PLAYER_MON_NUMBER
 from adapters.display.console import prompt_menu, _input_fn
 from adapters.state.battle_state_reader import BattleStateReader
 from adapters.state.bag_reader import BagReader
@@ -103,7 +102,7 @@ class BattleHandler:
                 print(f"\n{clean.strip()}")
 
         # Update strategy with current team roster and notify of battle start
-        active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
+        active_idx = self._state.active_mon_index()
         self._strategy.set_team(self._state.read_party(), active_idx)
         self._last_was_wild = self.is_wild()
         self._was_defeat = False
@@ -162,7 +161,7 @@ class BattleHandler:
 
         # Show party
         party = self._state.read_party()
-        active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
+        active_idx = self._state.active_mon_index()
         if len(party) > 1:
             print("  Party:")
             for i, mon in enumerate(party):
@@ -209,7 +208,7 @@ class BattleHandler:
         player = self._state.read_player()
         enemy = self._state.read_enemy()
         balls = self.get_balls() if self.is_wild() else []
-        active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
+        active_idx = self._state.active_mon_index()
 
         # Refresh party data so strategy has current info
         self._strategy.set_team(self._state.read_party(), active_idx)
@@ -260,7 +259,7 @@ class BattleHandler:
 
         party = self._state.read_party()
         player = self._state.read_player()
-        active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
+        active_idx = self._state.active_mon_index()
 
         # Build options: alive non-active party members
         options = []
@@ -344,7 +343,7 @@ class BattleHandler:
         """
 
         party = self._state.read_party()
-        active_idx = self._pyboy.memory[ADDR_PLAYER_MON_NUMBER]
+        active_idx = self._state.active_mon_index()
 
         # Build switchable list
         indices = []

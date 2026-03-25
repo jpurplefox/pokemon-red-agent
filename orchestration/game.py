@@ -9,7 +9,7 @@ from data.constants import (
     ADDR_MAP_N, ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH, MAP_NAMES,
     ADDR_Y_COORD, ADDR_X_COORD, ADDR_BADGES, ADDR_PLAYER_NAME,
     ADDR_PLAY_HOURS, ADDR_PLAY_MINUTES, ADDR_PLAY_SECONDS,
-    ADDR_CURRENT_MENU, POKEMON_CHARMAP,
+    POKEMON_CHARMAP,
 )
 from domain.models import HUDState
 from adapters.state.screen import ScreenReader
@@ -446,7 +446,7 @@ class Game:
         self._pyboy.tick(40)
 
         # Navigate party list to the target pokemon
-        current = self._pyboy.memory[ADDR_CURRENT_MENU]
+        current = self._menu.cursor_position()
         diff = selected_idx - current
         if diff > 0:
             for _ in range(diff):
@@ -477,7 +477,7 @@ class Game:
         self._pyboy.tick(40)
 
         # Pick the swap target: navigate to position 0 (the lead)
-        current = self._pyboy.memory[ADDR_CURRENT_MENU]
+        current = self._menu.cursor_position()
         for _ in range(current):
             self._pyboy.button("up")
             self._pyboy.tick(10)

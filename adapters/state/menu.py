@@ -11,6 +11,10 @@ class MenuReader:
         self._pyboy = pyboy
         self._screen = screen
 
+    def cursor_position(self):
+        """Return the current menu cursor index (0-based)."""
+        return self._pyboy.memory[ADDR_CURRENT_MENU]
+
     def get_options(self):
         """Read current menu options from wTileMap. Returns list of strings."""
         menu_y = self._pyboy.memory[ADDR_MENU_Y]
