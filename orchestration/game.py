@@ -34,8 +34,8 @@ from adapters.display.console import (
 
 class Game:
     def __init__(self, pyboy, rom_path=None, battle_strategy=None,
-                 naming_ai=None, overworld_ai=None, lead_ai=None,
-                 shop_ai=None):
+                 naming_ai=None, move_ai=None, overworld_ai=None,
+                 lead_ai=None, shop_ai=None):
         self._pyboy = pyboy
         self._lead_ai = lead_ai
         # All console input() calls will tick the emulator while waiting
@@ -71,7 +71,7 @@ class Game:
         self._battle = BattleHandler(
             self._pyboy, self._screen, self._menu, self._dialogue,
             strategy=battle_strategy, naming_ai=naming_ai,
-            bag_reader=self._bag,
+            move_ai=move_ai, bag_reader=self._bag,
         )
         self._debug = DebugScanner(self._pyboy, self._scanner)
         self._overworld_ai = overworld_ai

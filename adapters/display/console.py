@@ -178,3 +178,17 @@ def render_map(pois, py, px, grid, visit_counts=None, legend=True, ledges=None):
 def print_map(pois, py, px, grid, ledges=None):
     """Display an ASCII map with numbered POI icons and a legend."""
     print(render_map(pois, py, px, grid, ledges=ledges))
+
+
+def format_move(move):
+    """Format a move dict for display (name, type, power, PP, category, desc)."""
+    parts = [move["name"]]
+    if move.get("type"):
+        parts.append(f"[{move['type']}]")
+    parts.append(f"Pow:{move.get('power', 0)}")
+    parts.append(f"PP:{move.get('pp', 0)}")
+    if move.get("category"):
+        parts.append(f"({move['category']})")
+    if move.get("desc"):
+        parts.append(f"— {move['desc']}")
+    return " ".join(parts)

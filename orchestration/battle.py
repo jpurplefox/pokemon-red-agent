@@ -6,15 +6,16 @@ turn sequencing, switch handling, and strategy dispatch.
 Dependencies injected via constructor (DIP).
 """
 
-from adapters.display.console import prompt_menu, _input_fn
+from adapters.display.console import prompt_menu, format_move, _input_fn
 from adapters.state.battle_state_reader import BattleStateReader
 from adapters.state.bag_reader import BagReader
 from adapters.input.battle_menu_driver import BattleMenuDriver
+from data.pokemon_data import enrich_move
 
 
 class BattleHandler:
     def __init__(self, pyboy, screen, menu, dialogue, strategy=None,
-                 naming_ai=None, bag_reader=None):
+                 naming_ai=None, move_ai=None, bag_reader=None):
         self._pyboy = pyboy
         self._screen = screen
         self._menu = menu
@@ -23,6 +24,7 @@ class BattleHandler:
         self._driver = BattleMenuDriver(pyboy, screen)
         self._strategy = strategy or ManualStrategy()
         self._naming_ai = naming_ai
+        self._move_ai = move_ai
         self._bag = bag_reader
         self._last_was_wild = True
         self._enemy_name = "unknown"
@@ -246,6 +248,120 @@ class BattleHandler:
             self._driver.wait_for_move_menu(player.moves)
             self._driver.select_move(move_idx)
 
+    def _handle_move_learning(self, text):
+        """Handle the 'trying to learn a new move' event.
+
+        Returns True if battle continues, False if it ended.
+        """
+        import re
+        # Extract new move name from dialogue
+        # Patterns: "trying to learn BITE" or "make room for BITE"
+        match = re.search(r"(?:trying to learn|room for)\s+([A-Z][A-Z \-']+)",
+                          text, re.IGNORECASE)
+        new_move_name = match.group(1).strip().upper() if match else "UNKNOWN"
+
+        # Read current moves from the active pokemon
+        player = self._state.read_player()
+        current_moves = [enrich_move(m.name, m.pp) for m in player.moves if m.name]
+        new_move = enrich_move(new_move_name)
+
+        # Decide: AI or manual
+        forget_move = None
+        if self._move_ai:
+            species = player.name
+            forget_move = self._move_ai.decide(species, new_move, current_moves)
+
+        if forget_move is None:
+            # Manual mode or AI failed — show detailed menu
+            print(f"\n--- Learn {new_move_name}? ---")
+            print(f"  New: {format_move(new_move)}")
+            print(f"\n  Current moves:")
+            options = []
+            for i, m in enumerate(current_moves, 1):
+                label = f"Forget {m['name']} — {format_move(m)}"
+                options.append(label)
+            skip_label = f"Don't learn {new_move_name}"
+            options.append(skip_label)
+            choice = prompt_menu(options)
+            if choice == skip_label:
+                forget_move = ""
+            else:
+                # Extract move name from "Forget TACKLE — ..."
+                forget_move = choice.split(" — ")[0].replace("Forget ", "")
+
+        # Navigate the in-game menu
+        if forget_move == "":
+            # Don't learn — select NO or press B
+            self._pyboy.button("b")
+            self._pyboy.tick(30)
+            # May need a second B to dismiss "did not learn" text
+            for _ in range(5):
+                self._pyboy.tick(20)
+                if self._screen.read_text_box():
+                    self._pyboy.button("a")
+                    self._pyboy.tick(20)
+        else:
+            # Learn the move — need to select YES on "Delete an older move?"
+            # First, wait for and find the YES/NO menu
+            for _ in range(20):
+                options = self._menu.read_choice_menu()
+                if options:
+                    break
+                self._pyboy.button("a")
+                self._pyboy.tick(20)
+
+            if options:
+                # Select YES (first option)
+                for _ in range(10):
+                    self._pyboy.button("up")
+                    self._pyboy.tick(5)
+                self._pyboy.button("a")
+                self._pyboy.tick(60)
+
+            # Now wait for the move selection screen to appear
+            # The game shows all 4 moves — we need to pick which to forget
+            self._pyboy.tick(30)
+
+            # Find which move index to forget
+            move_idx = 0
+            for i, m in enumerate(current_moves):
+                if m["name"].upper() == forget_move.upper():
+                    move_idx = i
+                    break
+
+            # Navigate to the move — first go all the way up to reset cursor
+            for _ in range(5):
+                self._pyboy.button("up")
+                self._pyboy.tick(8)
+            # Then go down to target
+            for _ in range(move_idx):
+                self._pyboy.button("down")
+                self._pyboy.tick(10)
+            self._pyboy.button("a")
+            self._pyboy.tick(60)
+
+            # Advance any remaining dialogue ("Forget [move]? / 1, 2, 3, Poof!")
+            for _ in range(20):
+                self._pyboy.tick(20)
+                confirm_options = self._menu.read_choice_menu()
+                if confirm_options:
+                    # "Forget [move]?" YES/NO confirmation
+                    for _ in range(10):
+                        self._pyboy.button("up")
+                        self._pyboy.tick(5)
+                    self._pyboy.button("a")
+                    self._pyboy.tick(30)
+                    continue
+                text_now = self._screen.read_text_box()
+                if text_now:
+                    self._pyboy.button("a")
+                    self._pyboy.tick(20)
+                else:
+                    break
+
+        self._pyboy.tick(60)
+        return self.is_in_battle()
+
     def _handle_fainted_switch(self):
         """Handle switching after a party pokemon fainted.
 
@@ -445,9 +561,18 @@ class BattleHandler:
         # Wait a bit for menu to fully render
         self._pyboy.tick(30)
 
-        # Detect nickname prompt: YES/NO choice or naming keyboard
+        # Detect what kind of event this is
         text = self._screen.read_text_box() or ""
         lower_text = text.lower()
+
+        # Move learning prompt
+        is_move_learning = ("trying to learn" in lower_text or
+                            "older move" in lower_text or
+                            "make room for" in lower_text)
+        if is_move_learning:
+            return self._handle_move_learning(text)
+
+        # Nickname prompt
         is_nickname_prompt = "nickname" in lower_text
         is_naming_keyboard = "lower case" in lower_text or "upper case" in lower_text
 

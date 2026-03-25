@@ -8,6 +8,7 @@ from adapters.ticking_llm import TickingLLM
 from adapters.mlx_llm import MLXLLM
 from adapters.openai_llm import OpenAILLM
 from agents.naming_ai import NamingAI
+from agents.move_ai import MoveAI
 from agents.battle_ai import BattleAI
 from agents.battle_reflect_ai import BattleReflectAI
 from agents.scout_ai import ScoutAI
@@ -63,6 +64,7 @@ def _parse_flags(args):
 if __name__ == "__main__":
     strategy = None
     naming_ai = None
+    move_ai = None
     overworld_ai = None
     lead_ai = None
     shop_ai = None
@@ -83,7 +85,8 @@ if __name__ == "__main__":
         )
         llm = TickingLLM(raw_llm, pyboy)
         naming_ai = NamingAI(llm=llm)
-        print("Naming AI enabled (MLX)")
+        move_ai = MoveAI(llm=llm)
+        print("Naming AI + Move AI enabled (MLX)")
 
     if "--ai" in flags:
         scout = ScoutAI(llm=llm)
@@ -118,4 +121,5 @@ if __name__ == "__main__":
         print("Shop AI enabled (manual overworld control)")
 
     Game(pyboy, rom_path=ROM, battle_strategy=strategy, naming_ai=naming_ai,
-         overworld_ai=overworld_ai, lead_ai=lead_ai, shop_ai=shop_ai).run()
+         move_ai=move_ai, overworld_ai=overworld_ai, lead_ai=lead_ai,
+         shop_ai=shop_ai).run()
