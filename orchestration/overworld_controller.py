@@ -127,13 +127,14 @@ class OverworldAIController:
         self._log.update_hud(hud)
 
         money = self._bag.read_money()
+        key_items = self._bag.get_key_items()
         print_metrics()
         try:
             result = self._ai.decide(
                 map_name, pois, grid=grid, player_y=py, player_x=px,
                 party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
                 money=money, badges=mem[ADDR_BADGES],
-                player_name=player_name,
+                player_name=player_name, key_items=key_items,
             )
         except CloudLLMError:
             self.pause()
@@ -188,9 +189,10 @@ class OverworldAIController:
             self.pause()
             return
 
-        # If a battle or event interrupted the walk mid-path, save POI to resume
+        # If a battle interrupted the walk mid-path, save POI to resume
         # (keep blocked tiles for the resume)
-        if self._battle.is_in_battle() or result.get("mid_walk_interrupt"):
+        # Only resume for battles — NPC dialogue interrupts are not resumable
+        if self._battle.is_in_battle():
             self._pending_poi = poi
             self._pending_map = mem[ADDR_MAP_N]
             return
@@ -205,6 +207,8 @@ class OverworldAIController:
         if result.get("map_changed"):
             action_desc = f"Went to {poi['label']}"
             result_desc = f"Arrived at {new_map_name}"
+            if dialogue:
+                result_desc += f" {dialogue}"
         else:
             action_desc = f"Interacted with {poi['label']}"
             result_desc = dialogue or ""

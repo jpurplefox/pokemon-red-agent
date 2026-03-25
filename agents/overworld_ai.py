@@ -143,7 +143,7 @@ class OverworldAI:
 
     def decide(self, map_name, pois, grid=None, player_y=0, player_x=0,
                party=None, pokeballs=0, has_pokedex=False,
-               money=0, badges=0, player_name=""):
+               money=0, badges=0, player_name="", key_items=None):
         """Ask the LLM what to do next in the overworld."""
         self._iteration += 1
         _log._action_count = self._iteration
@@ -196,6 +196,7 @@ class OverworldAI:
                               pokeballs=pokeballs,
                               has_pokedex=has_pokedex,
                               money=money,
+                              key_items=key_items or [],
                               badge_list=_build_badge_list(badges),
                               badge_count=bin(badges).count("1"),
                               ascii_map=render_map(

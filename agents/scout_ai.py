@@ -51,10 +51,12 @@ class ScoutAI:
             HumanMessage(content=prompt),
         ]
 
+        _log.log_prompt("SCOUT", SYSTEM_PROMPT, prompt)
         _log.start_thinking()
         response = self._llm.invoke(messages)
         _log.stop_thinking()
         content = response.content or ""
+        _log.log_response("SCOUT", content)
         decision = self._parse_decision(content)
 
         # Print reasoning

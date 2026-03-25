@@ -470,6 +470,35 @@ BALL_ITEMS = {
     ITEM_POKE_BALL: "Poké Ball",
 }
 
+# Key items — important story/progress items shown to the AI
+KEY_ITEMS = {
+    0x05: "Town Map",
+    0x06: "Bicycle",
+    0x0B: "Old Amber",
+    0x2D: "Bike Voucher",
+    0x3B: "Old Rod",
+    0x3C: "Good Rod",
+    0x40: "Gold Teeth",
+    0x44: "S.S. Ticket",
+    0x45: "Coin Case",
+    0x46: "Oak's Parcel",
+    0x47: "Itemfinder",
+    0x48: "Silph Scope",
+    0x49: "Poké Flute",
+    0x4A: "Lift Key",
+    0x4B: "Exp. All",
+    0x4E: "Super Rod",
+    0xC4: "HM01 Cut",
+    0xC5: "HM02 Fly",
+    0xC6: "HM03 Surf",
+    0xC7: "HM04 Strength",
+    0xC8: "HM05 Flash",
+    0xC9: "Dome Fossil",
+    0xCA: "Helix Fossil",
+    0xCB: "Secret Key",
+    0xCC: "Card Key",
+}
+
 # Event flags
 ADDR_POKEDEX_FLAG = 0xD74B     # bit 5 = has Pokédex
 

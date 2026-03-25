@@ -11,6 +11,12 @@ No Pokémon yet!
 --- Inventory ---
 💰 Money: ¥{{ money }}
 Poké Balls: {{ pokeballs }}{% if pokeballs < 3 %} ⚠️ LOW{% endif %}
+{%- if key_items %}
+Key Items:
+{%- for item in key_items %}
+  - {{ item }}
+{%- endfor %}
+{%- endif %}
 
 --- Badges ({{ badge_count }}/8) ---
 {%- for b in badge_list %}

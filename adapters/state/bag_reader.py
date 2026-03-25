@@ -5,7 +5,7 @@ previously duplicated across game.py, event_processor.py, and battle.py.
 """
 
 from data.constants import (
-    ADDR_NUM_BAG_ITEMS, ADDR_BAG_ITEMS, BALL_ITEMS,
+    ADDR_NUM_BAG_ITEMS, ADDR_BAG_ITEMS, BALL_ITEMS, KEY_ITEMS,
     ADDR_PLAYER_MONEY,
 )
 
@@ -37,6 +37,16 @@ class BagReader:
             if item_id in BALL_ITEMS:
                 balls.append((BALL_ITEMS[item_id], count, i))
         return balls
+
+    def get_key_items(self) -> list[str]:
+        """Return list of key item names currently in the bag."""
+        mem = self._pyboy.memory
+        items = []
+        for i in range(mem[ADDR_NUM_BAG_ITEMS]):
+            item_id = mem[ADDR_BAG_ITEMS + i * 2]
+            if item_id in KEY_ITEMS:
+                items.append(KEY_ITEMS[item_id])
+        return items
 
     def read_money(self) -> int:
         """Read player money from BCD-encoded 3 bytes."""

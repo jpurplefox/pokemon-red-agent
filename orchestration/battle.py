@@ -426,7 +426,9 @@ class BattleHandler:
                 self._record_turn(" ".join(turn_texts))
                 return True
             if not self.is_in_battle():
-                self._record_turn(" ".join(turn_texts))
+                combined = " ".join(turn_texts)
+                print(f"  [battle-end] turn_texts: {combined[:200]}")
+                self._record_turn(combined)
                 return False
 
             # Handle mid-battle events (choice menu or naming keyboard)
@@ -495,7 +497,9 @@ class BattleHandler:
                     self._pyboy.tick(60)
                 else:
                     self._driver.type_name(name.upper()[:10])
-            return not self.is_in_battle()
+            # Give the game time to transition after naming
+            self._pyboy.tick(60)
+            return self.is_in_battle()
 
         # Detect fainted pokemon
         ctx = turn_context.lower()

@@ -178,12 +178,16 @@ class Navigator:
                 print_surroundings()
                 return
             if mem[ADDR_MAP_N] != start_map:
-                self._pyboy.tick(300)
                 result["map_changed"] = True
                 result["show_pois"] = True
-                if self._screen.read_text_box() or self._poll_for_event():
-                    lines = self._event_processor.process()
-                    result["dialogue"] = " ".join(lines) if lines else ""
+                # Wait long enough for map-entry events (e.g. Mart parcel)
+                # to trigger — NPCs may walk toward the player first
+                for _ in range(20):
+                    self._pyboy.tick(30)
+                    if self._screen.read_text_box() or self._poll_for_event():
+                        lines = self._event_processor.process()
+                        result["dialogue"] = " ".join(lines) if lines else ""
+                        break
                 return
 
         # For sprites (NPCs), verify they're still adjacent
