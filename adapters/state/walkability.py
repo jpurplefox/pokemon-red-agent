@@ -92,27 +92,26 @@ class WalkabilityGrid:
         grid = [[False] * w_tiles for _ in range(h_tiles)]
         ledges = set()
 
-        # Try ROM auto-detection first
+        # Try ROM auto-detection first, but manual overrides take priority
         coll = self.get_collision_tiles()
         use_rom = bool(coll)
-
-        if not use_rom:
-            walkable = WALKABLE_BLOCKS.get(mem[ADDR_TILESET], {})
+        manual = WALKABLE_BLOCKS.get(mem[ADDR_TILESET], {})
 
         for row in range(H):
             for col in range(W):
                 addr = ADDR_OVERWORLD_MAP + (row + MAP_BORDER) * row_width + (col + MAP_BORDER)
                 block_id = mem[addr]
 
-                if use_rom:
+                # Manual overrides always take priority
+                if block_id in manual:
+                    tl, tr, bl, br = manual[block_id]
+                elif use_rom:
                     bt = self.get_block_tiles(block_id)
                     if bt is None:
                         continue
                     tl, tr, bl, br = self.block_walkability(bt, coll)
                 else:
-                    if block_id not in walkable:
-                        continue
-                    tl, tr, bl, br = walkable[block_id]
+                    continue
 
                 ty = row * 2
                 tx = col * 2
@@ -138,10 +137,14 @@ class WalkabilityGrid:
     def _detect_ledges(self, grid, ledges, mem, W, H, row_width, coll,
                        h_tiles, w_tiles):
         """Detect one-way ledge tiles from walkability patterns."""
+        manual = WALKABLE_BLOCKS.get(mem[ADDR_TILESET], {})
         for row in range(H):
             for col in range(W):
                 addr = ADDR_OVERWORLD_MAP + (row + MAP_BORDER) * row_width + (col + MAP_BORDER)
                 block_id = mem[addr]
+                # Skip blocks with manual overrides — they are not ledges
+                if block_id in manual:
+                    continue
                 bt = self.get_block_tiles(block_id)
                 if bt is None:
                     continue

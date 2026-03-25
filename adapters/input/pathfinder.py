@@ -222,6 +222,8 @@ def find_best_path(grid, start, poi, blocked=None, other_poi_tiles=None,
         ledges = set()
     if warps is None:
         warps = set()
+    if other_poi_tiles:
+        blocked = blocked | other_poi_tiles
 
     targets = find_interaction_targets(poi, grid, blocked, other_poi_tiles)
     if not targets:
