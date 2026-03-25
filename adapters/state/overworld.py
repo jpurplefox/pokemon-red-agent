@@ -1,7 +1,8 @@
-"""Overworld scanner — reads WRAM to find nearby points of interest (SRP).
+"""Overworld scanner — reads WRAM to find nearby points of interest.
 
-Scans warps (stairs/doors), blocks (PC, SNES), signs, and sprites (NPCs)
-from Pokemon Red's WRAM structures.  Dependencies injected via constructor (DIP).
+Orchestrates scanning of warps, blocks, signs, sprites, and connections.
+Delegates walkability grid building, label disambiguation, and sprite
+resolution to dedicated classes (SRP).
 """
 
 from data.constants import (
@@ -10,32 +11,14 @@ from data.constants import (
     ADDR_NUM_SIGNS, ADDR_SIGN_COORDS,
     ADDR_NUM_SPRITES, ADDR_SPRITE_DATA, ADDR_SPRITE_DATA2,
     ADDR_MISSABLE_FLAGS, ADDR_MISSABLE_LIST,
-    ADDR_TILESET, ADDR_TILESET_BANK, ADDR_TILESET_BLOCKS_PTR,
-    ADDR_TILESET_COLL_PTR, ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH,
-    ADDR_OVERWORLD_MAP, MAP_BORDER, BLOCK_LABELS, WALKABLE_BLOCKS,
-    BLOCK_DESCRIPTIONS, SPRITE_LABELS, MAP_NAMES, ADDR_GRASS_TILE,
+    ADDR_TILESET, ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH,
+    ADDR_OVERWORLD_MAP, MAP_BORDER, BLOCK_LABELS,
+    BLOCK_DESCRIPTIONS, MAP_NAMES, ADDR_GRASS_TILE,
 )
 from adapters.input.pathfinder import find_best_path
-
-# Oak's Lab (map 0x28) starter Poké Balls by X coordinate
-# Left-to-right: Charmander, Squirtle, Bulbasaur
-_OAK_LAB_STARTERS = {
-    6: "Poké Ball (CHARMANDER)",
-    7: "Poké Ball (SQUIRTLE)",
-    8: "Poké Ball (BULBASAUR)",
-}
-
-# Gym map IDs → (leader name, sprite label they use)
-_GYM_LEADERS = {
-    0x36: ("BROCK", "Nerd"),        # Pewter Gym
-    0x41: ("MISTY", "Beauty"),      # Cerulean Gym
-    0x5C: ("LT. SURGE", "Gentleman"),  # Vermilion Gym
-    0x86: ("ERIKA", "Beauty"),      # Celadon Gym
-    0x9D: ("KOGA", "Nerd"),         # Fuchsia Gym
-    0xB2: ("SABRINA", "Beauty"),    # Saffron Gym
-    0xA6: ("BLAINE", "Nerd"),       # Cinnabar Gym
-    0x2D: ("GIOVANNI", "Giovanni"), # Viridian Gym
-}
+from adapters.state.walkability import WalkabilityGrid
+from adapters.state.poi_disambiguator import dedup_warps, disambiguate_labels
+from adapters.state.sprite_resolver import SpriteResolver
 
 # Broken warps: (map_id, warp_index) — warps that are reachable but don't work
 _BROKEN_WARPS = {
@@ -45,27 +28,14 @@ _BROKEN_WARPS = {
 
 
 class OverworldScanner:
-    # Quadrant tile indices within a 4x4 tile block (row-major layout).
-    # Each block is 4x4 tiles; each quadrant is the 2x2 sub-area that
-    # corresponds to one player step position.
-    _QUAD_INDICES = (
-        (0, 1, 4, 5),      # TL: rows 0-1, cols 0-1
-        (2, 3, 6, 7),      # TR: rows 0-1, cols 2-3
-        (8, 9, 12, 13),    # BL: rows 2-3, cols 0-1
-        (10, 11, 14, 15),  # BR: rows 2-3, cols 2-3
-    )
-
-    # Representative tile index per quadrant — the bottom-left tile of
-    # each 2x2 step area (where the player's feet land).  Pokemon Red
-    # checks a single tile per step for collision, not all four.
-    _QUAD_REP_TILE = (4, 6, 12, 14)
-
     def __init__(self, pyboy, rom_path=None):
         self._pyboy = pyboy
         self._rom = None
         if rom_path:
             with open(rom_path, 'rb') as f:
                 self._rom = f.read()
+        self._walkability = WalkabilityGrid(pyboy, self._rom)
+        self._sprite_resolver = SpriteResolver(pyboy, self._rom)
 
     def get_pois(self):
         """Return all nearby reachable points of interest as a list of dicts.
@@ -84,10 +54,10 @@ class OverworldScanner:
         all_pois.extend(self._scan_connections(py, px))
 
         # Deduplicate adjacent warps with the same label (keep closest)
-        all_pois = self._dedup_warps(all_pois, py, px)
+        all_pois = dedup_warps(all_pois, py, px)
 
         # Disambiguate duplicate labels by compass direction
-        all_pois = self._disambiguate_labels(all_pois, py, px)
+        all_pois = disambiguate_labels(all_pois, py, px)
 
         # Collect warp tiles to avoid walking through them accidentally
         warp_tiles = {(p["ty"], p["tx"]) for p in all_pois if p["kind"] == "warp"}
@@ -118,320 +88,29 @@ class OverworldScanner:
 
         return reachable
 
-    @staticmethod
-    def _dedup_warps(pois, py, px):
-        """Merge adjacent warps that share the same label.
-
-        Only warps within 2 tiles of each other AND with the same label
-        are considered duplicates (e.g. a two-tile-wide staircase).
-        Distant warps to the same map are kept as separate POIs.
-        """
-        warp_kinds = ("warp", "exit", "connection")
-        warps = [p for p in pois if p["kind"] in warp_kinds]
-        others = [p for p in pois if p["kind"] not in warp_kinds]
-
-        # Group nearby warps with same label using union-find
-        used = [False] * len(warps)
-        clusters = []
-        for i, w in enumerate(warps):
-            if used[i]:
-                continue
-            cluster = [w]
-            used[i] = True
-            for j in range(i + 1, len(warps)):
-                if used[j] or warps[j]["label"] != w["label"]:
-                    continue
-                # Check if adjacent to any warp already in the cluster
-                for c in cluster:
-                    if abs(warps[j]["ty"] - c["ty"]) + abs(warps[j]["tx"] - c["tx"]) <= 2:
-                        cluster.append(warps[j])
-                        used[j] = True
-                        break
-            clusters.append(cluster)
-
-        # Keep closest warp from each cluster
-        for cluster in clusters:
-            best = min(cluster, key=lambda w: abs(w["ty"] - py) + abs(w["tx"] - px))
-            others.append(best)
-
-        return others
-
-    @staticmethod
-    def _disambiguate_labels(pois, py, px):
-        """Add compass directions to POIs that share the same label.
-
-        Uses the map center as reference (not the player) so labels stay
-        stable as the player moves around the map.
-        """
-        from collections import Counter
-
-        # Use map center as reference so labels don't change with player position
-        if pois:
-            all_y = [p["ty"] for p in pois]
-            all_x = [p["tx"] for p in pois]
-            cy = (min(all_y) + max(all_y)) // 2
-            cx = (min(all_x) + max(all_x)) // 2
-        else:
-            cy, cx = py, px
-
-        def _compass(p):
-            dy = p["ty"] - cy
-            dx = p["tx"] - cx
-            ns = "south" if dy > 0 else "north" if dy < 0 else ""
-            ew = "east" if dx > 0 else "west" if dx < 0 else ""
-            if abs(dy) >= abs(dx):
-                return ns or ew
-            return ew or ns
-
-        def _compass_full(p):
-            dy = p["ty"] - cy
-            dx = p["tx"] - cx
-            ns = "north" if dy < 0 else "south" if dy > 0 else ""
-            ew = "west" if dx < 0 else "east" if dx > 0 else ""
-            if ns and ew:
-                return f"{ns}-{ew}"
-            return ns or ew or "nearby"
-
-        # First pass: simple compass
-        label_counts = Counter(p["label"] for p in pois)
-        if any(c > 1 for c in label_counts.values()):
-            for p in pois:
-                if label_counts[p["label"]] > 1:
-                    p["label"] = f"{p['label']} ({_compass(p)})"
-
-        # Second pass: if still duplicated, use full compass
-        label_counts = Counter(p["label"] for p in pois)
-        if any(c > 1 for c in label_counts.values()):
-            for p in pois:
-                if label_counts[p["label"]] > 1:
-                    base = p["label"].rsplit(" (", 1)[0]
-                    p["label"] = f"{base} ({_compass_full(p)})"
-
-        return pois
-
     # ------------------------------------------------------------------
-    # ROM-based tileset data (auto-detect walkability for any tileset)
+    # Delegated methods (kept for backward compatibility)
     # ------------------------------------------------------------------
 
-    def _rom_offset(self, bank, ptr):
-        """Convert a ROM bank:address to a file offset."""
-        if ptr < 0x4000:
-            return ptr  # Bank 0 — always mapped
-        return bank * 0x4000 + (ptr - 0x4000)
-
-    def get_collision_tiles(self):
-        """Read the set of walkable tile IDs from ROM collision data."""
-        if self._rom is None:
-            return set()
-        mem = self._pyboy.memory
-        bank = mem[ADDR_TILESET_BANK]
-        ptr = mem[ADDR_TILESET_COLL_PTR] | (mem[ADDR_TILESET_COLL_PTR + 1] << 8)
-        offset = self._rom_offset(bank, ptr)
-        tiles = set()
-        while offset < len(self._rom) and self._rom[offset] != 0xFF:
-            tiles.add(self._rom[offset])
-            offset += 1
-        return tiles
-
-    def get_block_tiles(self, block_id):
-        """Read the 16 tile IDs (4×4) for a block from ROM."""
-        if self._rom is None:
-            return None
-        mem = self._pyboy.memory
-        bank = mem[ADDR_TILESET_BANK]
-        ptr = mem[ADDR_TILESET_BLOCKS_PTR] | (mem[ADDR_TILESET_BLOCKS_PTR + 1] << 8)
-        offset = self._rom_offset(bank, ptr) + block_id * 16
-        if offset + 16 > len(self._rom):
-            return None
-        return self._rom[offset:offset + 16]
-
-    def block_walkability(self, block_tiles, collision_tiles):
-        """Return (TL, TR, BL, BR) walkability from block tile data.
-
-        Checks the representative tile per quadrant (bottom-left of each
-        2x2 step area, where the player's feet land).  This matches how
-        the Pokemon Red engine performs collision detection.
-        """
-        return tuple(
-            block_tiles[rep] in collision_tiles
-            for rep in self._QUAD_REP_TILE
-        )
-
-    # ------------------------------------------------------------------
-    # ROM-based sprite picture IDs (find header by WRAM pattern match)
-    # ------------------------------------------------------------------
-
-    # WRAM addresses that mirror the first 9 bytes of the map header:
-    # tileset(1) height(1) width(1) map_ptr(2) text_ptr(2) script_ptr(2)
-    _HEADER_WRAM_START = 0xD367  # wCurMapTileset
-    _HEADER_WRAM_LEN = 9        # 9 bytes: tileset..script_ptr
-
-    def _find_map_header(self):
-        """Find the current map's header offset in ROM.
-
-        Searches the ROM for the 9-byte pattern that WRAM mirrors
-        (tileset, height, width, map_ptr, text_ptr, script_ptr).
-        Returns flat ROM offset, or None.
-        """
-        if self._rom is None:
-            return None
-        mem = self._pyboy.memory
-        pattern = bytes(
-            mem[self._HEADER_WRAM_START + i]
-            for i in range(self._HEADER_WRAM_LEN)
-        )
-        offset = self._rom.find(pattern)
-        return offset if offset != -1 else None
-
-    def get_sprite_pic_ids(self):
-        """Read original sprite picture IDs from ROM map object data.
-
-        Finds map header by matching WRAM values, then follows the
-        object data pointer to read sprite picture IDs.
-        Returns list of picture IDs (one per sprite), or empty list.
-        """
-        header = self._find_map_header()
-        if header is None:
-            return []
-        rom = self._rom
-        bank = header // 0x4000
-
-        # Parse connections to find object data pointer
-        # Header byte 9 = connection flags (N/S/W/E), each adds 11 bytes
-        conn_flags = rom[header + 9]
-        num_conn = bin(conn_flags).count('1')
-        obj_ptr_addr = header + 10 + num_conn * 11
-        obj_ptr = rom[obj_ptr_addr] | (rom[obj_ptr_addr + 1] << 8)
-        obj = self._rom_offset(bank, obj_ptr)
-
-        # Parse object data: border(1) warps signs sprites
-        pos = obj + 1  # skip border block
-        num_warps = rom[pos]; pos += 1
-        pos += num_warps * 4  # skip warp entries
-
-        num_signs = rom[pos]; pos += 1
-        pos += num_signs * 3  # skip sign entries
-
-        num_sprites = rom[pos]; pos += 1
-        pic_ids = []
-        for _ in range(num_sprites):
-            pic_ids.append(rom[pos])
-            # Sprite entry: pic(1) y(1) x(1) movement(1) range/dir(1) text_id(1)
-            text_id = rom[pos + 5]
-            pos += 6
-            if text_id & 0x40:  # trainer: +2 bytes (class, set)
-                pos += 2
-            elif text_id & 0x80:  # item: +1 byte (item ID)
-                pos += 1
-        return pic_ids
-
-    # ------------------------------------------------------------------
-    # Walkability grid (for A* pathfinding)
-    # ------------------------------------------------------------------
+    # Expose WalkabilityGrid constants for backward compatibility
+    _QUAD_INDICES = WalkabilityGrid._QUAD_INDICES
+    _QUAD_REP_TILE = WalkabilityGrid._QUAD_REP_TILE
 
     def get_walkable_grid(self):
-        """Build a tile-level walkability grid from the block map.
+        """Delegate to WalkabilityGrid."""
+        return self._walkability.get_grid()
 
-        Uses ROM data (collision tiles + block definitions) when available,
-        falls back to manual WALKABLE_BLOCKS otherwise.
-        Returns (grid, h_tiles, w_tiles) where grid[ty][tx] is True
-        if the tile is walkable.
-        """
-        mem = self._pyboy.memory
-        W = mem[ADDR_MAP_WIDTH]
-        H = mem[ADDR_MAP_HEIGHT]
-        row_width = W + 2 * MAP_BORDER
+    def get_collision_tiles(self):
+        """Delegate to WalkabilityGrid."""
+        return self._walkability.get_collision_tiles()
 
-        h_tiles = H * 2
-        w_tiles = W * 2
-        grid = [[False] * w_tiles for _ in range(h_tiles)]
-        ledges = set()  # (ty, tx, direction) tiles that are one-way ledges
+    def get_block_tiles(self, block_id):
+        """Delegate to WalkabilityGrid."""
+        return self._walkability.get_block_tiles(block_id)
 
-        # Ledge tile pairs from pokered: data/tilesets/ledge_tiles.asm
-        # Format: (standing_tile, ledge_tile) -> direction
-        # A tile is only a ledge if the player stands on a matching
-        # "standing tile" and the adjacent tile is the "ledge tile".
-        LEDGE_PAIRS = {
-            # (standing_on, ledge_tile): direction
-            (0x2C, 0x37): "down",
-            (0x39, 0x36): "down",
-            (0x39, 0x37): "down",
-            (0x2C, 0x27): "left",
-            (0x39, 0x27): "left",
-            (0x2C, 0x0D): "right",
-            (0x2C, 0x1D): "right",
-            (0x39, 0x0D): "right",
-        }
-        # Quick lookup: which tile IDs can be ledge targets
-        LEDGE_TARGET_TILES = {lt for (_, lt) in LEDGE_PAIRS}
-        # Quick lookup: which tile IDs are valid standing tiles
-        LEDGE_STANDING_TILES = {st for (st, _) in LEDGE_PAIRS}
-
-        # Try ROM auto-detection first
-        coll = self.get_collision_tiles()
-        use_rom = bool(coll)
-
-        # Fallback: manual data
-        if not use_rom:
-            walkable = WALKABLE_BLOCKS.get(mem[ADDR_TILESET], {})
-
-        for row in range(H):
-            for col in range(W):
-                addr = ADDR_OVERWORLD_MAP + (row + MAP_BORDER) * row_width + (col + MAP_BORDER)
-                block_id = mem[addr]
-
-                if use_rom:
-                    bt = self.get_block_tiles(block_id)
-                    if bt is None:
-                        continue
-                    tl, tr, bl, br = self.block_walkability(bt, coll)
-
-                    ty = row * 2
-                    tx = col * 2
-                else:
-                    if block_id not in walkable:
-                        continue
-                    tl, tr, bl, br = walkable[block_id]
-
-                ty = row * 2
-                tx = col * 2
-                grid[ty][tx] = tl
-                grid[ty][tx + 1] = tr
-                grid[ty + 1][tx] = bl
-                grid[ty + 1][tx + 1] = br
-
-        # Player's current tile is always walkable (so A* can start)
-        py = mem[ADDR_Y_COORD]
-        px = mem[ADDR_X_COORD]
-        if 0 <= py < h_tiles and 0 <= px < w_tiles:
-            grid[py][px] = True
-
-        # Detect ledge tiles using walkability patterns.
-        # Ledges only exist on tileset 0 (OVERWORLD).
-        # A ledge-down exists when a block has [✓✓/✗✗] pattern:
-        # the top tiles are walkable but the bottom tiles are not.
-        # The bottom tiles become one-way "down" ledges.
-        tileset = mem[ADDR_TILESET]
-        if tileset == 0 and use_rom:
-            row_width = W + 2 * MAP_BORDER
-            for row in range(H):
-                for col in range(W):
-                    addr = ADDR_OVERWORLD_MAP + (row + MAP_BORDER) * row_width + (col + MAP_BORDER)
-                    block_id = mem[addr]
-                    bt = self.get_block_tiles(block_id)
-                    if bt is None:
-                        continue
-                    tl, tr, bl, br = self.block_walkability(bt, coll)
-                    ty = row * 2
-                    tx = col * 2
-                    # Pattern [✓✓/✗✗] or [✓✗/✗✗] or [✗✓/✗✗] = ledge down
-                    if (tl or tr) and not bl and not br:
-                        for ly, lx in [(ty + 1, tx), (ty + 1, tx + 1)]:
-                            if 0 <= ly < h_tiles and 0 <= lx < w_tiles:
-                                ledges.add((ly, lx, "down"))
-                                grid[ly][lx] = True
-
-        return grid, h_tiles, w_tiles, ledges
+    def block_walkability(self, block_tiles, collision_tiles):
+        """Delegate to WalkabilityGrid."""
+        return self._walkability.block_walkability(block_tiles, collision_tiles)
 
     def get_npc_tiles(self):
         """Return set of (ty, tx) tiles currently blocked by NPCs."""
@@ -819,14 +498,7 @@ class OverworldScanner:
             if sy < 0 or sx < 0 or (sy == py and sx == px):
                 continue
 
-            label = SPRITE_LABELS.get(pic_id, "Person")
-            # Override Poké Ball labels in Oak's Lab with starter names
-            if label == "Poké Ball" and mem[ADDR_MAP_N] == 0x28:
-                label = _OAK_LAB_STARTERS.get(sx, label)
-            # Override sprite labels in Gyms with leader names
-            gym_leader = _GYM_LEADERS.get(mem[ADDR_MAP_N])
-            if gym_leader and label == gym_leader[1]:
-                label = f"GYM LEADER {gym_leader[0]}"
+            label = self._sprite_resolver.resolve_label(pic_id, mem[ADDR_MAP_N], sx)
             results.append({
                 "label": label,
                 "dir": self._relative_dir(py, px, sy, sx),
@@ -850,7 +522,7 @@ class OverworldScanner:
         Returns POIs for adjacent maps reachable by walking off the edge.
         Each connection has 11 bytes in the ROM: dest_map_id(1) + strip data(10).
         """
-        header = self._find_map_header()
+        header = self._sprite_resolver.find_map_header()
         if header is None:
             return []
 

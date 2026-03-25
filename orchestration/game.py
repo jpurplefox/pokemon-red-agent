@@ -20,6 +20,7 @@ from dialogue import DialogueAdvancer
 from adapters.input.naming import NameEntry
 from adapters.state.overworld import OverworldScanner
 from orchestration.event_processor import EventProcessor
+from orchestration.mart_handler import MartHandler
 from adapters.input.navigator import Navigator
 from orchestration.battle import BattleHandler
 from adapters.state.bag_reader import BagReader
@@ -47,10 +48,11 @@ class Game:
 
         self._naming_ai = naming_ai
         self._bag = BagReader(self._pyboy)
+        self._mart = MartHandler(self._pyboy, self._screen, self._bag)
         self._event_processor = EventProcessor(
             self._pyboy, self._screen, self._menu,
             self._naming, self._handle_name_menu,
-            bag_reader=self._bag,
+            mart_handler=self._mart,
         )
         if naming_ai:
             self._event_processor.auto_accept = True
@@ -87,7 +89,7 @@ class Game:
                 party = self._battle.read_party()
                 return _shop.decide_purchases(
                     items, money, pokeballs, party=party)
-            self._event_processor.auto_buy_fn = _ai_buy
+            self._mart.auto_buy_fn = _ai_buy
 
         self._in_overworld = False
         self._in_battle = False
