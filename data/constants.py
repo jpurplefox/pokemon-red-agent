@@ -118,6 +118,25 @@ WALKABLE_BLOCKS = {
         0x0B: (True, True, True, True),
         0x0F: (True, True, True, True),
     },
+    17: {  # Cave (Mt. Moon, Rock Tunnel, Victory Road, etc.)
+        # ROM collision tile $05 falsely marks cave wall textures as walkable.
+        # Only floor/stair blocks are truly walkable; all partial walls are overridden.
+        0x02: (False, False, False, False),
+        0x14: (False, False, False, True),
+        0x15: (False, False, True, True),
+        0x16: (False, False, True, True),
+        0x17: (False, False, False, False),
+        0x18: (False, False, False, False),
+        0x1A: (False, False, False, False),
+        0x1B: (False, False, False, False),
+        0x1C: (False, False, False, False),
+        0x1E: (False, False, False, False),
+        0x1F: (False, False, False, False),
+        0x20: (False, False, False, False),
+        0x21: (False, False, False, False),
+        0x22: (False, False, False, False),
+        0x2A: (False, False, False, False),
+    },
     4: {  # House interior
         0x08: (False, False, True, True),
         0x0C: (False, True, False, True),
