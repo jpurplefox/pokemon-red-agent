@@ -202,42 +202,12 @@ class JSONStore(Protocol):
 
 # -- Strategy Protocol -------------------------------------------------------
 
-class BattleStrategy(Protocol):
-    """Contract for battle decision strategies (DIP).
-
-    Both ManualStrategy and BattleAI must satisfy this interface.
-    Default no-op implementations are provided for optional methods
-    via ManualStrategy; BattleAI overrides all of them.
-    """
+class BattleDecider(Protocol):
+    """Core battle decision making — choose moves and switches."""
 
     def decide(self, player: BattleMon, enemy: BattleMon,
                is_wild: bool, balls: list | None = None) -> tuple:
         """Choose a battle action: (action_type, detail)."""
-        ...
-
-    def set_team(self, team: list[PartyMember],
-                 active_idx: int | None = None) -> None:
-        """Update the current team roster."""
-        ...
-
-    def on_battle_start(self, player: BattleMon, enemy: BattleMon,
-                        is_wild: bool,
-                        balls: list | None = None) -> None:
-        """Called when a battle begins."""
-        ...
-
-    def on_battle_end(self, is_wild: bool,
-                      result: str = "unknown") -> None:
-        """Called when a battle ends."""
-        ...
-
-    def add_turn(self, text: str, player_hp: int, player_max_hp: int,
-                 enemy_hp: int, enemy_max_hp: int) -> None:
-        """Record a turn's result text and HP changes."""
-        ...
-
-    def get_history(self) -> list:
-        """Return the battle turn history."""
         ...
 
     def choose_switch_in(self, party: list[PartyMember],
@@ -251,3 +221,45 @@ class BattleStrategy(Protocol):
                             alive_indices: list[int]) -> tuple:
         """Decide whether to switch when offered (trainer battles)."""
         ...
+
+
+class BattleTracker(Protocol):
+    """Battle state tracking — team roster and turn history."""
+
+    def set_team(self, team: list[PartyMember],
+                 active_idx: int | None = None) -> None:
+        """Update the current team roster."""
+        ...
+
+    def add_turn(self, text: str, player_hp: int, player_max_hp: int,
+                 enemy_hp: int, enemy_max_hp: int) -> None:
+        """Record a turn's result text and HP changes."""
+        ...
+
+    def get_history(self) -> list:
+        """Return the battle turn history."""
+        ...
+
+
+class BattleLifecycle(Protocol):
+    """Battle lifecycle hooks — start and end callbacks."""
+
+    def on_battle_start(self, player: BattleMon, enemy: BattleMon,
+                        is_wild: bool,
+                        balls: list | None = None) -> None:
+        """Called when a battle begins."""
+        ...
+
+    def on_battle_end(self, is_wild: bool,
+                      result: str = "unknown") -> None:
+        """Called when a battle ends."""
+        ...
+
+
+class BattleStrategy(BattleDecider, BattleTracker, BattleLifecycle, Protocol):
+    """Full battle strategy — combines all battle protocols.
+
+    BattleAI implements all three. ManualStrategy or simpler strategies
+    can implement only the protocols they need.
+    """
+    ...
