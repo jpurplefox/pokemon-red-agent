@@ -197,9 +197,6 @@ class OverworldAIController:
             self._pending_map = mem[ADDR_MAP_N]
             return
 
-        # Action completed — clear blocked tiles
-        self._navigator.clear_blocked()
-
         new_map_id = mem[ADDR_MAP_N]
         new_map_name = MAP_NAMES.get(new_map_id, f"Map {new_map_id}")
         dialogue = result.get("dialogue", "")

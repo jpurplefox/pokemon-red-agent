@@ -20,7 +20,6 @@ class Navigator:
         self._screen = screen
         self._scanner = scanner
         self._event_processor = event_processor
-        self._pending_blocked = set()  # blocked tiles for current action (survives resume)
 
     def go(self, print_surroundings):
         """Select a POI, pathfind to it, walk there, and interact.
@@ -49,25 +48,15 @@ class Navigator:
         self._go_to_poi(poi, print_surroundings, result, all_pois=all_pois)
         return result
 
-    def clear_blocked(self):
-        """Clear discovered blocked tiles (call when action completes)."""
-        self._pending_blocked.clear()
 
     def _go_to_poi(self, poi, print_surroundings, result, attempt=1,
-                   all_pois=None, known_blocked=None):
+                   all_pois=None):
         """Walk to a POI and interact. Retries if NPC moved."""
         mem = self._pyboy.memory
         grid, _, _, ledges = self._scanner.get_walkable_grid()
         blocked = self._scanner.get_npc_tiles()
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
-
-        if known_blocked is None:
-            known_blocked = set()
-        known_blocked |= self._pending_blocked
-        for by, bx in known_blocked:
-            if 0 <= by < len(grid) and 0 <= bx < len(grid[0]):
-                grid[by][bx] = False
 
         # Tiles of other POIs — avoid standing on them to interact
         other_poi_tiles = set()
@@ -120,9 +109,6 @@ class Navigator:
                     poi = updated
             # Recalculate path from current position
             grid, _, _, ledges = self._scanner.get_walkable_grid()
-            for by, bx in known_blocked:
-                if 0 <= by < len(grid) and 0 <= bx < len(grid[0]):
-                    grid[by][bx] = False
             blocked = self._scanner.get_npc_tiles()
             py, px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
             new_path, new_face = find_best_path(grid, (py, px), poi, blocked,
@@ -152,17 +138,10 @@ class Navigator:
                     result["dialogue"] = " ".join(lines) if lines else ""
                     print_surroundings()
                     return
-                # No text — tile is blocked (bad collision data)
-                dy = {"up": -1, "down": 1}.get(direction, 0)
-                dx = {"left": -1, "right": 1}.get(direction, 0)
-                bad_tile = (old_py + dy, old_px + dx)
-                known_blocked.add(bad_tile)
-                self._pending_blocked.add(bad_tile)
-                if 0 <= bad_tile[0] < len(grid) and 0 <= bad_tile[1] < len(grid[0]):
-                    grid[bad_tile[0]][bad_tile[1]] = False
+                # Couldn't move — skip and retry path
                 consecutive_fails += 1
                 if consecutive_fails >= 5:
-                    print("Too many blocked tiles — aborting navigation.")
+                    print("Too many failed moves — aborting navigation.")
                     result["interrupted"] = True
                     print_surroundings()
                     return
