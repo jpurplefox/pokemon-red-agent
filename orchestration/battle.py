@@ -58,13 +58,13 @@ class BattleHandler:
         full_text = " ".join(h.get("text", "") for h in history).lower()
 
         if self._was_defeat or "blacked out" in full_text:
-            result = "defeat"
+            result = "you lost"
         elif "gotcha" in full_text or "was caught" in full_text:
             result = "caught"
         elif "got away" in full_text or "ran away" in full_text:
             result = "fled"
         else:
-            result = "victory"
+            result = "you won"
 
         is_wild = self._last_was_wild
         enemy_pokemon = self._enemy_name

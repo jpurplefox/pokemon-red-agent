@@ -5,6 +5,7 @@ ADDR_MENU_X = 0xCC25           # wTopMenuItemX: X position of first menu item
 ADDR_CURRENT_MENU = 0xCC26     # wCurrentMenuItem: selected item (0 = first)
 ADDR_MAX_MENU = 0xCC28         # wMaxMenuItem: index of last item
 ADDR_MENU_WATCHED_KEYS = 0xCC29  # wMenuWatchedKeys: non-zero when menu awaits input
+ADDR_LIST_SCROLL_OFFSET = 0xCC36  # wListScrollOffset: items scrolled above visible area
 
 ADDR_PLAYER_NAME = 0xD158     # wPlayerName: 11 bytes (up to 7 chars + 0x50 terminator)
 ADDR_BADGES = 0xD356           # wObtainedBadges: 8 bits, 1 per badge

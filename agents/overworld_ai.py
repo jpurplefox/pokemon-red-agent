@@ -87,15 +87,18 @@ class OverworldAI:
         """Delegate reflection to the ReflectAI agent."""
         if self._reflect_ai:
             self._reflect_ai.iteration = self._iteration
-            self._reflect_ai.reflect(map_name, action, result, dialogue,
-                                     player_name=player_name)
+            try:
+                self._reflect_ai.reflect(map_name, action, result, dialogue,
+                                         player_name=player_name)
+            except Exception as e:
+                print(f"  ⚠️  Reflect skipped: {e}")
 
     # ------------------------------------------------------------------
     # History
     # ------------------------------------------------------------------
 
     def record_action(self, action_desc, map_name, result_text="",
-                      poi_label="", poi_kind="", poi_num=0, reason=""):
+                      poi_label="", poi_kind="", action_label="", reason=""):
         """Record an action in the exploration history."""
         self._visited_maps.add(map_name)
         entry = {
@@ -109,8 +112,8 @@ class OverworldAI:
             entry["poi"] = poi_label
         if poi_kind:
             entry["poi_kind"] = poi_kind
-        if poi_num:
-            entry["poi_num"] = poi_num
+        if action_label:
+            entry["action_label"] = action_label
         self._history.append(entry)
         if len(self._history) > _MAX_HISTORY:
             self._history = self._history[-_MAX_HISTORY:]
@@ -264,7 +267,12 @@ class OverworldAI:
                             _log.log_think(think)
                         _log.log_think(f"=> INTERACT with {interact_data[idx]['label']}")
                         self._last_think = think
-                        return ("go", orig_idx)
+                        poi_kind = pois[orig_idx].get("kind", "")
+                        if poi_kind == "grass":
+                            _log.log_stat("grass")
+                        else:
+                            _log.log_stat("interact")
+                        return ("go", orig_idx, f"INTERACT:{num}")
                 except ValueError:
                     pass
 
@@ -279,7 +287,8 @@ class OverworldAI:
                             _log.log_think(think)
                         _log.log_think(f"=> GO to {warp_data[idx]['label']}")
                         self._last_think = think
-                        return ("go", orig_idx)
+                        _log.log_stat("warp")
+                        return ("go", orig_idx, f"GO:{num}")
                 except ValueError:
                     pass
 

@@ -45,7 +45,7 @@ class EventProcessor:
         pending_lines = []
         all_dialogue = []
 
-        while idle < 20:
+        while idle < 30:
             self._pyboy.tick(10)
 
             # Battle started — stop processing, let battle handler take over
@@ -201,7 +201,7 @@ class EventProcessor:
             self._pyboy.button("down")
             self._pyboy.tick(10)
         self._pyboy.button("a")
-        self._pyboy.tick(30)
+        self._pyboy.tick(60)
 
     def _read_money(self):
         """Read player money."""

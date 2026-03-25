@@ -25,6 +25,18 @@ _OAK_LAB_STARTERS = {
     8: "Poké Ball (BULBASAUR)",
 }
 
+# Gym map IDs → (leader name, sprite label they use)
+_GYM_LEADERS = {
+    0x36: ("BROCK", "Nerd"),        # Pewter Gym
+    0x41: ("MISTY", "Beauty"),      # Cerulean Gym
+    0x5C: ("LT. SURGE", "Gentleman"),  # Vermilion Gym
+    0x86: ("ERIKA", "Beauty"),      # Celadon Gym
+    0x9D: ("KOGA", "Nerd"),         # Fuchsia Gym
+    0xB2: ("SABRINA", "Beauty"),    # Saffron Gym
+    0xA6: ("BLAINE", "Nerd"),       # Cinnabar Gym
+    0x2D: ("GIOVANNI", "Giovanni"), # Viridian Gym
+}
+
 # Broken warps: (map_id, warp_index) — warps that are reachable but don't work
 _BROKEN_WARPS = {
     (0x2F, 0),  # Viridian Forest North Gate — left door to Route 2
@@ -95,7 +107,9 @@ class OverworldScanner:
                 pass
 
         # Add a single grass POI if there's tall grass on this map
-        grass_poi = self._find_nearest_grass(py, px, grid)
+        # Skip Pallet Town — no wild Pokémon spawn there
+        current_map = MAP_NAMES.get(self._pyboy.memory[ADDR_MAP_N], "")
+        grass_poi = self._find_nearest_grass(py, px, grid) if current_map != "Pallet Town" else None
         if grass_poi:
             path, _ = find_best_path(grid, (py, px), grass_poi, blocked=npc_blocked,
                                      ledges=ledges, warps=warp_tiles)
@@ -809,6 +823,10 @@ class OverworldScanner:
             # Override Poké Ball labels in Oak's Lab with starter names
             if label == "Poké Ball" and mem[ADDR_MAP_N] == 0x28:
                 label = _OAK_LAB_STARTERS.get(sx, label)
+            # Override sprite labels in Gyms with leader names
+            gym_leader = _GYM_LEADERS.get(mem[ADDR_MAP_N])
+            if gym_leader and label == gym_leader[1]:
+                label = f"GYM LEADER {gym_leader[0]}"
             results.append({
                 "label": label,
                 "dir": self._relative_dir(py, px, sy, sx),

@@ -21,19 +21,12 @@ Poké Balls: {{ pokeballs }}{% if pokeballs < 3 %} ⚠️ LOW{% endif %}
 --- ⚡ Active Sub-Goal ---
 {{ active_subgoal.description }}
 {%- endif %}
-{%- if false and completed_subgoals %}
-
---- Completed Sub-Goals ---
-{%- for sg in completed_subgoals %}
-✅ {{ sg.description }}
-{%- endfor %}
-{%- endif %}
 {%- if history %}
 
 --- Recent History ---
 {%- for entry in history %}
 • [{{ entry.map }}]
-  {%- if entry.poi %} {% if entry.poi_kind in ("connection", "exit", "warp") %}GO{% else %}INTERACT{% endif %}:{{ entry.poi_num | default("?") }} {{ entry.poi }}:{% endif %} {{ entry.action }}
+  {%- if entry.poi %} {{ entry.action_label | default("") }} {{ entry.poi }}:{% endif %} {{ entry.action }}
   {%- if entry.result %} → {{ entry.result }}{% endif %}
   {%- if entry.reason %} (reason: {{ entry.reason }}){% endif %}
 {%- endfor %}

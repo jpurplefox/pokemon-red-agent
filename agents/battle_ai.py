@@ -97,9 +97,9 @@ class BattleAI:
 
     def on_battle_end(self, is_wild, result="unknown"):
         """Called when a battle ends. Delegates to BattleReflectAI."""
-        if result == "victory":
+        if result == "you won":
             _log.log_stat("W")
-        elif result == "defeat":
+        elif result == "you lost":
             _log.log_stat("L")
         elif result == "caught":
             _log.log_stat("C")

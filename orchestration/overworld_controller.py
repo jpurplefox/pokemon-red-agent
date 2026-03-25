@@ -148,10 +148,14 @@ class OverworldAIController:
             print("AI couldn't decide — returning control to you.")
             return "pause"
 
-        action_type, detail = result
+        if len(result) == 3:
+            action_type, detail, action_label = result
+        else:
+            action_type, detail = result
+            action_label = ""
 
         if action_type == "go":
-            self._handle_go(pois, detail, map_name, mem)
+            self._handle_go(pois, detail, map_name, mem, action_label)
         elif action_type == "move":
             self._pyboy.button(detail, delay=8)
             self._pyboy.tick(30)
@@ -166,14 +170,14 @@ class OverworldAIController:
 
         return "acted"
 
-    def _handle_go(self, pois, detail, map_name, mem):
+    def _handle_go(self, pois, detail, map_name, mem, action_label=""):
         """Navigate to a POI and record the result."""
         poi = pois[detail]
         self._handle_go_with_poi(poi, map_name, mem, all_pois=pois,
-                                 poi_num=detail + 1)
+                                 action_label=action_label)
 
     def _handle_go_with_poi(self, poi, map_name, mem, all_pois=None,
-                                poi_num=0):
+                                action_label=""):
         """Navigate to a specific POI dict and record the result."""
         self._ai.record_poi_visited(map_name, poi["label"])
         result = self._navigator.go_to(poi, self._print_surroundings,
@@ -184,9 +188,9 @@ class OverworldAIController:
             self.pause()
             return
 
-        # If a battle interrupted the walk, save POI to resume after
+        # If a battle or event interrupted the walk mid-path, save POI to resume
         # (keep blocked tiles for the resume)
-        if self._battle.is_in_battle():
+        if self._battle.is_in_battle() or result.get("mid_walk_interrupt"):
             self._pending_poi = poi
             self._pending_map = mem[ADDR_MAP_N]
             return
@@ -208,7 +212,7 @@ class OverworldAIController:
         self._ai.record_action(
             action_desc, map_name, result_desc,
             poi_label=poi['label'], poi_kind=poi['kind'],
-            poi_num=poi_num,
+            action_label=action_label,
             reason=getattr(self._ai, '_last_think', ''),
         )
 

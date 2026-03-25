@@ -88,8 +88,6 @@ if __name__ == "__main__":
         scout = ScoutAI(llm=llm)
         battle_reflect = BattleReflectAI(llm=llm)
         strategy = BattleAI(llm=llm, scout=scout, battle_reflect=battle_reflect)
-        reflect_ai = ReflectAI(llm=llm)
-
         # Overworld LLM: cloud via --model, or local MLX by default
         if cloud_model:
             model_id = CLOUD_MODELS.get(cloud_model, cloud_model)
@@ -105,6 +103,8 @@ if __name__ == "__main__":
             overworld_llm = llm
             print("Overworld AI: local MLX")
 
+        # Reflect uses same LLM as overworld (local or cloud)
+        reflect_ai = ReflectAI(llm=overworld_llm)
         overworld_ai = OverworldAI(llm=overworld_llm, reflect_ai=reflect_ai)
         lead_ai = LeadAI(llm=llm)
         print("Battle AI + Scout AI + Overworld AI + Lead AI enabled")

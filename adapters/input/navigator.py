@@ -173,6 +173,8 @@ class Navigator:
                 print("Interrupted!")
                 lines = self._event_processor.process()
                 result["dialogue"] = " ".join(lines) if lines else ""
+                if path:
+                    result["mid_walk_interrupt"] = True
                 print_surroundings()
                 return
             if mem[ADDR_MAP_N] != start_map:

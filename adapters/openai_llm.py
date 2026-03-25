@@ -27,11 +27,12 @@ class OpenAILLM:
     def __init__(self, *, model: str, base_url: str, api_key_env: str,
                  max_tokens: int = 512, temperature: float = 0.3,
                  strip_thinking: bool = False,
-                 enable_thinking: bool = True):
+                 enable_thinking: bool = True,
+                 timeout: float = 180.0):
         api_key = os.environ.get(api_key_env)
         if not api_key:
             raise RuntimeError(f"{api_key_env} environment variable is required")
-        self._client = OpenAI(api_key=api_key, base_url=base_url)
+        self._client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
         self._model = model
         self._max_tokens = max_tokens
         self._temperature = temperature
@@ -59,11 +60,15 @@ class OpenAILLM:
         if not self._enable_thinking:
             kwargs["extra_body"] = {"enable_thinking": False}
 
-        try:
-            response = self._client.chat.completions.create(**kwargs)
-        except Exception as e:
-            print(f"\n  ⚠️  Cloud LLM error: {e}")
-            raise CloudLLMError(str(e)) from e
+        max_retries = 3
+        for attempt in range(max_retries):
+            try:
+                response = self._client.chat.completions.create(**kwargs)
+                break
+            except Exception as e:
+                print(f"\n  ⚠️  Cloud LLM error (attempt {attempt+1}/{max_retries}): {e}")
+                if attempt == max_retries - 1:
+                    raise CloudLLMError(str(e)) from e
 
         text = response.choices[0].message.content
 

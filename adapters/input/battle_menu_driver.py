@@ -102,20 +102,31 @@ class BattleMenuDriver:
         self._last_move_idx = move_idx
 
     def use_ball(self, bag_index: int):
-        """Select ITEM from battle menu, then select the ball by bag index."""
+        """Select ITEM from battle menu, then select the ball by bag index.
+
+        Reads the current cursor position and scroll offset from WRAM
+        to navigate correctly regardless of bag state.
+        """
+        from data.constants import ADDR_CURRENT_MENU, ADDR_LIST_SCROLL_OFFSET
+
         self.select_battle_option("ITEM")
         for _ in range(30):
             self._pyboy.tick(10)
             if not self.has_battle_menu():
                 break
 
-        for _ in range(10):
-            self._pyboy.button("up")
-            self._pyboy.tick(5)
+        # Read current cursor state from WRAM
+        mem = self._pyboy.memory
+        cursor_pos = mem[ADDR_CURRENT_MENU]
+        scroll_offset = mem[ADDR_LIST_SCROLL_OFFSET]
+        current_index = scroll_offset + cursor_pos
 
-        for _ in range(bag_index):
-            self._pyboy.button("down")
-            self._pyboy.tick(8)
+        # Navigate from current position to target
+        delta = bag_index - current_index
+        direction = "down" if delta > 0 else "up"
+        for _ in range(abs(delta)):
+            self._pyboy.button(direction)
+            self._pyboy.tick(5)
 
         self._pyboy.button("a")
         self._pyboy.tick(20)
