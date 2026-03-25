@@ -49,7 +49,6 @@ class OverworldScanner:
         all_pois = []
         all_pois.extend(self._scan_warps(py, px))
         all_pois.extend(self._scan_blocks(py, px))
-        all_pois.extend(self._scan_signs(py, px))
         all_pois.extend(self._scan_sprites(py, px))
         all_pois.extend(self._scan_connections(py, px))
 

@@ -117,11 +117,15 @@ def _poi_icon(poi):
     return _POI_KIND_ICONS.get(poi.get("kind"), "🚪")
 
 
-def render_map(pois, py, px, grid, visit_counts=None, legend=True):
+_LEDGE_ARROWS = {"down": "↓", "left": "←", "right": "→"}
+
+
+def render_map(pois, py, px, grid, visit_counts=None, legend=True, ledges=None):
     """Return an ASCII map string with numbered POI markers and a legend.
 
     visit_counts: optional list parallel to pois with visit counts per POI.
     legend: if False, omit the text legend below the map (grid only).
+    ledges: optional set of (y, x, direction) tuples for one-way tiles.
     """
     if not pois:
         return "Nothing nearby."
@@ -135,6 +139,13 @@ def render_map(pois, py, px, grid, visit_counts=None, legend=True):
         if key not in poi_at and 0 <= poi["ty"] < h and 0 <= poi["tx"] < w:
             poi_at[key] = str(i + 1)
 
+    # Build ledge lookup: (y, x) → arrow character
+    ledge_at = {}
+    if ledges:
+        for entry in ledges:
+            ly, lx, direction = entry
+            ledge_at[(ly, lx)] = _LEDGE_ARROWS.get(direction, "·")
+
     lines = []
     for y in range(h):
         row = ""
@@ -144,6 +155,8 @@ def render_map(pois, py, px, grid, visit_counts=None, legend=True):
             elif (y, x) in poi_at:
                 ref = poi_at[(y, x)]
                 row += f"{ref:>2}"
+            elif (y, x) in ledge_at:
+                row += f" {ledge_at[(y, x)]}"
             elif grid[y][x]:
                 row += " ·"
             else:
@@ -162,6 +175,6 @@ def render_map(pois, py, px, grid, visit_counts=None, legend=True):
     return "\n".join(lines)
 
 
-def print_map(pois, py, px, grid):
+def print_map(pois, py, px, grid, ledges=None):
     """Display an ASCII map with numbered POI icons and a legend."""
-    print(render_map(pois, py, px, grid))
+    print(render_map(pois, py, px, grid, ledges=ledges))
