@@ -154,6 +154,52 @@ class DisplayPort(Protocol):
     def log_event(self, msg: str, kind: str = "") -> None: ...
 
 
+# -- Agent Ports (inter-agent communication) ---------------------------------
+
+class CatchDecider(Protocol):
+    """Decides whether to attempt catching a wild Pokémon."""
+
+    def should_catch(self, enemy_name: str, enemy_level: int,
+                     team: list) -> bool: ...
+
+
+class BattleReflector(Protocol):
+    """Extracts lessons from completed battles."""
+
+    def reflect(self, history: list, battle_type: str, result: str,
+                enemy_name: str) -> None: ...
+
+    def get_memory(self) -> list: ...
+
+
+class SubgoalReflector(Protocol):
+    """Analyzes gameplay events and manages sub-goals."""
+
+    iteration: int
+
+    def reflect(self, map_name: str, action: str, result: str = "",
+                dialogue: str = "", player_name: str = "") -> None: ...
+
+    def active_subgoal(self) -> dict | None: ...
+
+
+class PurchaseAdvisor(Protocol):
+    """Decides what to buy at Poké Marts."""
+
+    def decide_purchases(self, items: list, money: int, pokeballs: int,
+                         party: list | None = None) -> list: ...
+
+
+# -- Persistence Ports -------------------------------------------------------
+
+class JSONStore(Protocol):
+    """Abstract persistence for JSON data (lists of dicts)."""
+
+    def load(self) -> list: ...
+
+    def save(self, data: list) -> None: ...
+
+
 # -- Strategy Protocol -------------------------------------------------------
 
 class BattleStrategy(Protocol):

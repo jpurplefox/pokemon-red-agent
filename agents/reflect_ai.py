@@ -5,7 +5,6 @@ battle results, creating or completing sub-goals that guide the
 overworld exploration agent.
 """
 
-import json
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -32,11 +31,13 @@ def _render(template_name, **kwargs):
 class ReflectAI:
     """Analyzes gameplay events and manages sub-goals."""
 
-    def __init__(self, llm, goal="Become Pokemon Champion"):
+    def __init__(self, llm, goal="Become Pokemon Champion", store=None):
         self._llm = llm
         self.goal = goal
-        self._subgoals_file = Path("overworld_subgoals.json")
-        self._subgoals = self._load_subgoals()
+        self._store = store
+        self._subgoals = self._store.load() if self._store else []
+        if self._subgoals:
+            print(f"  Loaded {len(self._subgoals)} sub-goals")
         self._iteration = 0
 
     @property
@@ -58,20 +59,10 @@ class ReflectAI:
         """Return list of completed sub-goals."""
         return [sg for sg in self._subgoals if sg["status"] == "done"]
 
-    def _load_subgoals(self):
-        """Load sub-goals from disk."""
-        if self._subgoals_file.exists():
-            try:
-                data = json.loads(self._subgoals_file.read_text())
-                print(f"  Loaded {len(data)} sub-goals from {self._subgoals_file}")
-                return data
-            except (json.JSONDecodeError, KeyError):
-                pass
-        return []
-
     def _save_subgoals(self):
-        """Persist sub-goals to disk."""
-        self._subgoals_file.write_text(json.dumps(self._subgoals, indent=2))
+        """Persist sub-goals via the injected store."""
+        if self._store:
+            self._store.save(self._subgoals)
 
     def reflect(self, map_name, action, result="", dialogue="",
                 player_name=""):

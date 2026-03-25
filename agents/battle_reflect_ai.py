@@ -5,7 +5,6 @@ not very effective) and persists them to battle_memory.json.
 This memory is shared with BattleAI for better decision-making.
 """
 
-import json
 from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
@@ -30,25 +29,17 @@ def _render(template_name, **kwargs):
 class BattleReflectAI:
     """Analyzes battle logs and extracts type effectiveness knowledge."""
 
-    def __init__(self, llm):
+    def __init__(self, llm, store=None):
         self._llm = llm
-        self._memory_file = Path("battle_memory.json")
-        self._memory = self._load_memory()
-
-    def _load_memory(self):
-        """Load type effectiveness memory from disk."""
-        if self._memory_file.exists():
-            try:
-                data = json.loads(self._memory_file.read_text())
-                print(f"  Loaded {len(data)} battle memory facts from {self._memory_file}")
-                return data
-            except (json.JSONDecodeError, KeyError):
-                pass
-        return []
+        self._store = store
+        self._memory = self._store.load() if self._store else []
+        if self._memory:
+            print(f"  Loaded {len(self._memory)} battle memory facts")
 
     def _save_memory(self):
-        """Persist memory to disk."""
-        self._memory_file.write_text(json.dumps(self._memory, indent=2))
+        """Persist memory via the injected store."""
+        if self._store:
+            self._store.save(self._memory)
 
     def get_memory(self):
         """Return all known type effectiveness facts."""

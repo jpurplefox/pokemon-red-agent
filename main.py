@@ -15,6 +15,7 @@ from agents.overworld_ai import OverworldAI
 from agents.reflect_ai import ReflectAI
 from agents.lead_ai import LeadAI
 from agents.shop_ai import ShopAI
+from adapters.persistence.json_store import FileJSONStore
 from orchestration.game import Game
 
 ROM = "rom.gb"
@@ -86,7 +87,8 @@ if __name__ == "__main__":
 
     if "--ai" in flags:
         scout = ScoutAI(llm=llm)
-        battle_reflect = BattleReflectAI(llm=llm)
+        battle_memory_store = FileJSONStore("battle_memory.json")
+        battle_reflect = BattleReflectAI(llm=llm, store=battle_memory_store)
         strategy = BattleAI(llm=llm, scout=scout, battle_reflect=battle_reflect)
         # Overworld LLM: cloud via --model, or local MLX by default
         if cloud_model:
@@ -103,9 +105,12 @@ if __name__ == "__main__":
             overworld_llm = llm
             print("Overworld AI: local MLX")
 
-        # Reflect uses same LLM as overworld (local or cloud)
-        reflect_ai = ReflectAI(llm=overworld_llm)
-        overworld_ai = OverworldAI(llm=overworld_llm, reflect_ai=reflect_ai)
+        # Reflect and shop use same LLM as overworld (local or cloud)
+        subgoal_store = FileJSONStore("overworld_subgoals.json")
+        reflect_ai = ReflectAI(llm=overworld_llm, store=subgoal_store)
+        shop_ai = ShopAI(llm=llm)
+        overworld_ai = OverworldAI(llm=overworld_llm, reflect_ai=reflect_ai,
+                                   shop_ai=shop_ai)
         lead_ai = LeadAI(llm=llm)
         print("Battle AI + Scout AI + Overworld AI + Lead AI enabled")
     elif "--shop" in flags:

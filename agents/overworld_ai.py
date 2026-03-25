@@ -11,8 +11,6 @@ from pathlib import Path
 
 from jinja2 import Environment, FileSystemLoader
 from langchain_core.messages import SystemMessage, HumanMessage
-from agents.shop_ai import ShopAI
-from agents.reflect_ai import ReflectAI
 from adapters.display.ai_logger import AILogger
 from adapters.display.console import _poi_icon, render_map
 
@@ -56,10 +54,10 @@ def _build_badge_list(badges_byte):
 
 class OverworldAI:
     def __init__(self, llm, goal="Become Pokemon Champion",
-                 reflect_ai: ReflectAI | None = None):
+                 reflect_ai=None, shop_ai=None):
         self._llm = llm
         self.goal = goal
-        self.shop_ai = ShopAI(llm=self._llm)
+        self.shop_ai = shop_ai
         self._reflect_ai = reflect_ai
         self._history = []
         self._last_think = ""
