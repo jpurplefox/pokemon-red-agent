@@ -129,7 +129,7 @@ The system uses two distinct reflection mechanisms, each invoked as a separate L
 
 Sub-goals emerge from in-game events --- for example, when an NPC says ``Please deliver this parcel to Professor Oak'', the agent creates a sub-goal: \emph{Deliver Oak's Parcel to Professor Oak}. When the delivery is completed and the game confirms it, the agent marks the sub-goal as done. If a more important sub-goal is discovered, the agent replaces the current one.
 
-This mechanism allows the agent to discover and track its own objectives from gameplay rather than relying on a pre-programmed quest list. The main goal (e.g., ``Become the Pok\'{e}mon Champion'') provides long-term direction, while sub-goals decompose it into concrete, actionable steps as the agent encounters them organically through NPC dialogue and game events.
+This mechanism allows the agent to discover and track its own objectives from gameplay rather than relying on a pre-programmed quest list. The main goal (e.g., ``Become the Pok\'{e}mon Champion'') provides long-term direction, while sub-goals decompose it into concrete, actionable steps as the agent encounters them organically through NPC dialogue and game events. The few-shot examples in the reflection prompt use scenarios from a different game entirely, preventing the LLM from pattern-matching against Pok\'{e}mon-specific examples and forcing it to reason about the current situation.
 
 \textbf{Battle Reflection and Type Effectiveness Learning.} After each battle, a separate reflection step analyzes the turn-by-turn history to extract type effectiveness facts --- for example, that Water moves are super effective against Rock types, or that Normal moves have no effect on Ghost types. These facts are persisted to a memory file and injected into future battle prompts, giving the battle agent an accumulating knowledge base built entirely from its own experience.
 
@@ -174,6 +174,7 @@ The state prompt presents two separate lists: \emph{interactables} (NPCs, signs,
   \item The party roster with nicknames, species, levels, and HP status (with visual indicators for low HP and fainted members).
   \item Pok\'{e} Ball count with a low-stock indicator, and current money.
   \item Badge progress (obtained vs remaining, with gym leader and city names).
+  \item Key items currently in the inventory (e.g., Oak's Parcel), giving the agent awareness of quest-relevant objects it is carrying and can deliver.
   \item The active sub-goal, if any.
   \item A rolling history of recent actions, providing short-term memory of previous decisions.
 \end{itemize}
