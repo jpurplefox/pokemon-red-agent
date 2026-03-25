@@ -5,6 +5,8 @@ venv/
 __pycache__/
 *.pyc
 overworld_subgoals.json
+battle_memory.json
+.DS_Store
 
 # LaTeX build artifacts
 paper/*.aux
