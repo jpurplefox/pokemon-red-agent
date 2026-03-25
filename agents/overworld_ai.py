@@ -167,6 +167,7 @@ class OverworldAI:
                 "dist": dist,
                 "times_recent": times,
                 "is_warp": is_warp,
+                "kind": kind,
                 "_orig_idx": i,
             }
             if is_warp:
@@ -265,8 +266,7 @@ class OverworldAI:
                             _log.log_think(think)
                         _log.log_think(f"=> INTERACT with {interact_data[idx]['label']}")
                         self._last_think = think
-                        poi_kind = pois[orig_idx].get("kind", "")
-                        if poi_kind == "grass":
+                        if interact_data[idx].get("kind") == "grass":
                             _log.log_stat("grass")
                         else:
                             _log.log_stat("interact")
