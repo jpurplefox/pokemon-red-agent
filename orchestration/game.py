@@ -382,8 +382,7 @@ class Game:
         """Delegate to the OverworldAIController."""
         result = self._ow_controller.tick()
         if result == "pause":
-            self._ow_controller = None
-            self._overworld_ai = None
+            self._ow_controller.pause()
             self._show_pois = True
         elif result == "acted":
             self._in_overworld = True

@@ -69,7 +69,7 @@ class MLXLLM:
                  max_tokens: int = 512, temperature: float = 0.3,
                  enable_thinking: bool = False,
                  thinking_budget: int | None = None):
-        self._model, self._tokenizer = load(model_name)
+        self._model, self._tokenizer = load(model_name)  # type: ignore[misc]
         self._max_tokens = max_tokens
         self._temperature = temperature
         self._enable_thinking = enable_thinking

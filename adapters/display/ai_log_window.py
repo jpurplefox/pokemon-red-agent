@@ -38,6 +38,7 @@ def ai_log(text: str, kind: str = ""):
     """
     if not _started:
         start()
+    assert _queue is not None
     for line in text.split("\n"):
         _queue.put(("log", line, kind))
 
@@ -48,6 +49,7 @@ def ai_update_hud(team=None, goal="", subgoal="", think_time=0.0,
     """Update the persistent HUD data."""
     if not _started:
         start()
+    assert _queue is not None
     _queue.put(("hud", team or [], goal, subgoal, think_time,
                 action_count, badges, map_name, player_name, play_time,
                 retries))
@@ -57,6 +59,7 @@ def ai_set_thinking(is_thinking: bool):
     """Signal that AI is thinking (True) or done (False) for live timer."""
     if not _started:
         start()
+    assert _queue is not None
     _queue.put(("thinking", is_thinking))
 
 

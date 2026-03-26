@@ -32,9 +32,9 @@ class TogetherLLM:
         self._max_tokens = max_tokens
         self._temperature = temperature
 
-    def invoke(self, messages: list) -> _Response:
+    def invoke(self, messages: list) -> _Response:  # type: ignore[type-arg]
         """Send messages to Together AI and return a response."""
-        chat_messages = []
+        chat_messages: list[dict[str, str]] = []
         for msg in messages:
             if hasattr(msg, 'type'):
                 role = "system" if msg.type == "system" else "user"
@@ -46,8 +46,8 @@ class TogetherLLM:
 
         response = self._client.chat.completions.create(
             model=self._model,
-            messages=chat_messages,
+            messages=chat_messages,  # type: ignore[arg-type]
             max_tokens=self._max_tokens,
             temperature=self._temperature,
         )
-        return _Response(content=response.choices[0].message.content)
+        return _Response(content=response.choices[0].message.content or "")

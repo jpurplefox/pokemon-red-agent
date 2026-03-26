@@ -39,9 +39,9 @@ class OpenAILLM:
         self._strip_thinking = strip_thinking
         self._enable_thinking = enable_thinking
 
-    def invoke(self, messages: list) -> _Response:
+    def invoke(self, messages: list) -> _Response:  # type: ignore[type-arg]
         """Send messages to the API and return a response."""
-        chat_messages = []
+        chat_messages: list[dict[str, str]] = []
         for msg in messages:
             if hasattr(msg, 'type'):
                 role = "system" if msg.type == "system" else "user"
@@ -51,26 +51,25 @@ class OpenAILLM:
                 role = "user"
             chat_messages.append({"role": role, "content": msg.content})
 
-        kwargs = dict(
-            model=self._model,
-            messages=chat_messages,
-            max_tokens=self._max_tokens,
-            temperature=self._temperature,
-        )
-        if not self._enable_thinking:
-            kwargs["extra_body"] = {"enable_thinking": False}
+        extra_body = {"enable_thinking": False} if not self._enable_thinking else None
 
         max_retries = 3
         for attempt in range(max_retries):
             try:
-                response = self._client.chat.completions.create(**kwargs)
+                response = self._client.chat.completions.create(
+                    model=self._model,
+                    messages=chat_messages,  # type: ignore[arg-type]
+                    max_tokens=self._max_tokens,
+                    temperature=self._temperature,
+                    extra_body=extra_body,
+                )
                 break
             except Exception as e:
                 print(f"\n  ⚠️  Cloud LLM error (attempt {attempt+1}/{max_retries}): {e}")
                 if attempt == max_retries - 1:
                     raise CloudLLMError(str(e)) from e
 
-        text = response.choices[0].message.content
+        text = response.choices[0].message.content or ""
 
         if self._strip_thinking:
             text = _THINK_RE.sub("", text).strip()

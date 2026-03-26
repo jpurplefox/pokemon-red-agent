@@ -364,7 +364,7 @@ class BattleAI:
             response = self._llm.invoke(messages)
             _log.stop_thinking()
             text = response.content or ""
-            action, _ = self._parse_response(text, player, enemy, is_wild, balls)
+            action, _ = self._parse_response(text, player, balls)
 
         self._log_action(action)
         return action
