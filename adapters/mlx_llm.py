@@ -75,10 +75,10 @@ class MLXLLM:
         self._enable_thinking = enable_thinking
         self._thinking_budget = thinking_budget
 
-    def invoke(self, messages: list) -> _Response:
+    def invoke(self, messages: list) -> _Response:  # type: ignore[type-arg]
         """Send messages to the local MLX model and return a response."""
         # Convert LangChain-style messages to chat format
-        chat_messages = []
+        chat_messages: list[dict[str, str]] = []
         for msg in messages:
             if hasattr(msg, 'type'):
                 role = "system" if msg.type == "system" else "user"
@@ -88,14 +88,48 @@ class MLXLLM:
                 role = "user"
             chat_messages.append({"role": role, "content": msg.content})
 
+        # Ensure alternating roles — merge consecutive same-role messages
+        # and fold system into first user for models that don't support it
+        merged: list[dict[str, str]] = []
+        for m in chat_messages:
+            if merged and merged[-1]["role"] == m["role"]:
+                merged[-1]["content"] += "\n\n" + m["content"]
+            elif merged and m["role"] == "system":
+                # Fold system into next user or previous message
+                merged[-1]["content"] += "\n\n" + m["content"]
+            else:
+                merged.append(dict(m))
+        # If first message is system and model doesn't support it,
+        # merge into first user message
+        if len(merged) >= 2 and merged[0]["role"] == "system":
+            # Try keeping system — if template fails, we'll merge below
+            chat_messages = merged
+        else:
+            chat_messages = merged
+
         template_kwargs = dict(
             tokenize=False, add_generation_prompt=True,
         )
         if not self._enable_thinking:
             template_kwargs["enable_thinking"] = False
-        prompt = self._tokenizer.apply_chat_template(
-            chat_messages, **template_kwargs,
-        )
+        try:
+            prompt = self._tokenizer.apply_chat_template(
+                chat_messages, **template_kwargs,
+            )
+        except Exception:
+            # Model doesn't support system role — merge system into user
+            if chat_messages and chat_messages[0]["role"] == "system":
+                system_content = chat_messages[0]["content"]
+                chat_messages = chat_messages[1:]
+                if chat_messages:
+                    chat_messages[0]["content"] = (
+                        system_content + "\n\n" + chat_messages[0]["content"]
+                    )
+                else:
+                    chat_messages = [{"role": "user", "content": system_content}]
+            prompt = self._tokenizer.apply_chat_template(
+                chat_messages, **template_kwargs,
+            )
 
         sampler = make_sampler(temp=self._temperature)
 

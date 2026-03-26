@@ -18,7 +18,7 @@ _TEMPLATES = Path(__file__).parent / "templates"
 _env = Environment(loader=FileSystemLoader(_TEMPLATES), trim_blocks=True,
                    lstrip_blocks=True)
 
-_log = AILogger("AI")
+_log = AILogger("BATTLE")
 
 
 def _render(template_name, **kwargs):
@@ -525,12 +525,16 @@ class BattleAI:
     def _log_action(self, action):
         if action[0] == "run":
             _log.log_think("=> RUN")
+            _log.log_stat("run")
         elif action[0] == "ball":
             _log.log_think("=> throw Poke Ball!")
+            _log.log_stat("ball")
         elif action[0] == "switch":
             mon = self._team[action[1]]
             label = (mon.nickname if mon.nickname == mon.name
                      else f"{mon.name} ({mon.nickname})")
             _log.log_think(f"=> SWITCH to {label}!")
+            _log.log_stat("sw")
         else:
             _log.log_think(f"=> {action[1]}")
+            _log.log_stat("atk")

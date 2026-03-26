@@ -25,7 +25,7 @@
 \begin{abstract}
 We present an autonomous agent capable of playing Pok\'{e}mon Red, a classic role-playing game for the Game Boy, using a large language model as its sole decision-making engine. Unlike prior work that applies reinforcement learning or targets isolated game mechanics such as competitive battling, our agent plays the RPG through its opening act --- navigating an open world, engaging in combat, capturing Pok\'{e}mon, managing resources, and pursuing narrative objectives up to the S.S.\ Anne --- all through natural language reasoning over structured game state, with no task-specific training or fine-tuning.
 
-The system is built around six specialized LLM-based agents --- overworld navigation, battle strategy, catch-or-defeat evaluation, shop optimization, party lead selection, and nickname generation --- each operating on prompts constructed from direct memory reads of the emulator's working RAM. A minimal layer of mechanical automation handles low-level execution (menu traversal, pathfinding, dialogue advancement), while a feedback-based validation mechanism allows the LLM to self-correct when it attempts invalid actions. This separation between strategic reasoning and mechanical execution allows us to study which decisions an LLM can reliably make and how effectively it recovers from errors through feedback.
+The system is built around seven specialized LLM-based agents --- overworld navigation, battle strategy, catch-or-defeat evaluation, move learning, shop optimization, party lead selection, and nickname generation --- each operating on prompts constructed from direct memory reads of the emulator's working RAM. A minimal layer of mechanical automation handles low-level execution (menu traversal, pathfinding, dialogue advancement), while a feedback-based validation mechanism allows the LLM to self-correct when it attempts invalid actions. This separation between strategic reasoning and mechanical execution allows us to study which decisions an LLM can reliably make and how effectively it recovers from errors through feedback.
 
 We evaluate the system across multiple open-weight models of varying sizes --- Qwen 2.5 14B, Qwen 3 14B, and Qwen 3.5 9B --- all running locally on consumer hardware via MLX, and additionally test larger models (Qwen 3.5 27B and Qwen 3.5 122B-A10B) for the overworld agent to study how model scale affects high-level navigation decisions. We discuss the design trade-offs involved in building a viable LLM-based game agent, the failure modes we observe, and the minimal set of interventions needed to keep the agent on track.
 \end{abstract}
@@ -43,7 +43,7 @@ The dominant paradigm for game-playing AI has been reinforcement learning, which
 
 We choose Pok\'{e}mon Red (1996) for the Game Boy as our testbed for several reasons. First, its mechanics are extensively documented by the fan community, including full maps of working RAM (WRAM) addresses, which enables precise programmatic access to game state without relying on computer vision. Second, the game offers a gradually increasing complexity curve: early routes are largely linear and forgiving, while later areas introduce branching paths, puzzle-based dungeons, and tougher opponents. Third, Pok\'{e}mon Red requires all the core RPG skills simultaneously --- exploration, combat, resource management, and quest tracking --- making it a comprehensive benchmark for evaluating an LLM's ability to coordinate multiple reasoning modes.
 
-In this work, we present an autonomous agent that plays Pok\'{e}mon Red using a large language model as its sole decision-making engine, with no reinforcement learning, fine-tuning, or task-specific training. The system is organized around six specialized LLM-based agents, each responsible for a distinct aspect of gameplay: overworld navigation, battle strategy, catch-or-defeat evaluation, shop optimization, party lead selection, and nickname generation. Each agent operates on structured prompts constructed from direct reads of the emulator's working RAM, and produces decisions in a constrained format that a mechanical execution layer translates into button presses.
+In this work, we present an autonomous agent that plays Pok\'{e}mon Red using a large language model as its sole decision-making engine, with no reinforcement learning, fine-tuning, or task-specific training. The system is organized around seven specialized LLM-based agents, each responsible for a distinct aspect of gameplay: overworld navigation, battle strategy, catch-or-defeat evaluation, move learning, shop optimization, party lead selection, and nickname generation. Each agent operates on structured prompts constructed from direct reads of the emulator's working RAM, and produces decisions in a constrained format that a mechanical execution layer translates into button presses.
 
 A key design principle of our approach is the explicit separation between \emph{strategic reasoning} and \emph{mechanical execution}. The LLM is responsible for all high-level decisions --- where to go, what move to use, whether to catch a Pok\'{e}mon --- while a thin automation layer handles low-level tasks that require no intelligence: pathfinding via A*, menu traversal, and dialogue advancement. When the LLM attempts an invalid action, the system provides feedback explaining the failure and requests a new decision, preserving the LLM as the sole decision-maker. This separation allows us to study a focused question: \emph{which decisions can an LLM reliably make in an RPG, and how effectively does it self-correct when given feedback on invalid actions?}
 
@@ -111,6 +111,7 @@ Rather than using a single monolithic prompt, we decompose gameplay into six spe
   \item \textbf{Overworld Agent}: Decides where to go next by examining two separate lists extracted from the current map: available warps (exits to other areas) and nearby points of interest (POIs) --- NPCs, signs, and tall grass patches ---. It also receives the party's health status, badge progress, available money, and a history of recent actions. Outputs a target warp or POI for the Navigator to reach via pathfinding.
   \item \textbf{Battle Agent}: Selects combat actions (attack, use item, switch Pok\'{e}mon) based on the current battle state, including both combatants' types, HP, available moves, and status conditions.
   \item \textbf{Scout Agent}: Evaluates whether a newly encountered wild Pok\'{e}mon should be caught or defeated, considering the current party composition and whether the species (or its evolution line) is already represented.
+  \item \textbf{Move Agent}: When a Pok\'{e}mon tries to learn a new move but already knows four, decides whether to replace an existing move or skip learning. Evaluates move stats, types, and the team's current coverage.
   \item \textbf{Shop Agent}: Decides what items to purchase at Pok\'{e} Marts based on current inventory, available funds, and party needs.
   \item \textbf{Lead Agent}: After each battle, evaluates the party and decides which Pok\'{e}mon should lead the team for the next encounter, considering HP status, level distribution, and training needs.
   \item \textbf{Naming Agent}: Generates creative nicknames for newly caught Pok\'{e}mon. While this agent does not affect gameplay outcomes, it illustrates the LLM's ability to perform creative tasks within the same architecture used for strategic reasoning.
@@ -181,7 +182,7 @@ The state prompt presents two separate lists: \emph{interactables} (NPCs, signs,
 
 The system prompt provides minimal strategic guidance: it explains the two action types, notes that visited interactables are unlikely to yield new information, suggests preferring warps to unvisited maps, and informs the agent that tall grass contains wild Pok\'{e}mon whose battles grant experience. These are factual descriptions of game mechanics, not strategic directives.
 
-The visit counter is a key design choice: by showing the agent how many times it has already interacted with each POI, we provide the information needed to avoid repetitive loops without hard-coding anti-loop rules. The agent can reason for itself that visiting the same NPC five times is unproductive. Similarly, the rolling action history allows the agent to detect when it is cycling between the same locations and adjust its strategy accordingly.
+The visit counter is a key design choice: by showing the agent how many times it has already interacted with each POI, we provide the information needed to avoid repetitive loops. The agent can reason for itself that visiting the same NPC five times is unproductive. Similarly, the rolling action history allows the agent to detect when it is cycling between the same locations and adjust its strategy accordingly.
 
 \subsection{Battle Agent}
 
@@ -214,6 +215,12 @@ The scout receives the wild Pok\'{e}mon's species, types, level, and full evolut
 \end{itemize}
 
 These pre-computed signals reduce the reasoning burden on the LLM --- it does not need to manually cross-reference types across the team --- while leaving the final catch-or-defeat decision entirely to the agent. The prompt establishes a priority hierarchy (type diversity over evolution potential over avoiding duplicates) but the agent weighs these factors in context.
+
+\subsection{Move Agent}
+
+When a Pok\'{e}mon attempts to learn a new move but already knows four, the move agent decides whether to replace an existing move or skip learning. The agent receives the Pok\'{e}mon's species, the new move's stats (power, accuracy, PP, type, category, description), and the same details for all four current moves.
+
+The prompt provides general principles --- higher power is generally better, type coverage across different types is valuable, keeping two moves of the same type is usually redundant, and status moves are situational. The agent outputs \texttt{FORGET <move name>} to replace a specific move or \texttt{KEEP} to skip learning.
 
 \subsection{Shop Agent}
 
@@ -248,7 +255,7 @@ When the overworld agent selects a POI, the navigator module computes a path usi
 
 Navigation is designed for interruption safety. At each step, the navigator checks whether a battle has started, dialogue has appeared, or the player has warped to a new map. If a battle interrupts navigation, the pending POI is preserved and navigation resumes automatically after the battle is resolved, since the original destination was never reached. This is important for maintaining coherence: without resumption, the agent would observe that its last decision produced no visible result --- it chose to go to a POI but arrived somewhere unexpected --- leading to confusion in subsequent reasoning. By completing the interrupted action, the system ensures that the agent's decisions have the outcomes it intended. A map transition triggers a wait period for the game to stabilize before continuing.
 
-The path is recalculated before each step rather than computed once upfront, because NPCs move between tiles and can block previously valid routes. Additionally, if the player fails to move after a step --- indicating that a tile marked as walkable in the ROM data is actually blocked --- the navigator marks that tile as non-walkable and recalculates the path around it. This handles cases where the game's collision data does not match actual walkability, such as certain cave walls in Mt.\ Moon.
+The path is recalculated before each step rather than computed once upfront, because NPCs move between tiles and can block previously valid routes. The walkability grid itself includes manual overrides for cases where the ROM's collision data does not match actual walkability --- for example, certain cave wall tiles in Mt.\ Moon that the game marks as walkable but are in fact blocked. These overrides are defined as a static table of tile corrections rather than detected dynamically at runtime.
 
 The pathfinder also handles directional ledges --- tiles that can only be traversed in one direction (e.g., jumping down a ledge but not climbing back up). These are modeled as one-way edges in the walkability grid, allowing A* to find valid paths that respect the game's movement constraints.
 
@@ -291,100 +298,66 @@ Every component in this layer shares a common property: given the same input, it
 
 All experiments are conducted on a MacBook Pro 14-inch (November 2024) with an Apple M4 Pro chip and 24~GB of unified memory. The game runs on PyBoy, an open-source Game Boy emulator written in Python, at normal emulation speed. Each run starts from the beginning of the game (New Game) with no prior state. All models run with thinking/reasoning mode disabled, using direct response generation only.
 
-We evaluate three experimental configurations:
+We evaluate the following models:
+
+\begin{itemize}
+  \item \textbf{Qwen 3 14B} --- served locally via MLX.
+  \item \textbf{Qwen 3.5 9B} --- served locally via MLX.
+  \item \textbf{Qwen 3.5 27B} --- served via cloud inference.
+  \item \textbf{Gemma 3 12B} --- served locally via MLX.
+  \item \textbf{Qwen 3.5 122B-A10B} --- served via cloud inference, evaluated only if 27B cannot complete the target progression.
+\end{itemize}
+
+For each model, all seven agents use the same model. We conduct 3 independent runs per model. Each run has a maximum duration of 24 hours and terminates under one of three conditions:
 
 \begin{enumerate}
-  \item \textbf{Local-only runs}: All six agents use the same locally-served model via MLX. We test three models: Qwen 2.5 14B, Qwen 3 14B, and Qwen 3.5 9B. Multiple independent runs are conducted per model.
-  \item \textbf{Hybrid runs}: The overworld agent uses a larger model served via cloud inference (Qwen 3.5 27B or Qwen 3.5 122B-A10B), while all other agents continue using Qwen 3.5 9B locally. This configuration isolates the effect of model scale on navigation decisions --- the most complex and failure-prone aspect of gameplay.
+  \item \textbf{Completion}: The agent reaches the S.S.\ Anne.
+  \item \textbf{Retry exhaustion}: Any agent fails to produce a valid action after its maximum retry attempts, requiring human intervention and breaking autonomy.
+  \item \textbf{Unrecoverable loop}: The agent enters a repetitive cycle that fills its entire action history without making progress.
 \end{enumerate}
-
-We conduct \texttt{[N]} independent runs per configuration. Runs are not time-limited; each continues until the agent reaches \texttt{[ENDPOINT]} or a termination condition is met. A run terminates when any agent exhausts its retry attempts without producing a valid action, as control would otherwise fall back to a human operator, breaking the autonomy requirement.
-
-% TODO: Fill in N (number of runs) and ENDPOINT (how far each run goes)
 
 \subsection{Metrics}
 
-We collect the following metrics across all runs:
+\subsubsection{Per-Agent Decision Metrics}
+
+We instrument each agent to continuously log decision statistics:
 
 \begin{itemize}
-  \item \textbf{Narrative progression}: The number of gym badges obtained and the furthest area reached in each run, providing a coarse measure of overall game completion.
-  \item \textbf{Battle win rate}: The proportion of battles won versus lost, reported separately for wild encounters and trainer battles.
-  \item \textbf{Invalid action rate}: The number of actions rejected by the validation layer per agent, broken down by error type (e.g., nonexistent POI, unavailable move). This measures how often the LLM produces decisions that are syntactically valid but semantically illegal given the current game state.
-  \item \textbf{Capture efficiency}: The number of Pok\'{e}mon successfully captured versus the number of wild encounters where the scout agent recommended catching, measuring the battle agent's effectiveness in catch mode.
+  \item \textbf{Overworld}: Total decisions, broken down by type (warp, interact, tall grass). Number of retries due to invalid actions.
+  \item \textbf{Battle}: Total decisions by type (attack, switch, ball, run). Wins, losses (whiteouts), and captures.
+  \item \textbf{Battle Reflect}: Total lessons recorded. Accuracy of learned type effectiveness compared against the game's actual type chart.
+  \item \textbf{Overworld Reflect}: Number of sub-goals discovered from gameplay.
+  \item \textbf{Scout}: Decisions to catch vs.\ defeat.
+  \item \textbf{Lead}: Decisions to swap the lead vs.\ keep the current one.
+  \item \textbf{Shop}: Number of purchase transactions.
+  \item \textbf{Move Learning}: Decisions to learn a new move vs.\ keep the existing moveset.
+  \item \textbf{Naming}: Number of nicknames generated.
+  \item \textbf{All agents}: Total unparseable responses (responses that fail to match the expected output format).
 \end{itemize}
+
+\subsubsection{Narrative Progression Checkpoints}
+
+We record the wall-clock time at which the agent reaches each story milestone, along with the team's average level and party size at that point:
+
+\begin{enumerate}
+  \item Obtain starter Pok\'{e}mon
+  \item Deliver Oak's Parcel
+  \item Reach Viridian Forest
+  \item Defeat Brock (Badge 1)
+  \item Reach Mt.\ Moon
+  \item Reach Cerulean City
+  \item Defeat Misty (Badge 2)
+  \item Help Bill
+  \item Reach Vermilion City
+  \item Complete the S.S.\ Anne
+\end{enumerate}
 
 % --------------------------------------------------------------------------- %
 
 \section{Results}
 \label{sec:results}
 
-\subsection{Game Progression}
-
-% TODO: Fill in with actual data
-% Table template:
-% \begin{table}[h]
-% \centering
-% \begin{tabular}{lccc}
-% \toprule
-% Run & Badges & Furthest Area & Total Battles \\
-% \midrule
-% 1 & & & \\
-% 2 & & & \\
-% 3 & & & \\
-% \bottomrule
-% \end{tabular}
-% \caption{Game progression across independent runs.}
-% \label{tab:progression}
-% \end{table}
-
-\texttt{[TODO: Report game progression per run --- badges obtained, furthest area reached, total battles fought.]}
-
-\subsection{Battle Performance}
-
-% TODO: Fill in with actual data
-% Table template:
-% \begin{table}[h]
-% \centering
-% \begin{tabular}{lcc}
-% \toprule
-% Battle Type & Wins & Losses \\
-% \midrule
-% Wild (defeat mode) & & \\
-% Wild (catch mode) & & \\
-% Trainer & & \\
-% \bottomrule
-% \end{tabular}
-% \caption{Battle outcomes by encounter type.}
-% \label{tab:battles}
-% \end{table}
-
-\texttt{[TODO: Report win/loss rates for wild battles (defeat mode), wild battles (catch mode), and trainer battles.]}
-
-\subsection{Decision Quality}
-
-% TODO: Fill in with actual data
-% Table template:
-% \begin{table}[h]
-% \centering
-% \begin{tabular}{lcc}
-% \toprule
-% Agent & Invalid Actions & Most Common Error \\
-% \midrule
-% Overworld & & \\
-% Battle & & \\
-% Scout & & \\
-% Shop & & \\
-% \bottomrule
-% \end{tabular}
-% \caption{Invalid action rates by agent.}
-% \label{tab:invalid}
-% \end{table}
-
-\texttt{[TODO: Report invalid action rates per agent, with breakdown of most common error types.]}
-
-\subsection{Capture Efficiency}
-
-\texttt{[TODO: Report number of catch attempts vs successful captures, and scout recommendation accuracy.]}
+\texttt{[TODO: Fill in with experimental data after runs are completed.]}
 
 % --------------------------------------------------------------------------- %
 

@@ -33,6 +33,12 @@ _BROKEN_WARPS = {
     (0x32, 0),  # Viridian Forest South Gate — left door to Viridian Forest
 }
 
+# Connections to hide — require HM moves not yet available (e.g. Surf)
+# Format: (map_id, destination_label)
+_BLOCKED_CONNECTIONS = {
+    (0x00, "Route 21"),   # Pallet Town → Route 21 (needs Surf)
+}
+
 
 class OverworldScanner:
     def __init__(self, pyboy, rom_path=None):
@@ -563,6 +569,11 @@ class OverworldScanner:
                 ey, ex = H, 0
             else:  # right
                 ey, ex = H, W * 2 - 1
+
+            # Skip connections that require HMs not yet available
+            current_map = mem[ADDR_MAP_N]
+            if (current_map, map_name) in _BLOCKED_CONNECTIONS:
+                continue
 
             results.append({
                 "label": map_name,

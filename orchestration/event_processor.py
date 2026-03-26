@@ -17,7 +17,7 @@ class EventProcessor:
                  mart_handler=None):
         self._pyboy = pyboy
         self._screen = screen
-        self._menu = menu
+        self.menu = menu
         self._naming = naming
         self._handle_name_menu = name_menu_handler
         self._dialogue = DialogueAdvancer(pyboy, screen)
@@ -89,7 +89,7 @@ class EventProcessor:
                 # Check if a choice menu (HEAL/CANCEL, YES/NO, etc.)
                 # appeared alongside the dialogue text — scan tilemap
                 # for cursor tile, no WRAM dependency
-                choice_options = self._menu.read_choice_menu()
+                choice_options = self.menu.read_choice_menu()
                 if choice_options:
                     self._flush_dialogue(pending_lines, all_dialogue)
                     pending_lines = []
@@ -111,7 +111,7 @@ class EventProcessor:
 
             # Check for standalone menus (e.g. PC menu) that appear
             # without text box content — just a cursor + options
-            choice_options = self._menu.read_choice_menu()
+            choice_options = self.menu.read_choice_menu()
             if choice_options:
                 self._handle_choice_menu(choice_options)
                 idle = 0

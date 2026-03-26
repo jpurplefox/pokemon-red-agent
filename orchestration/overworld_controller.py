@@ -201,7 +201,10 @@ class OverworldAIController:
         new_map_name = MAP_NAMES.get(new_map_id, f"Map {new_map_id}")
         dialogue = result.get("dialogue", "")
 
-        if result.get("map_changed"):
+        if result.get("blocked"):
+            action_desc = f"Tried to go to {poi['label']}"
+            result_desc = "Blocked — cannot reach this area"
+        elif result.get("map_changed"):
             action_desc = f"Went to {poi['label']}"
             result_desc = f"Arrived at {new_map_name}"
             if dialogue:

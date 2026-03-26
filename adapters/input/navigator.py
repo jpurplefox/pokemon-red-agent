@@ -159,9 +159,11 @@ class Navigator:
             if mem[ADDR_MAP_N] != start_map:
                 result["map_changed"] = True
                 result["show_pois"] = True
-                # Wait long enough for map-entry events (e.g. Mart parcel)
-                # to trigger — NPCs may walk toward the player first
-                for _ in range(20):
+                # Wait for map-entry events (e.g. Mart parcel, Bill's script)
+                # Bill's House (0x58) needs extra time for long scripted events
+                new_map = mem[ADDR_MAP_N]
+                wait_cycles = 60 if new_map == 0x58 else 3
+                for _ in range(wait_cycles):
                     self._pyboy.tick(30)
                     if self._screen.read_text_box() or self._poll_for_event():
                         lines = self._event_processor.process()
@@ -185,7 +187,7 @@ class Navigator:
                 return
 
         # Interact with the POI based on its kind
-        self._interact(poi, face)
+        self._interact(poi, face, result)
 
         # Poll for event triggered by the interaction
         if self._poll_for_event():
@@ -196,7 +198,8 @@ class Navigator:
             for _ in range(120):
                 self._pyboy.tick(10)
                 new_text = self._screen.read_text_box()
-                if new_text:
+                new_menu = self._event_processor.menu.read_choice_menu() if not new_text else None
+                if new_text or new_menu:
                     extra = self._event_processor.process()
                     if extra:
                         result["dialogue"] += " " + " ".join(extra)
@@ -251,7 +254,7 @@ class Navigator:
                 return p
         return None
 
-    def _interact(self, poi, face):
+    def _interact(self, poi, face, result=None):
         """Perform the appropriate interaction for a POI kind."""
         mem = self._pyboy.memory
 
@@ -264,9 +267,15 @@ class Navigator:
         elif poi["kind"] == "connection":
             old_map = mem[ADDR_MAP_N]
             self._pyboy.button(face, delay=8)
-            self._pyboy.tick(60)
+            # Poll until map changes or timeout
+            for _ in range(20):
+                self._pyboy.tick(10)
+                if mem[ADDR_MAP_N] != old_map:
+                    break
             if mem[ADDR_MAP_N] == old_map:
                 print(f"Cannot cross to {poi['label']} (blocked).")
+                if result is not None:
+                    result["blocked"] = True
         elif poi["kind"] == "exit":
             self._pyboy.button(face, delay=8)
             self._pyboy.tick(60)

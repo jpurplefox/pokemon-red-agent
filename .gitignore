@@ -1,5 +1,6 @@
 rom.gb
 rom.gb.ram
+*.state
 .env
 venv/
 __pycache__/

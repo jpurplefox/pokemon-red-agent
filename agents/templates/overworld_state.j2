@@ -33,7 +33,6 @@ Key Items:
 {%- for entry in history %}
 • [{{ entry.map }}]
   {%- if entry.poi %} {{ entry.action_label | default("") }} {{ entry.poi }}:{% endif %} {{ entry.action }}
-  {%- if entry.reason %} (thought: {{ entry.reason }}){% endif %}
   {%- if entry.result %} → {{ entry.result }}{% endif %}
 {%- endfor %}
 {%- endif %}
