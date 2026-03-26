@@ -27,7 +27,7 @@ We present an autonomous agent capable of playing Pok\'{e}mon Red, a classic rol
 
 The system is built around seven specialized LLM-based agents --- overworld navigation, battle strategy, catch-or-defeat evaluation, move learning, shop optimization, party lead selection, and nickname generation --- each operating on prompts constructed from direct memory reads of the emulator's working RAM. A minimal layer of mechanical automation handles low-level execution (menu traversal, pathfinding, dialogue advancement), while a feedback-based validation mechanism allows the LLM to self-correct when it attempts invalid actions. This separation between strategic reasoning and mechanical execution allows us to study which decisions an LLM can reliably make and how effectively it recovers from errors through feedback.
 
-We evaluate the system across multiple open-weight models of varying sizes --- Qwen 2.5 14B, Qwen 3 14B, and Qwen 3.5 9B --- all running locally on consumer hardware via MLX, and additionally test larger models (Qwen 3.5 27B and Qwen 3.5 122B-A10B) for the overworld agent to study how model scale affects high-level navigation decisions. We discuss the design trade-offs involved in building a viable LLM-based game agent, the failure modes we observe, and the minimal set of interventions needed to keep the agent on track.
+We evaluate the system across multiple open-weight models of varying sizes --- Qwen 3 14B, Qwen 3.5 9B, and Gemma 3 12B running locally on consumer hardware via MLX, and larger models (Qwen 3.5 27B and Qwen 3.5 122B-A10B) served via cloud inference --- to study how model scale affects gameplay quality. We discuss the design trade-offs involved in building a viable LLM-based game agent, the failure modes we observe, and the minimal set of interventions needed to keep the agent on track.
 \end{abstract}
 
 % --------------------------------------------------------------------------- %
@@ -47,7 +47,7 @@ In this work, we present an autonomous agent that plays Pok\'{e}mon Red using a 
 
 A key design principle of our approach is the explicit separation between \emph{strategic reasoning} and \emph{mechanical execution}. The LLM is responsible for all high-level decisions --- where to go, what move to use, whether to catch a Pok\'{e}mon --- while a thin automation layer handles low-level tasks that require no intelligence: pathfinding via A*, menu traversal, and dialogue advancement. When the LLM attempts an invalid action, the system provides feedback explaining the failure and requests a new decision, preserving the LLM as the sole decision-maker. This separation allows us to study a focused question: \emph{which decisions can an LLM reliably make in an RPG, and how effectively does it self-correct when given feedback on invalid actions?}
 
-We evaluate models at multiple scales: smaller models (9B--14B parameters) run locally via MLX on Apple Silicon, while the overworld agent --- the most demanding component --- requires at minimum a 27B-parameter model served via cloud inference. Notably, this 27B model remains within reach of consumer hardware with sufficient memory, far from the frontier-scale models typically associated with complex agent behavior.
+We evaluate models at multiple scales, from 9B to 122B parameters, to identify the minimum model size required for consistent gameplay. Preliminary results suggest that smaller models (9B--14B) struggle with sustained navigation, while a 27B-parameter model achieves consistent progress. This 27B model remains within reach of consumer hardware with sufficient memory, far from the frontier-scale models typically associated with complex agent behavior.
 
 Our contributions are as follows:
 \begin{itemize}
@@ -105,7 +105,7 @@ The emulator runs synchronously with the agent: after each decision, the executi
 
 \subsection{Multi-Agent Architecture}
 
-Rather than using a single monolithic prompt, we decompose gameplay into six specialized agents, each responsible for a distinct aspect of the game:
+Rather than using a single monolithic prompt, we decompose gameplay into seven specialized agents, each responsible for a distinct aspect of the game:
 
 \begin{itemize}
   \item \textbf{Overworld Agent}: Decides where to go next by examining two separate lists extracted from the current map: available warps (exits to other areas) and nearby points of interest (POIs) --- NPCs, signs, and tall grass patches ---. It also receives the party's health status, badge progress, available money, and a history of recent actions. Outputs a target warp or POI for the Navigator to reach via pathfinding.
@@ -200,7 +200,7 @@ The battle state provided to the agent includes:
   \item The available action space, which varies by context: \texttt{MOVE:<name>}, \texttt{SWITCH:<nickname>}, \texttt{BALL} (catch mode only), and \texttt{RUN} (wild battles only).
 \end{itemize}
 
-When a Pok\'{e}mon faints mid-battle, a dedicated \emph{switch-in sub-agent} selects a replacement based on type matchups against the current enemy.
+When a Pok\'{e}mon faints mid-battle, a dedicated \emph{switch-in decision} selects a replacement based on type matchups against the current enemy.
 \subsection{Scout Agent}
 
 Upon encountering a wild Pok\'{e}mon, the scout agent decides whether the battle goal should be \textsc{catch} or \textsc{defeat}. This decision runs before the battle agent is invoked, setting the strategic frame for the entire encounter.
