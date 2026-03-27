@@ -61,7 +61,7 @@ class OverworldAI:
         self._reflect_ai = reflect_ai
         self._history = []
         self._last_think = ""
-        self._visited_maps = set()
+        self._visited_maps = []  # ordered by discovery time
         self._visited_pois = set()
         self._iteration = 0
 
@@ -98,7 +98,8 @@ class OverworldAI:
     def record_action(self, action_desc, map_name, result_text="",
                       poi_label="", poi_kind="", action_label="", reason=""):
         """Record an action in the exploration history."""
-        self._visited_maps.add(map_name)
+        if map_name not in self._visited_maps:
+            self._visited_maps.append(map_name)
         entry = {
             "action": action_desc,
             "map": map_name,
@@ -147,7 +148,8 @@ class OverworldAI:
         """Ask the LLM what to do next in the overworld."""
         self._iteration += 1
         _log._action_count = self._iteration
-        self._visited_maps.add(map_name)
+        if map_name not in self._visited_maps:
+            self._visited_maps.append(map_name)
 
         # Build POI data split into interactables and warps
         recent = self._history[-25:]
@@ -188,7 +190,7 @@ class OverworldAI:
                               map_name=map_name,
                               interactables=interact_data,
                               warps=warp_data,
-                              visited_maps=sorted(self._visited_maps),
+                              visited_maps=self._visited_maps,
                               history=self._history[-25:],
                               active_subgoal=active,
                               completed_subgoals=completed,

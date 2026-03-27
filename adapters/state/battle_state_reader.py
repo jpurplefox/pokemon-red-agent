@@ -11,7 +11,7 @@ from data.constants import (
     BMON_PP, BMON_LEVEL, BMON_MAX_HP,
     ADDR_PARTY_COUNT, ADDR_PARTY_SPECIES, ADDR_PARTY_MONS,
     PARTY_MON_SIZE, PARTY_MON_LEVEL, PARTY_MON_HP, PARTY_MON_MAX_HP,
-    ADDR_PARTY_NICKS, PARTY_NICK_SIZE,
+    PARTY_MON_STATUS, ADDR_PARTY_NICKS, PARTY_NICK_SIZE,
     POKEMON_CHARMAP,
 )
 from data.pokemon_data import POKEMON_NAMES, MOVE_NAMES, MOVE_BASE_PP, status_text
@@ -71,6 +71,7 @@ class BattleStateReader:
             level = mem[base + PARTY_MON_LEVEL]
             hp = (mem[base + PARTY_MON_HP] << 8) | mem[base + PARTY_MON_HP + 1]
             max_hp = (mem[base + PARTY_MON_MAX_HP] << 8) | mem[base + PARTY_MON_MAX_HP + 1]
+            status = status_text(mem[base + PARTY_MON_STATUS])
             nick_base = ADDR_PARTY_NICKS + i * PARTY_NICK_SIZE
             nickname = ""
             for j in range(10):
@@ -82,6 +83,7 @@ class BattleStateReader:
                 name=name,
                 nickname=nickname.strip() or name,
                 level=level, hp=hp, max_hp=max_hp,
+                status=status,
             ))
         return party
 

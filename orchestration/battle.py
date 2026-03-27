@@ -195,10 +195,13 @@ class BattleHandler:
         """Pass turn text and current HP to the strategy for history tracking."""
         player = self._state.read_player()
         enemy = self._state.read_enemy()
+        switch_hp = getattr(self, '_switch_hp', None)
+        self._switch_hp = None  # consume it
         self._strategy.add_turn(
             text,
             player.hp, player.max_hp,
             enemy.hp, enemy.max_hp,
+            switch_hp=switch_hp,
         )
 
     # ------------------------------------------------------------------
@@ -238,6 +241,9 @@ class BattleHandler:
         elif action_type == "switch":
             self._driver.switch_pokemon(detail)
             self._driver.reset_move_cursor()
+            # Record HP of the new mon right after switching (before enemy attacks)
+            new_player = self._state.read_player()
+            self._switch_hp = new_player.hp
         else:
             move_idx = next(
                 (i for i, m in enumerate(player.moves)
@@ -682,7 +688,7 @@ class ManualStrategy:
     def on_battle_end(self, is_wild, result="unknown"):
         pass
 
-    def add_turn(self, text, player_hp, player_max_hp, enemy_hp, enemy_max_hp):
+    def add_turn(self, text, player_hp, player_max_hp, enemy_hp, enemy_max_hp, switch_hp=None):
         pass
 
     def get_history(self):

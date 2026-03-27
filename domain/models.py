@@ -40,6 +40,7 @@ class PartyMember:
     level: int
     hp: int
     max_hp: int
+    status: str = ""
 
 
 # -- Inventory --------------------------------------------------------------

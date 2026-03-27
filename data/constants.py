@@ -9,9 +9,9 @@ ADDR_LIST_SCROLL_OFFSET = 0xCC36  # wListScrollOffset: items scrolled above visi
 
 ADDR_PLAYER_NAME = 0xD158     # wPlayerName: 11 bytes (up to 7 chars + 0x50 terminator)
 ADDR_BADGES = 0xD356           # wObtainedBadges: 8 bits, 1 per badge
-ADDR_PLAY_HOURS = 0xDA40       # wPlayTimeHours: 2 bytes (little-endian)
-ADDR_PLAY_MINUTES = 0xDA43     # wPlayTimeMinutes: 1 byte
-ADDR_PLAY_SECONDS = 0xDA44     # wPlayTimeSeconds: 1 byte
+ADDR_PLAY_HOURS = 0xDA40       # wPlayTimeHours: 1 byte
+ADDR_PLAY_MINUTES = 0xDA42     # wPlayTimeMinutes: 1 byte (0xDA41 = wPlayTimeMaxed)
+ADDR_PLAY_SECONDS = 0xDA43     # wPlayTimeSeconds: 1 byte
 ADDR_TILEMAP = 0xC3A0          # wTileMap: WRAM copy of screen (20 tiles per row)
 ADDR_GRASS_TILE = 0xD535       # wGrassTile: tile ID that triggers wild encounters
 
@@ -49,6 +49,7 @@ ADDR_PARTY_SPECIES = 0xD164   # wPartySpecies: 6 bytes, species IDs
 ADDR_PARTY_MONS = 0xD16B      # wPartyMon1: 44 bytes per pokemon
 PARTY_MON_SIZE = 44           # bytes per party pokemon struct
 PARTY_MON_HP = 0x01           # 2 bytes big-endian, current HP
+PARTY_MON_STATUS = 0x04       # 1 byte: status condition (same encoding as battle mon)
 PARTY_MON_LEVEL = 0x21        # offset to level within party mon struct
 PARTY_MON_MAX_HP = 0x22       # 2 bytes big-endian, max HP
 ADDR_PARTY_NICKS = 0xD2B5     # wPartyMonNick: 11 bytes per nickname (10 chars + 0x50)

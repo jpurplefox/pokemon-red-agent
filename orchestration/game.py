@@ -138,7 +138,7 @@ class Game:
                     break
                 player_name += POKEMON_CHARMAP.get(tile, "")
 
-            hours = mem[ADDR_PLAY_HOURS] | (mem[ADDR_PLAY_HOURS + 1] << 8)
+            hours = mem[ADDR_PLAY_HOURS]
             minutes = mem[ADDR_PLAY_MINUTES]
             seconds = mem[ADDR_PLAY_SECONDS]
 
@@ -286,6 +286,9 @@ class Game:
 
         # Process the turn result (attack messages, etc.)
         battle_continues = self._battle.process_turn()
+
+        # Update HUD with current HP after each turn
+        self._update_hud()
 
         if not battle_continues and self._battle.is_in_battle():
             # Non-battle event mid-battle (e.g. nickname prompt after

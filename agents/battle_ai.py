@@ -39,10 +39,12 @@ class BattleAI:
         self._team = team
         self._active_idx = active_idx
 
-    def add_turn(self, text, player_hp, player_max_hp, enemy_hp, enemy_max_hp):
+    def add_turn(self, text, player_hp, player_max_hp, enemy_hp, enemy_max_hp,
+                 switch_hp=None):
         """Record what happened in a turn for context in the next decision."""
         if not text or not text.strip():
             return
+
         # Calculate damage dealt/received compared to previous turn
         if self._history:
             prev = self._history[-1]
@@ -51,13 +53,20 @@ class BattleAI:
         else:
             prev_player_hp = player_max_hp
             prev_enemy_hp = enemy_max_hp
-        dmg_to_enemy = prev_enemy_hp - enemy_hp
-        dmg_to_player = prev_player_hp - player_hp
+
         parts = []
+        dmg_to_enemy = prev_enemy_hp - enemy_hp
         if dmg_to_enemy > 0:
             parts.append(f"You dealt {dmg_to_enemy} dmg")
+        # When switching, use the HP the new mon had when it entered
+        # (before the enemy could attack it) as the baseline
+        if switch_hp is not None:
+            dmg_to_player = switch_hp - player_hp
+        else:
+            dmg_to_player = prev_player_hp - player_hp
         if dmg_to_player > 0:
             parts.append(f"You took {dmg_to_player} dmg")
+
         self._history.append({
             "text": text.strip(),
             "damage": ", ".join(parts) if parts else "No damage",
@@ -355,7 +364,8 @@ class BattleAI:
             return None
 
         # Retry loop if LLM tries to RUN in a trainer battle
-        while not is_wild and action[0] == "run":
+        run_retries = 0
+        while action and not is_wild and action[0] == "run" and run_retries < 3:
             error_msg = "ERROR: You CANNOT run from trainer battles. Pick a MOVE instead."
             _log.log_retry()
             _log.log_think("(retry: tried to run from trainer)")
@@ -365,6 +375,11 @@ class BattleAI:
             _log.stop_thinking()
             text = response.content or ""
             action, _ = self._parse_response(text, player, balls)
+            run_retries += 1
+
+        if action is None:
+            _log.log_think("(all retries failed — returning control to user)")
+            return None
 
         self._log_action(action)
         return action
@@ -447,6 +462,7 @@ class BattleAI:
                 "label": label, "types": m_types,
                 "level": mon.level,
                 "hp": mon.hp, "max_hp": mon.max_hp,
+                "status": mon.status if hasattr(mon, 'status') and mon.status else "",
             })
 
         battle_type = "Wild" if is_wild else "Trainer (CANNOT RUN)"

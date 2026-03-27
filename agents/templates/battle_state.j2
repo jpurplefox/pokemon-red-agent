@@ -31,7 +31,7 @@ Poke Balls: {{ balls | join(", ") }}
 {% endif %}
 {% if switchable %}
 Party (available to switch):
-{% for mon in switchable %}  - {{ mon.label }}{% if mon.types %} ({{ mon.types }}){% endif %} Lv{{ mon.level }} HP: {{ mon.hp }}/{{ mon.max_hp }}
+{% for mon in switchable %}  - {{ mon.label }}{% if mon.types %} ({{ mon.types }}){% endif %} Lv{{ mon.level }} HP: {{ mon.hp }}/{{ mon.max_hp }}{% if mon.status %} [{{ mon.status }}]{% endif %}
 {% endfor %}
 {% endif %}
 {% if known_matchups %}

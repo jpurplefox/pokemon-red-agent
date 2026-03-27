@@ -16,7 +16,7 @@ _OAK_LAB_STARTERS = {
 # Gym map IDs → (leader name, sprite label they use)
 _GYM_LEADERS = {
     0x36: ("BROCK", "Nerd"),        # Pewter Gym
-    0x41: ("MISTY", "Beauty"),      # Cerulean Gym
+    0x41: ("MISTY", "Girl"),         # Cerulean Gym
     0x5C: ("LT. SURGE", "Gentleman"),  # Vermilion Gym
     0x86: ("ERIKA", "Beauty"),      # Celadon Gym
     0x9D: ("KOGA", "Nerd"),         # Fuchsia Gym
