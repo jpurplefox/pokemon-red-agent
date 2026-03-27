@@ -47,7 +47,7 @@ Maps visited so far: {{ visited_maps | join(", ") if visited_maps else "None" }}
 {%- if interactables %}
 --- Interactables (use INTERACT:<number>) ---
 {%- for poi in interactables %}
-[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away)
+[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away){% if poi.times_recent >= 3 %} 🚫 VISITED x{{ poi.times_recent }} — DO NOT interact again{% elif poi.times_recent > 0 %} ⚠️ VISITED x{{ poi.times_recent }}{% endif %}
 {%- endfor %}
 {%- endif %}
 {%- if warps %}
