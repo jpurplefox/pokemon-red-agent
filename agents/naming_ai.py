@@ -71,6 +71,11 @@ class NamingAI:
             content = response.content or ""
             name = self._parse_name(content)
             _log.log_response("NAMING", content)
+            # Show the model's reasoning in the HUD
+            for line in content.strip().split("\n"):
+                if line.strip().upper().startswith("THINK:"):
+                    _log.log_think(line.strip()[6:].strip())
+                    break
             if name:
                 _log.log_think(f"Nickname → {name}")
                 return name
