@@ -108,7 +108,7 @@ class OverworldAIController:
                 break
             player_name += POKEMON_CHARMAP.get(tile, "")
         self._last_player_name = player_name
-        hours = mem[ADDR_PLAY_HOURS] | (mem[ADDR_PLAY_HOURS + 1] << 8)
+        hours = mem[ADDR_PLAY_HOURS]
         minutes = mem[ADDR_PLAY_MINUTES]
         seconds = mem[ADDR_PLAY_SECONDS]
         play_time = f"{hours}:{minutes:02d}:{seconds:02d}"

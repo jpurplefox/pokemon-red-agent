@@ -9,9 +9,9 @@ ADDR_LIST_SCROLL_OFFSET = 0xCC36  # wListScrollOffset: items scrolled above visi
 
 ADDR_PLAYER_NAME = 0xD158     # wPlayerName: 11 bytes (up to 7 chars + 0x50 terminator)
 ADDR_BADGES = 0xD356           # wObtainedBadges: 8 bits, 1 per badge
-ADDR_PLAY_HOURS = 0xDA40       # wPlayTimeHours: 1 byte
-ADDR_PLAY_MINUTES = 0xDA42     # wPlayTimeMinutes: 1 byte (0xDA41 = wPlayTimeMaxed)
-ADDR_PLAY_SECONDS = 0xDA43     # wPlayTimeSeconds: 1 byte
+ADDR_PLAY_HOURS = 0xDA41       # wPlayTimeHours (PyBoy offset +1 from pokered 0xDA40)
+ADDR_PLAY_MINUTES = 0xDA43     # wPlayTimeMinutes
+ADDR_PLAY_SECONDS = 0xDA44     # wPlayTimeSeconds
 ADDR_TILEMAP = 0xC3A0          # wTileMap: WRAM copy of screen (20 tiles per row)
 ADDR_GRASS_TILE = 0xD535       # wGrassTile: tile ID that triggers wild encounters
 
