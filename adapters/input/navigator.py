@@ -211,12 +211,12 @@ class Navigator:
         if text:
             lines = self._event_processor.process()
             result["dialogue"] = " ".join(lines) if lines else ""
-            # Wait for any post-dialogue scripts/animations to finish
+            # Wait for any post-dialogue scripts/animations or menus to finish
             for _ in range(120):
                 self._pyboy.tick(10)
                 new_text = self._screen.read_text_box()
-                if new_text:
-                    # More text appeared — process it
+                new_menu = self._event_processor.menu.read_choice_menu() if not new_text else None
+                if new_text or new_menu:
                     extra = self._event_processor.process()
                     if extra:
                         result["dialogue"] += " " + " ".join(extra)

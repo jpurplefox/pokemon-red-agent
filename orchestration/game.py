@@ -234,8 +234,18 @@ class Game:
         if not self._menu.is_name_menu():
             return False
 
-        self._in_overworld = False
         options = self._menu.get_options()
+
+        # PC menus get misdetected as name menus — dismiss with B
+        opts_text = " ".join(options).upper()
+        if any(kw in opts_text for kw in ("LOG OFF", "WITHDRAW", "DEPOSIT",
+                                           "BILL", "SOMEONE", "PROF.OAK")):
+            print(f"  [AUTO] Closing PC menu: {options}")
+            self._pyboy.button("b")
+            self._pyboy.tick(30)
+            return True
+
+        self._in_overworld = False
         choice = prompt_menu(options)
         self._menu.select(choice, options)
         self._pyboy.tick(30)
@@ -322,6 +332,7 @@ class Game:
                 self._overworld_ai.record_dialogue(map_name, full)
 
         self._pyboy.tick(30)
+
         if self._map_loaded():
             if not self._in_overworld:
                 self._in_overworld = True

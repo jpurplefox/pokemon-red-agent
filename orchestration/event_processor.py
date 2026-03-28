@@ -123,7 +123,6 @@ class EventProcessor:
                 continue
 
             idle += 1
-
         return all_dialogue
 
     def _handle_naming_keyboard(self):
