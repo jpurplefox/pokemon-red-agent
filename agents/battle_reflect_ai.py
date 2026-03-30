@@ -77,8 +77,12 @@ class BattleReflectAI:
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
-        response = self._llm.invoke(messages)
-        text = (response.content or "").strip()
+        for _empty_retry in range(3):
+            response = self._llm.invoke(messages)
+            text = (response.content or "").strip()
+            if text:
+                break
+            print(f"  ⚠️  Battle Reflect: empty response (attempt {_empty_retry + 1}/3)")
 
         _log.log_response("BATTLE-REFLECT", text)
 

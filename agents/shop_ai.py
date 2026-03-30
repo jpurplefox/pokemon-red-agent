@@ -41,8 +41,12 @@ class ShopAI:
             _log.log_prompt("SHOP", "(inline)", user_prompt)
 
         messages = [HumanMessage(content=user_prompt)]
-        response = self._llm.invoke(messages)
-        text = response.content or ""
+        for _empty_retry in range(3):
+            response = self._llm.invoke(messages)
+            text = response.content or ""
+            if text.strip():
+                break
+            print(f"  ⚠️  Shop: empty response (attempt {_empty_retry + 1}/3)")
 
         if _DEBUG_PROMPTS:
             _log.log_response("SHOP", text)

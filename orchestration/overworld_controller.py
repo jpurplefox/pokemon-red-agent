@@ -14,7 +14,6 @@ from data.constants import (
     ADDR_PLAY_SECONDS, MAP_NAMES, POKEMON_CHARMAP,
 )
 from adapters.display.ai_logger import AILogger, print_metrics
-from adapters.openai_llm import CloudLLMError
 from domain.models import HUDState
 
 
@@ -129,16 +128,12 @@ class OverworldAIController:
         money = self._bag.read_money()
         key_items = self._bag.get_key_items()
         print_metrics()
-        try:
-            result = self._ai.decide(
-                map_name, pois, grid=grid, player_y=py, player_x=px,
-                party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
-                money=money, badges=mem[ADDR_BADGES],
-                player_name=player_name, key_items=key_items,
-            )
-        except CloudLLMError as e:
-            print(f"  ⚠️  Cloud LLM error: {e} — retrying next tick")
-            return "acted"
+        result = self._ai.decide(
+            map_name, pois, grid=grid, player_y=py, player_x=px,
+            party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
+            money=money, badges=mem[ADDR_BADGES],
+            player_name=player_name, key_items=key_items,
+        )
 
         # Update HUD again after decide (think time + action count updated)
         hud.action_count = self._ai.iteration

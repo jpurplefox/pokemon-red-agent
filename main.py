@@ -98,7 +98,6 @@ if __name__ == "__main__":
                 model=model_id,
                 base_url="https://openrouter.ai/api/v1",
                 api_key_env="OPENROUTER_API_KEY",
-                enable_thinking=False,
             )
             llm = TickingLLM(cloud_llm, pyboy)
             naming_ai = NamingAI(llm=llm)

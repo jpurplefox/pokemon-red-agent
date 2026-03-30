@@ -17,21 +17,4 @@ class TickingLLM:
 
     def invoke(self, messages):
         """Call the LLM while the emulator keeps ticking on main thread."""
-        max_attempts = 3
-        for attempt in range(max_attempts):
-            try:
-                return self._pyboy.run_with_ticking(self._llm.invoke, messages)
-            except TimeoutError:
-                print(f"  ⚠️  LLM timeout (attempt {attempt + 1}/{max_attempts})")
-                print(f"  ⚠️  Model: {getattr(self._llm, '_model_name', '?')}")
-                print(f"  ⚠️  Messages ({len(messages)}):")
-                for i, msg in enumerate(messages):
-                    role = msg.__class__.__name__
-                    content = msg.content or ""
-                    preview = content[:200].replace("\n", "\\n")
-                    if len(content) > 200:
-                        preview += f"... ({len(content)} chars)"
-                    print(f"       [{i}] {role}: {preview}")
-                if attempt == max_attempts - 1:
-                    from adapters.openai_llm import CloudLLMError
-                    raise CloudLLMError("LLM call timed out after retries")
+        return self._pyboy.run_with_ticking(self._llm.invoke, messages)

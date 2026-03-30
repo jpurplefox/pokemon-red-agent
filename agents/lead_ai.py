@@ -55,8 +55,12 @@ class LeadAI:
         ]
 
         for attempt in range(3):
-            response = self._llm.invoke(messages)
-            content = response.content or ""
+            for _empty_retry in range(3):
+                response = self._llm.invoke(messages)
+                content = response.content or ""
+                if content.strip():
+                    break
+                print(f"  ⚠️  Lead: empty response (attempt {_empty_retry + 1}/3)")
             _log.log_response("LEAD", content)
             result = self._parse_response(content, party, alive)
             if result is not None:

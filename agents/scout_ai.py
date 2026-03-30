@@ -53,9 +53,13 @@ class ScoutAI:
 
         _log.log_prompt("SCOUT", SYSTEM_PROMPT, prompt)
         _log.start_thinking()
-        response = self._llm.invoke(messages)
+        for _empty_retry in range(3):
+            response = self._llm.invoke(messages)
+            content = response.content or ""
+            if content.strip():
+                break
+            print(f"  ⚠️  Scout: empty response (attempt {_empty_retry + 1}/3)")
         _log.stop_thinking()
-        content = response.content or ""
         _log.log_response("SCOUT", content)
         decision = self._parse_decision(content)
 
