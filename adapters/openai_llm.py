@@ -78,14 +78,21 @@ class OpenAILLM:
                 if not text and getattr(msg, "reasoning_content", None):
                     print(f"  ⚠️  content empty but reasoning_content present ({len(msg.reasoning_content)} chars)")
                     text = msg.reasoning_content
+
+                if self._strip_thinking:
+                    text = _THINK_RE.sub("", text).strip()
+
+                if not text.strip():
+                    attempt += 1
+                    wait = min(2 ** attempt, 30)
+                    print(f"\n  ⚠️  Empty response (attempt {attempt}), retrying in {wait}s...")
+                    time.sleep(wait)
+                    continue
                 break
             except Exception as e:
                 attempt += 1
                 wait = min(2 ** attempt, 30)
                 print(f"\n  ⚠️  Cloud LLM error (attempt {attempt}), retrying in {wait}s: {e}")
                 time.sleep(wait)
-
-        if self._strip_thinking:
-            text = _THINK_RE.sub("", text).strip()
 
         return _Response(content=text)

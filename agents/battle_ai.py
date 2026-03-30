@@ -186,11 +186,7 @@ class BattleAI:
 
         for attempt in range(3):
             _log.start_thinking()
-            for _empty_retry in range(3):
-                response = self._llm.invoke(messages)
-                if (response.content or "").strip():
-                    break
-                print(f"  ⚠️  Battle: empty response (attempt {_empty_retry + 1}/3)")
+            response = self._llm.invoke(messages)
             _log.stop_thinking()
             choice_idx = self._parse_switch_response(
                 response.content or "", party, alive_indices, is_wild
@@ -280,12 +276,8 @@ class BattleAI:
             HumanMessage(content=user_prompt),
         ]
         _log.start_thinking()
-        for _empty_retry in range(3):
-            response = self._llm.invoke(messages)
-            text = response.content or ""
-            if text.strip():
-                break
-            print(f"  ⚠️  Battle: empty response (attempt {_empty_retry + 1}/3)")
+        response = self._llm.invoke(messages)
+        text = response.content or ""
         _log.stop_thinking()
 
         for line in text.strip().split("\n"):
@@ -346,12 +338,8 @@ class BattleAI:
         max_retries = 2
         last_text = ""
         for attempt in range(max_retries + 1):
-            for _empty_retry in range(3):
-                response = self._llm.invoke(messages)
-                last_text = response.content or ""
-                if last_text.strip():
-                    break
-                print(f"  ⚠️  Battle: empty response (attempt {_empty_retry + 1}/3)")
+            response = self._llm.invoke(messages)
+            last_text = response.content or ""
             _log.stop_thinking()
             # Print reasoning to console for every attempt
             for line in last_text.strip().split("\n"):
@@ -383,12 +371,8 @@ class BattleAI:
             _log.log_think("(retry: tried to run from trainer)")
             messages.append(HumanMessage(content=error_msg))
             _log.start_thinking()
-            for _empty_retry in range(3):
-                response = self._llm.invoke(messages)
-                text = response.content or ""
-                if text.strip():
-                    break
-                print(f"  ⚠️  Battle: empty response (attempt {_empty_retry + 1}/3)")
+            response = self._llm.invoke(messages)
+            text = response.content or ""
             _log.stop_thinking()
             action, _ = self._parse_response(text, player, balls)
             run_retries += 1

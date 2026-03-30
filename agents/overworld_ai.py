@@ -219,12 +219,8 @@ class OverworldAI:
         attempt = 0
         while attempt <= max_retries:
             _log.start_thinking()
-            for _empty_retry in range(3):
-                response = self._llm.invoke(messages)
-                text = response.content or ""
-                if text.strip():
-                    break
-                print(f"  ⚠️  Overworld: empty response (attempt {_empty_retry + 1}/3)")
+            response = self._llm.invoke(messages)
+            text = response.content or ""
             _log.stop_thinking()
             _log.log_console(text.strip())
             result = self._parse_response(text, interact_data, warp_data)

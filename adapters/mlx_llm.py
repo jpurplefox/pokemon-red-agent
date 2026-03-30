@@ -82,11 +82,14 @@ class MLXLLM:
             )
 
         sampler = make_sampler(temp=self._temperature)
-        text = generate(self._model, self._tokenizer,
-                        prompt=prompt, max_tokens=self._max_tokens,
-                        sampler=sampler, verbose=False)
+        while True:
+            text = generate(self._model, self._tokenizer,
+                            prompt=prompt, max_tokens=self._max_tokens,
+                            sampler=sampler, verbose=False)
 
-        # Strip <think>…</think> blocks in case model thinks anyway
-        text = _THINK_RE.sub("", text).strip()
+            # Strip <think>…</think> blocks in case model thinks anyway
+            text = _THINK_RE.sub("", text).strip()
 
-        return _Response(content=text)
+            if text:
+                return _Response(content=text)
+            print("  ⚠️  MLX: empty response, retrying...")

@@ -68,12 +68,8 @@ class MoveAI:
 
         for attempt in range(3):
             _log.start_thinking()
-            for _empty_retry in range(3):
-                response = self._llm.invoke(messages)
-                content = response.content or ""
-                if content.strip():
-                    break
-                print(f"  ⚠️  Move: empty response (attempt {_empty_retry + 1}/3)")
+            response = self._llm.invoke(messages)
+            content = response.content or ""
             _log.stop_thinking()
             _log.log_response("MOVE", content)
             result = self._parse_response(content, current_moves)

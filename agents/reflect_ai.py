@@ -87,13 +87,8 @@ class ReflectAI:
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
-        text = ""
-        for _attempt in range(3):
-            response = self._llm.invoke(messages)
-            text = response.content or ""
-            if text.strip():
-                break
-            print(f"  ⚠️  Reflect: empty response (attempt {_attempt + 1}/3)")
+        response = self._llm.invoke(messages)
+        text = response.content or ""
 
         if _DEBUG_PROMPTS:
             _log.log_response("REFLECT", text)
