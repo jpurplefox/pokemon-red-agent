@@ -5,9 +5,14 @@ team nicknames to avoid duplicates.  Names are limited to 10 characters
 (Pokemon Red constraint).
 """
 
+import re
+
 from langchain_core.messages import SystemMessage, HumanMessage
 from data.constants import EVOLUTION_LINES
 from adapters.display.ai_logger import AILogger
+from adapters.openai_llm import CloudLLMError
+
+_THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 
 _log = AILogger("NAME")
 
@@ -66,28 +71,27 @@ class NamingAI:
 
         _log.log_prompt("NAMING", SYSTEM_PROMPT, prompt)
 
-        for attempt in range(3):
-            response = self._llm.invoke(messages)
-            content = response.content or ""
-            name = self._parse_name(content)
-            _log.log_response("NAMING", content)
-            # Show the model's reasoning in the HUD
-            for line in content.strip().split("\n"):
-                if line.strip().upper().startswith("THINK:"):
-                    _log.log_think(line.strip()[6:].strip())
-                    break
-            if name:
-                _log.log_think(f"Nickname → {name}")
-                return name
-            _log.log_retry()
-            messages.append(response)
-            messages.append(HumanMessage(
-                content="ERROR: Invalid response. Respond with exactly: NAME: <nickname>"
-            ))
-
-        # All retries failed — return None for manual naming
-        _log.log_think("(couldn't generate name — asking user)")
-        return None
+        while True:
+            try:
+                response = self._llm.invoke(messages)
+                content = response.content or ""
+                content = _THINK_RE.sub("", content).strip()
+                name = self._parse_name(content)
+                _log.log_response("NAMING", content)
+                for line in content.strip().split("\n"):
+                    if line.strip().upper().startswith("THINK:"):
+                        _log.log_think(line.strip()[6:].strip())
+                        break
+                if name:
+                    _log.log_think(f"Nickname → {name}")
+                    return name
+                _log.log_retry()
+                messages = [
+                    SystemMessage(content=SYSTEM_PROMPT),
+                    HumanMessage(content=prompt),
+                ]
+            except CloudLLMError:
+                _log.log_think("(LLM timed out — retrying naming)")
 
     def _parse_name(self, text):
         """Extract the name from the LLM response. Returns empty string on failure."""

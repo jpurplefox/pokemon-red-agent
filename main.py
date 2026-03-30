@@ -23,6 +23,7 @@ ROM = "rom.gb"
 
 # OpenRouter model presets (--model <name>)
 CLOUD_MODELS = {
+    "qwen3.5-27b": "qwen/qwen3.5-27b",
     "qwen3-30b":  "qwen/qwen3-30b-a3b",
     "qwen3-235b": "qwen/qwen3-235b-a22b",
     "gemini-flash": "google/gemini-2.5-flash",
@@ -36,6 +37,7 @@ LOCAL_MODELS = {
     "qwen2.5-14b": "mlx-community/Qwen2.5-14B-Instruct-4bit",
     "qwen3-14b":   "mlx-community/Qwen3-14B-4bit",
     "qwen3.5-9b":  "mlx-community/Qwen3.5-9B-4bit",
+    "llama3.1-8b":  "mlx-community/Llama-3.1-8B-Instruct-4bit",
 }
 
 DEFAULT_LOCAL_MODEL = "mlx-community/Qwen2.5-7B-Instruct-4bit"
@@ -76,7 +78,7 @@ if __name__ == "__main__":
 
     start_ai_window()
 
-    if flags & {"--ai", "--naming", "--shop"}:
+    if flags & {"--ai", "--naming", "--shop"} and not cloud_model:
         local_id = LOCAL_MODELS.get(local_model, local_model) if local_model else DEFAULT_LOCAL_MODEL
         print(f"Loading local model: {local_id}")
         raw_llm = MLXLLM(
@@ -89,11 +91,7 @@ if __name__ == "__main__":
         print("Naming AI + Move AI enabled (MLX)")
 
     if "--ai" in flags:
-        scout = ScoutAI(llm=llm)
-        battle_memory_store = FileJSONStore("battle_memory.json")
-        battle_reflect = BattleReflectAI(llm=llm, store=battle_memory_store)
-        strategy = BattleAI(llm=llm, scout=scout, battle_reflect=battle_reflect)
-        # Overworld LLM: cloud via --model, or local MLX by default
+        # If cloud model specified, use it for ALL agents
         if cloud_model:
             model_id = CLOUD_MODELS.get(cloud_model, cloud_model)
             cloud_llm = OpenAILLM(
@@ -102,17 +100,18 @@ if __name__ == "__main__":
                 api_key_env="OPENROUTER_API_KEY",
                 enable_thinking=False,
             )
-            overworld_llm = TickingLLM(cloud_llm, pyboy)
-            print(f"Overworld AI: {model_id} (OpenRouter)")
-        else:
-            overworld_llm = llm
-            print("Overworld AI: local MLX")
-
-        # Reflect and shop use same LLM as overworld (local or cloud)
+            llm = TickingLLM(cloud_llm, pyboy)
+            naming_ai = NamingAI(llm=llm)
+            move_ai = MoveAI(llm=llm)
+            print(f"All agents: {model_id} (OpenRouter)")
+        scout = ScoutAI(llm=llm)
+        battle_memory_store = FileJSONStore("battle_memory.json")
+        battle_reflect = BattleReflectAI(llm=llm, store=battle_memory_store)
+        strategy = BattleAI(llm=llm, scout=scout, battle_reflect=battle_reflect)
         subgoal_store = FileJSONStore("overworld_subgoals.json")
-        reflect_ai = ReflectAI(llm=overworld_llm, store=subgoal_store)
+        reflect_ai = ReflectAI(llm=llm, store=subgoal_store)
         shop_ai = ShopAI(llm=llm)
-        overworld_ai = OverworldAI(llm=overworld_llm, reflect_ai=reflect_ai,
+        overworld_ai = OverworldAI(llm=llm, reflect_ai=reflect_ai,
                                    shop_ai=shop_ai)
         lead_ai = LeadAI(llm=llm)
         print("Battle AI + Scout AI + Overworld AI + Lead AI enabled")

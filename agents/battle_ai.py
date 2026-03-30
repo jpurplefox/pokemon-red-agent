@@ -304,8 +304,8 @@ class BattleAI:
                             return i
 
         # Couldn't parse — stay
-        _log.log_think("=> STAY")
-        return None
+        _log.log_think("=> STAY (couldn't parse)")
+        return -1
 
     # ------------------------------------------------------------------
     # Decision

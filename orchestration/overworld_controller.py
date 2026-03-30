@@ -136,9 +136,9 @@ class OverworldAIController:
                 money=money, badges=mem[ADDR_BADGES],
                 player_name=player_name, key_items=key_items,
             )
-        except CloudLLMError:
-            self.pause()
-            return "paused"
+        except CloudLLMError as e:
+            print(f"  ⚠️  Cloud LLM error: {e} — retrying next tick")
+            return "acted"
 
         # Update HUD again after decide (think time + action count updated)
         hud.action_count = self._ai.iteration

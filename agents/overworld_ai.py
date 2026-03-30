@@ -201,6 +201,7 @@ class OverworldAI:
                               key_items=key_items or [],
                               badge_list=_build_badge_list(badges),
                               badge_count=bin(badges).count("1"),
+                              last_think=self._last_think,
                               ascii_map=render_map(
                                   [pois[p["_orig_idx"]] for p in poi_data],
                                   player_y, player_x, grid,

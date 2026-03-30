@@ -39,7 +39,7 @@ class Game:
         self._pyboy = pyboy
         self._lead_ai = lead_ai
         # All console input() calls will tick the emulator while waiting
-        set_input_fn(lambda prompt="": pyboy.run_with_ticking(input, prompt))
+        set_input_fn(lambda prompt="": pyboy.run_with_ticking(input, prompt, timeout=None))
         self._screen = ScreenReader(self._pyboy)
         self._menu = MenuReader(self._pyboy, self._screen)
         self._dialogue = DialogueAdvancer(self._pyboy, self._screen)

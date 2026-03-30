@@ -510,6 +510,11 @@ class BattleHandler:
             self._pyboy.tick(10)
             self._pyboy.button("a")
             self._pyboy.tick(30)
+            # Wait until the choice menu is fully dismissed
+            for _ in range(60):
+                if not self._menu.read_choice_menu():
+                    break
+                self._pyboy.tick(5)
         else:
             # Select YES
             for _ in range(10):
@@ -644,7 +649,11 @@ class BattleHandler:
         # Check for other choice menus
         options = self._menu.read_choice_menu()
         if options:
-            choice = prompt_menu(options)
+            # If the YES/NO switch menu is still on screen, auto-select NO
+            if self._strategy and len(options) == 2 and "YES" in str(options[0]).upper() and "NO" in str(options[1]).upper():
+                choice = options[1]  # NO
+            else:
+                choice = prompt_menu(options)
             target_idx = options.index(choice)
             for _ in range(10):
                 self._pyboy.button("up")

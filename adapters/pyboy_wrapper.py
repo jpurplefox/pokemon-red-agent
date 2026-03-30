@@ -47,12 +47,20 @@ class PyBoyWrapper:
             return result
         return self._pyboy.tick(count, render=render, sound=False)
 
-    def run_with_ticking(self, fn, *args, **kwargs):
+    def run_with_ticking(self, fn, *args, timeout=200.0, **kwargs):
         """Run fn in a worker thread while the main thread keeps ticking."""
-        future = self._pool.submit(fn, *args, **kwargs)
+        import time
+        pool = ThreadPoolExecutor(max_workers=1)
+        future = pool.submit(fn, *args, **kwargs)
+        start = time.monotonic()
         while not future.done():
             self._pyboy.tick(1, render=True, sound=self._sound)
-        return future.result()
+            if timeout is not None and time.monotonic() - start > timeout:
+                pool.shutdown(wait=False)
+                raise TimeoutError(f"LLM call timed out after {timeout}s")
+        result = future.result()
+        pool.shutdown(wait=False)
+        return result
 
     def __getattr__(self, name):
         """Proxy all other attributes to the real PyBoy."""

@@ -34,6 +34,7 @@ class OpenAILLM:
             raise RuntimeError(f"{api_key_env} environment variable is required")
         self._client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
         self._model = model
+        self._model_name = model
         self._max_tokens = max_tokens
         self._temperature = temperature
         self._strip_thinking = strip_thinking
@@ -69,7 +70,13 @@ class OpenAILLM:
                 if attempt == max_retries - 1:
                     raise CloudLLMError(str(e)) from e
 
-        text = response.choices[0].message.content or ""
+        msg = response.choices[0].message
+        text = msg.content or ""
+
+        # Some models ignore enable_thinking and put output in reasoning_content
+        if not text and getattr(msg, "reasoning_content", None):
+            print(f"  ⚠️  content empty but reasoning_content present ({len(msg.reasoning_content)} chars)")
+            text = msg.reasoning_content
 
         if self._strip_thinking:
             text = _THINK_RE.sub("", text).strip()

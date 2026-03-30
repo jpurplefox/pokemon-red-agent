@@ -37,6 +37,12 @@ Key Items:
 {%- endfor %}
 {%- endif %}
 
+{%- if last_think %}
+
+--- Last Reasoning ---
+{{ last_think }}
+{%- endif %}
+
 --- Current Location ---
 Map: {{ map_name }}
 {%- if map_name not in visited_maps %}
