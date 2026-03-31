@@ -4,7 +4,9 @@ Pure output adapter: translates domain-level intents into button sequences.
 No WRAM reading for game state — only reads cursor position for navigation.
 """
 
-from data.constants import ADDR_CURRENT_MENU, ADDR_MENU_WATCHED_KEYS
+from data.constants import (
+    ADDR_CURRENT_MENU, ADDR_MENU_WATCHED_KEYS, ADDR_LIST_SCROLL_OFFSET,
+)
 
 
 # Naming keyboard grid layout (uppercase)
@@ -85,7 +87,7 @@ class BattleMenuDriver:
             if self._pyboy.memory[ADDR_MENU_WATCHED_KEYS] != 0:
                 break
             self._pyboy.tick(5)
-        self._pyboy.tick(15)  # settle time after menu ready
+        self._pyboy.tick(10)  # settle time after menu ready
         current = self._last_move_idx
         diff = move_idx - current
         if diff > 0:
@@ -107,16 +109,20 @@ class BattleMenuDriver:
         Reads the current cursor position and scroll offset from WRAM
         to navigate correctly regardless of bag state.
         """
-        from data.constants import ADDR_CURRENT_MENU, ADDR_LIST_SCROLL_OFFSET
-
         self.select_battle_option("ITEM")
         for _ in range(30):
             self._pyboy.tick(10)
             if not self.has_battle_menu():
                 break
 
-        # Read current cursor state from WRAM
+        # Wait for item menu to be ready for input
         mem = self._pyboy.memory
+        for _ in range(60):
+            if mem[ADDR_MENU_WATCHED_KEYS] != 0:
+                break
+            self._pyboy.tick(5)
+
+        # Read current cursor state from WRAM
         cursor_pos = mem[ADDR_CURRENT_MENU]
         scroll_offset = mem[ADDR_LIST_SCROLL_OFFSET]
         current_index = scroll_offset + cursor_pos
@@ -124,12 +130,23 @@ class BattleMenuDriver:
         # Navigate from current position to target
         delta = bag_index - current_index
         direction = "down" if delta > 0 else "up"
-        for _ in range(abs(delta)):
+
+        # Navigate by tracking actual position, retrying lost presses
+        max_presses = abs(delta) * 3  # safety limit
+        presses = 0
+        while presses < max_presses:
+            cur = mem[ADDR_CURRENT_MENU] + mem[ADDR_LIST_SCROLL_OFFSET]
+            if cur == bag_index:
+                break
             self._pyboy.button(direction)
-            self._pyboy.tick(5)
+            presses += 1
+            for _ in range(30):
+                self._pyboy.tick(5)
+                if mem[ADDR_CURRENT_MENU] + mem[ADDR_LIST_SCROLL_OFFSET] != cur:
+                    break
 
         self._pyboy.button("a")
-        self._pyboy.tick(20)
+        self._pyboy.tick(10)
         self._pyboy.button("a")
         self._pyboy.tick(10)
 
@@ -140,12 +157,12 @@ class BattleMenuDriver:
             self._pyboy.tick(10)
             if not self.has_battle_menu():
                 break
-        self._pyboy.tick(40)
+        self._pyboy.tick(10)
 
         self._navigate_to_party_slot(party_idx)
 
         self._pyboy.button("a")
-        self._pyboy.tick(20)
+        self._pyboy.tick(10)
         self._pyboy.button("a")
         self._pyboy.tick(10)
 
@@ -155,7 +172,7 @@ class BattleMenuDriver:
         """Navigate to a party member in the party selection screen."""
         self._navigate_to_party_slot(target_idx)
         self._pyboy.button("a")
-        self._pyboy.tick(20)
+        self._pyboy.tick(10)
 
     def _navigate_to_party_slot(self, target_idx: int):
         """Move cursor to a specific party slot reliably.
@@ -205,4 +222,4 @@ class BattleMenuDriver:
             cur_row, cur_col = target_row, target_col
 
         self._pyboy.button("start")
-        self._pyboy.tick(30)
+        self._pyboy.tick(10)

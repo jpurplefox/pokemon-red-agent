@@ -28,7 +28,7 @@ class DialogueAdvancer:
             current = self._screen.read_text_box()
             while current != prev:
                 prev = current
-                self._pyboy.tick(10)
+                self._pyboy.tick(30)
                 current = self._screen.read_text_box()
                 if stop_condition(len(dialogue) > 0, unchanged_count):
                     break

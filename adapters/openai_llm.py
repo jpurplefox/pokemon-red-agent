@@ -3,6 +3,7 @@
 Works with any provider that exposes an OpenAI-compatible chat endpoint:
 Together AI, Alibaba DashScope, OpenRouter, local vLLM, etc.
 
+Uses httpx directly for reliable timeout control.
 Satisfies the LLMPort Protocol: invoke(messages) → response with .content
 """
 
@@ -11,7 +12,7 @@ import re
 import time
 from dataclasses import dataclass
 
-from openai import OpenAI
+import httpx
 
 _THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 
@@ -28,22 +29,24 @@ class OpenAILLM:
     def __init__(self, *, model: str, base_url: str, api_key_env: str,
                  max_tokens: int = 512, temperature: float = 0.3,
                  strip_thinking: bool = False,
-                 timeout: float = 180.0):
+                 timeout: float = 120.0):
         api_key = os.environ.get(api_key_env)
         if not api_key:
             raise RuntimeError(f"{api_key_env} environment variable is required")
-        self._client = OpenAI(api_key=api_key, base_url=base_url, timeout=timeout)
+        self._base_url = base_url.rstrip("/")
+        self._api_key = api_key
         self._model = model
         self._model_name = model
         self._max_tokens = max_tokens
         self._temperature = temperature
         self._strip_thinking = strip_thinking
+        self._timeout = timeout
 
     def invoke(self, messages: list) -> _Response:  # type: ignore[type-arg]
         """Send messages to the API and return a response.
 
         Retries indefinitely on API errors with exponential backoff.
-        Each individual request is bounded by the client timeout.
+        Each individual request is bounded by the timeout.
         """
         chat_messages: list[dict[str, str]] = []
         for msg in messages:
@@ -55,29 +58,45 @@ class OpenAILLM:
                 role = "user"
             chat_messages.append({"role": role, "content": msg.content})
 
+        payload = {
+            "model": self._model,
+            "messages": chat_messages,
+            "max_tokens": self._max_tokens,
+            "temperature": self._temperature,
+            "enable_thinking": False,
+        }
+        headers = {
+            "Authorization": f"Bearer {self._api_key}",
+            "Content-Type": "application/json",
+        }
+
         attempt = 0
         while True:
             try:
-                response = self._client.chat.completions.create(
-                    model=self._model,
-                    messages=chat_messages,  # type: ignore[arg-type]
-                    max_tokens=self._max_tokens,
-                    temperature=self._temperature,
-                    extra_body={"enable_thinking": False},
-                )
-                if not response.choices:
+                with httpx.Client(timeout=self._timeout) as client:
+                    resp = client.post(
+                        f"{self._base_url}/chat/completions",
+                        json=payload,
+                        headers=headers,
+                    )
+                resp.raise_for_status()
+                data = resp.json()
+
+                choices = data.get("choices", [])
+                if not choices:
                     attempt += 1
                     wait = min(2 ** attempt, 30)
                     print(f"\n  ⚠️  Empty choices (attempt {attempt}), retrying in {wait}s...")
                     time.sleep(wait)
                     continue
-                msg = response.choices[0].message
-                text = msg.content or ""
 
-                # Some models ignore enable_thinking and put output in reasoning_content
-                if not text and getattr(msg, "reasoning_content", None):
-                    print(f"  ⚠️  content empty but reasoning_content present ({len(msg.reasoning_content)} chars)")
-                    text = msg.reasoning_content
+                msg = choices[0].get("message", {})
+                text = msg.get("content") or ""
+
+                if not text and msg.get("reasoning_content"):
+                    rc = msg["reasoning_content"]
+                    print(f"  ⚠️  content empty but reasoning_content present ({len(rc)} chars)")
+                    text = rc
 
                 if self._strip_thinking:
                     text = _THINK_RE.sub("", text).strip()
@@ -89,6 +108,11 @@ class OpenAILLM:
                     time.sleep(wait)
                     continue
                 break
+            except httpx.TimeoutException as e:
+                attempt += 1
+                wait = min(2 ** attempt, 30)
+                print(f"\n  ⏱️  Timeout after {self._timeout}s (attempt {attempt}), retrying in {wait}s...")
+                time.sleep(wait)
             except Exception as e:
                 attempt += 1
                 wait = min(2 ** attempt, 30)

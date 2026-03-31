@@ -83,7 +83,7 @@ class Navigator:
                 ny, nx = py + dy, px + dx
                 if 0 <= ny < len(grid) and 0 <= nx < len(grid[0]) and grid[ny][nx]:
                     self._pyboy.button(direction, delay=8)
-                    self._pyboy.tick(50)
+                    self._pyboy.tick(20)
                     path = [(py, px)]  # walk back to the warp tile
                     face = None
                     break
@@ -123,7 +123,7 @@ class Navigator:
             direction = path.pop(0)
             old_py, old_px = py, px
             self._pyboy.button(direction, delay=8)
-            self._pyboy.tick(50)  # Extra frames for walk animation to finish
+            self._pyboy.tick(20)  # Extra frames for walk animation to finish
 
             # Verify the player actually moved — if not, check why
             new_py, new_px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
@@ -164,7 +164,7 @@ class Navigator:
                 new_map = mem[ADDR_MAP_N]
                 wait_cycles = 60 if new_map == 0x58 else 3
                 for _ in range(wait_cycles):
-                    self._pyboy.tick(30)
+                    self._pyboy.tick(20)
                     if self._screen.read_text_box() or self._poll_for_event():
                         lines = self._event_processor.process()
                         result["dialogue"] = " ".join(lines) if lines else ""
@@ -194,9 +194,14 @@ class Navigator:
             print(f"Event at {poi['label']}!")
             lines = self._event_processor.process()
             result["dialogue"] = " ".join(lines) if lines else ""
+            # If a battle started, return immediately
+            if mem[ADDR_IS_IN_BATTLE] != 0:
+                return
             # Wait for post-dialogue scripts/animations to finish
             for _ in range(120):
                 self._pyboy.tick(10)
+                if mem[ADDR_IS_IN_BATTLE] != 0:
+                    return
                 new_text = self._screen.read_text_box()
                 new_menu = self._event_processor.menu.read_choice_menu() if not new_text else None
                 if new_text or new_menu:
@@ -211,9 +216,13 @@ class Navigator:
         if text:
             lines = self._event_processor.process()
             result["dialogue"] = " ".join(lines) if lines else ""
+            if mem[ADDR_IS_IN_BATTLE] != 0:
+                return
             # Wait for any post-dialogue scripts/animations or menus to finish
             for _ in range(120):
                 self._pyboy.tick(10)
+                if mem[ADDR_IS_IN_BATTLE] != 0:
+                    return
                 new_text = self._screen.read_text_box()
                 new_menu = self._event_processor.menu.read_choice_menu() if not new_text else None
                 if new_text or new_menu:
@@ -263,7 +272,7 @@ class Navigator:
         elif face is None:
             # Warp (stairs) — walking onto the tile activates it;
             # transition is handled by the walking loop's map-change check
-            self._pyboy.tick(300)
+            self._pyboy.tick(100)
         elif poi["kind"] == "connection":
             old_map = mem[ADDR_MAP_N]
             self._pyboy.button(face, delay=8)
@@ -278,13 +287,13 @@ class Navigator:
                     result["blocked"] = True
         elif poi["kind"] == "exit":
             self._pyboy.button(face, delay=8)
-            self._pyboy.tick(60)
+            self._pyboy.tick(30)
         else:
             # Sign/Sprite — face the POI and press A
             self._pyboy.button(face, delay=8)
-            self._pyboy.tick(30)
+            self._pyboy.tick(20)
             self._pyboy.button("a", delay=8)
-            self._pyboy.tick(30)
+            self._pyboy.tick(20)
 
     def _walk_in_grass(self):
         """Walk back and forth in tall grass until a wild battle triggers."""
@@ -295,7 +304,7 @@ class Navigator:
         for _ in range(50):  # max 50 steps before giving up
             for d in directions:
                 self._pyboy.button(d, delay=8)
-                self._pyboy.tick(30)
+                self._pyboy.tick(20)
                 if mem[ADDR_IS_IN_BATTLE] != 0:
                     return
                 if self._screen.read_text_box():

@@ -90,6 +90,13 @@ class BattleHandler:
         Handles "Wild X appeared!", "Go! Y!", and any pre-battle dialogue.
         Prints all dialogue text, then returns when ready for player input.
         """
+        # Skip past battle transition animation quickly
+        for _ in range(60):
+            self._pyboy.tick(10)
+            text = self._screen.read_text_box()
+            if text or self._driver.has_battle_menu():
+                break
+
         full = self._dialogue.advance_until(
             lambda d, u: self._driver.has_battle_menu()
         )
