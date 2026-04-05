@@ -15,6 +15,7 @@ from dataclasses import dataclass
 import httpx
 
 _THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
+_THINKING_BUDGET = 4096
 
 
 @dataclass
@@ -29,6 +30,7 @@ class OpenAILLM:
     def __init__(self, *, model: str, base_url: str, api_key_env: str,
                  max_tokens: int = 512, temperature: float = 0.3,
                  strip_thinking: bool = False,
+                 enable_thinking: bool = False,
                  timeout: float = 120.0):
         api_key = os.environ.get(api_key_env)
         if not api_key:
@@ -40,6 +42,7 @@ class OpenAILLM:
         self._max_tokens = max_tokens
         self._temperature = temperature
         self._strip_thinking = strip_thinking
+        self._enable_thinking = enable_thinking
         self._timeout = timeout
 
     def invoke(self, messages: list) -> _Response:  # type: ignore[type-arg]
@@ -58,13 +61,22 @@ class OpenAILLM:
                 role = "user"
             chat_messages.append({"role": role, "content": msg.content})
 
-        payload = {
-            "model": self._model,
-            "messages": chat_messages,
-            "max_tokens": self._max_tokens,
-            "temperature": self._temperature,
-            "enable_thinking": False,
-        }
+        if self._enable_thinking:
+            payload = {
+                "model": self._model,
+                "messages": chat_messages,
+                "max_tokens": self._max_tokens + _THINKING_BUDGET,
+                "temperature": self._temperature,
+                "enable_thinking": True,
+                "thinking": {"budget_tokens": _THINKING_BUDGET},
+            }
+        else:
+            payload = {
+                "model": self._model,
+                "messages": chat_messages,
+                "max_tokens": self._max_tokens,
+                "temperature": self._temperature,
+            }
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",
@@ -93,13 +105,18 @@ class OpenAILLM:
                 msg = choices[0].get("message", {})
                 text = msg.get("content") or ""
 
-                if not text and msg.get("reasoning_content"):
-                    rc = msg["reasoning_content"]
-                    print(f"  ⚠️  content empty but reasoning_content present ({len(rc)} chars)")
-                    text = rc
+                # Check for reasoning (field name varies by provider)
+                reasoning = (msg.get("reasoning") or
+                             msg.get("reasoning_content") or "")
+                if reasoning:
+                    print(f"  🧠 Thinking: {len(reasoning)} chars")
+                if not text and reasoning:
+                    print(f"  ⚠️  content empty, using reasoning")
+                    text = reasoning
 
-                if self._strip_thinking:
-                    text = _THINK_RE.sub("", text).strip()
+                # Always strip <think> tags from content (some models
+                # embed them inline even with structured reasoning)
+                text = _THINK_RE.sub("", text).strip()
 
                 if not text.strip():
                     attempt += 1

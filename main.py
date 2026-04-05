@@ -77,6 +77,7 @@ if __name__ == "__main__":
     pyboy.set_speed(fast="--fast" in flags)
 
     start_ai_window()
+    enable_thinking = "--thinking" in flags
 
     if flags & {"--ai", "--naming", "--shop"} and not cloud_model:
         local_id = LOCAL_MODELS.get(local_model, local_model) if local_model else DEFAULT_LOCAL_MODEL
@@ -84,6 +85,7 @@ if __name__ == "__main__":
         raw_llm = MLXLLM(
             model_name=local_id,
             temperature=0.3,
+            enable_thinking=enable_thinking,
         )
         llm = TickingLLM(raw_llm, pyboy)
         naming_ai = NamingAI(llm=llm)
@@ -98,6 +100,7 @@ if __name__ == "__main__":
                 model=model_id,
                 base_url="https://openrouter.ai/api/v1",
                 api_key_env="OPENROUTER_API_KEY",
+                enable_thinking=enable_thinking,
             )
             llm = TickingLLM(cloud_llm, pyboy)
             naming_ai = NamingAI(llm=llm)
@@ -107,8 +110,10 @@ if __name__ == "__main__":
         battle_memory_store = FileJSONStore("battle_memory.json")
         battle_reflect = BattleReflectAI(llm=llm, store=battle_memory_store)
         strategy = BattleAI(llm=llm, scout=scout, battle_reflect=battle_reflect)
-        subgoal_store = FileJSONStore("overworld_subgoals.json")
-        reflect_ai = ReflectAI(llm=llm, store=subgoal_store)
+        reflect_ai = None
+        if "--subgoals" in flags:
+            subgoal_store = FileJSONStore("overworld_subgoals.json")
+            reflect_ai = ReflectAI(llm=llm, store=subgoal_store)
         shop_ai = ShopAI(llm=llm)
         overworld_ai = OverworldAI(llm=llm, reflect_ai=reflect_ai,
                                    shop_ai=shop_ai)

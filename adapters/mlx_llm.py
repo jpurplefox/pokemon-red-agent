@@ -21,10 +21,12 @@ class MLXLLM:
     """Local LLM inference using MLX on Apple Silicon."""
 
     def __init__(self, model_name: str = "mlx-community/Qwen3.5-9B-4bit",
-                 max_tokens: int = 512, temperature: float = 0.3):
+                 max_tokens: int = 512, temperature: float = 0.3,
+                 enable_thinking: bool = False):
         self._model, self._tokenizer = load(model_name)  # type: ignore[misc]
         self._max_tokens = max_tokens
         self._temperature = temperature
+        self._enable_thinking = enable_thinking
 
     def invoke(self, messages: list) -> _Response:  # type: ignore[type-arg]
         """Send messages to the local MLX model and return a response."""
@@ -60,7 +62,7 @@ class MLXLLM:
 
         template_kwargs = dict(
             tokenize=False, add_generation_prompt=True,
-            enable_thinking=False,
+            enable_thinking=self._enable_thinking,
         )
         try:
             prompt = self._tokenizer.apply_chat_template(
@@ -87,7 +89,7 @@ class MLXLLM:
                             prompt=prompt, max_tokens=self._max_tokens,
                             sampler=sampler, verbose=False)
 
-            # Strip <think>…</think> blocks in case model thinks anyway
+            # Always strip <think>…</think> blocks so agents get clean output
             text = _THINK_RE.sub("", text).strip()
 
             if text:

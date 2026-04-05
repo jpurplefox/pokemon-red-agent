@@ -45,10 +45,6 @@ Key Items:
 
 --- Current Location ---
 Map: {{ map_name }}
-{%- if map_name not in visited_maps %}
-🆕 NEW MAP — explore before moving on!
-{%- endif %}
-Maps visited so far: {{ visited_maps | join(", ") if visited_maps else "None" }}
 
 {%- if interactables %}
 --- Interactables (use INTERACT:<number>) ---

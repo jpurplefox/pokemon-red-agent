@@ -148,7 +148,7 @@ class Game:
             subgoal = ""
             if self._ow_controller:
                 ow = self._ow_controller._ai
-                goal = getattr(ow, '_goal', '')
+                goal = ow.goal
                 active = ow.active_subgoal() if hasattr(ow, 'active_subgoal') else None
                 if active:
                     subgoal = active.get('description', '')

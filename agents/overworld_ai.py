@@ -217,12 +217,15 @@ class OverworldAI:
 
         max_retries = 3
         attempt = 0
+        retry_user_prompt = None
         while attempt <= max_retries:
             _log.start_thinking()
-            response = self._llm.invoke(messages)
+            response = self._llm.invoke([
+                messages[0],
+                HumanMessage(content=retry_user_prompt or user_prompt),
+            ])
             text = response.content or ""
             _log.stop_thinking()
-            _log.log_console(text.strip())
             result = self._parse_response(text, interact_data, warp_data)
             if result is not None:
                 return result
@@ -230,13 +233,33 @@ class OverworldAI:
             _log.log_retry()
             _log.log_think(f"(retry {attempt}: couldn't parse response)")
             _log.log_think(f"  raw: {text.strip()}")
-            messages.append(response)
-            messages.append(HumanMessage(
-                content=f"ERROR: Invalid action. "
-                        f"Use INTERACT:1-{len(interact_data)} for NPCs/signs/items, "
-                        f"or GO:1-{len(warp_data)} for warps. "
-                        f"Respond with exactly: ACTION: INTERACT:<number> or ACTION: GO:<number>"
-            ))
+            # Retry with a shorter prompt: drop history, add correction
+            retry_user_prompt = _render("overworld_state.j2",
+                              map_name=map_name,
+                              interactables=interact_data,
+                              warps=warp_data,
+                              visited_maps=self._visited_maps,
+                              history=[],
+                              active_subgoal=active,
+                              completed_subgoals=completed,
+                              party=party or [],
+                              pokeballs=pokeballs,
+                              has_pokedex=has_pokedex,
+                              money=money,
+                              key_items=key_items or [],
+                              badge_list=_build_badge_list(badges),
+                              badge_count=bin(badges).count("1"),
+                              last_think=self._last_think,
+                              ascii_map=render_map(
+                                  [pois[p["_orig_idx"]] for p in poi_data],
+                                  player_y, player_x, grid,
+                                  legend=False) if grid else "")
+            retry_user_prompt += (
+                f"\n\nERROR: Invalid action. "
+                f"Use INTERACT:1-{len(interact_data)} for NPCs/signs/items, "
+                f"or GO:1-{len(warp_data)} for warps. "
+                f"Respond with exactly: ACTION: INTERACT:<number> or ACTION: GO:<number>"
+            )
 
         # Max retries exhausted — return None to signal control back to user
         _log.log_think("(max retries — returning control to user)")
