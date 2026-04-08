@@ -6,9 +6,11 @@ Satisfies the LLMPort Protocol: invoke(messages) → response with .content
 import re
 from dataclasses import dataclass
 from mlx_lm import load, generate
-from mlx_lm.sample_utils import make_sampler
+from mlx_lm.sample_utils import make_sampler, make_logits_processors
 
-_THINK_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
+_THINK_CLOSED_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
+_THINK_UNCLOSED_RE = re.compile(r"<think>.*", re.DOTALL)
+_THINKING_BUDGET = 8192
 
 
 @dataclass
@@ -21,12 +23,11 @@ class MLXLLM:
     """Local LLM inference using MLX on Apple Silicon."""
 
     def __init__(self, model_name: str = "mlx-community/Qwen3.5-9B-4bit",
-                 max_tokens: int = 512, temperature: float = 0.3,
-                 enable_thinking: bool = False):
+                 max_tokens: int = 512, temperature: float = 0.3):
         self._model, self._tokenizer = load(model_name)  # type: ignore[misc]
-        self._max_tokens = max_tokens
-        self._temperature = temperature
-        self._enable_thinking = enable_thinking
+        # Qwen models always produce <think> blocks regardless of config,
+        # so always allocate extra tokens for the thinking budget.
+        self._max_tokens = max_tokens + _THINKING_BUDGET
 
     def invoke(self, messages: list) -> _Response:  # type: ignore[type-arg]
         """Send messages to the local MLX model and return a response."""
@@ -62,7 +63,7 @@ class MLXLLM:
 
         template_kwargs = dict(
             tokenize=False, add_generation_prompt=True,
-            enable_thinking=self._enable_thinking,
+            enable_thinking=False,
         )
         try:
             prompt = self._tokenizer.apply_chat_template(
@@ -83,14 +84,30 @@ class MLXLLM:
                 chat_messages, **template_kwargs,
             )
 
-        sampler = make_sampler(temp=self._temperature)
+        sampler = make_sampler(
+            temp=0.6, top_p=0.9, top_k=40, min_p=0.05,
+        )
+        logits_processors = make_logits_processors(
+            repetition_penalty=1.15, presence_penalty=0.0,
+        )
         while True:
             text = generate(self._model, self._tokenizer,
                             prompt=prompt, max_tokens=self._max_tokens,
-                            sampler=sampler, verbose=False)
+                            sampler=sampler,
+                            logits_processors=logits_processors,
+                            verbose=False)
+            print(f"  [MLX raw] {text}")
 
-            # Always strip <think>…</think> blocks so agents get clean output
-            text = _THINK_RE.sub("", text).strip()
+            # Log and strip <think> blocks
+            think_match = _THINK_CLOSED_RE.search(text)
+            if think_match:
+                print(f"  🧠 Thinking: {len(think_match.group())} chars")
+            text = _THINK_CLOSED_RE.sub("", text).strip()
+            # Strip unclosed <think> blocks (model ran out of tokens mid-thought)
+            unclosed_match = _THINK_UNCLOSED_RE.search(text)
+            if unclosed_match:
+                print(f"  🧠 Thinking (truncated): {len(unclosed_match.group())} chars")
+            text = _THINK_UNCLOSED_RE.sub("", text).strip()
 
             if text:
                 return _Response(content=text)

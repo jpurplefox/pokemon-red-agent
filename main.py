@@ -85,7 +85,6 @@ if __name__ == "__main__":
         raw_llm = MLXLLM(
             model_name=local_id,
             temperature=0.3,
-            enable_thinking=enable_thinking,
         )
         llm = TickingLLM(raw_llm, pyboy)
         naming_ai = NamingAI(llm=llm)
