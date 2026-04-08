@@ -349,7 +349,126 @@ We record the wall-clock time at which the agent reaches each story milestone, a
 \section{Results}
 \label{sec:results}
 
-\texttt{[TODO: Fill in with experimental data after runs are completed.]}
+\subsection{Summary}
+
+Table~\ref{tab:summary} presents a high-level comparison of all evaluated models. For each run, we report the furthest narrative checkpoint reached, total wall-clock time, and key decision statistics across agents.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Summary of experimental runs by model.}
+\label{tab:summary}
+\begin{tabular}{lrrrrrrrr}
+\toprule
+Model & Time & OW & Battle & Wins & Losses & Catches & Unparse. & Outcome \\
+\midrule
+Qwen 3.5 9B       & 0.1h &   6 &   --- & --- & --- & --- &  3 & Failed (unparseable) \\
+Qwen 3.5 27B      &  30h & 790 & 1167  & 413 &   2 &  16 & 32 & Badge 2 (Misty) \\
+Qwen 3.5 35B-A3B  & \multicolumn{8}{c}{\emph{--- pending ---}} \\
+Qwen 3.5 122B-A10B & \multicolumn{8}{c}{\emph{--- pending ---}} \\
+Qwen 3.5 397B-A17B & \multicolumn{8}{c}{\emph{--- pending ---}} \\
+Qwen 3.6 Plus     &  37h & 894 & 1553  & 351 &  15 &   4 &  9 & Badge 2 + Bill \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Narrative Progression}
+
+Tables~\ref{tab:cp-27b} and~\ref{tab:cp-36plus} show the wall-clock time and party composition at each narrative checkpoint for the two models that achieved meaningful progress. Qwen 3.5 9B failed before reaching any checkpoint (Section~\ref{sec:obs}).
+
+\begin{table}[h]
+\centering
+\small
+\caption{Qwen 3.5 27B --- checkpoint progression.}
+\label{tab:cp-27b}
+\begin{tabular}{rlrl}
+\toprule
+\# & Checkpoint & Time & Party \\
+\midrule
+1 & Obtain starter    & 0h 14m  & Lv5 Bulbasaur \\
+2 & Deliver Parcel    & 1h 03m  & Lv7 Bulbasaur \\
+3 & Viridian Forest   & 2h 26m  & Lv9 Bulbasaur, Lv4 Rattata, Lv3 Spearow \\
+4 & Defeat Brock      & 5h 02m  & Lv13 Bulbasaur, Lv9 Rattata, Lv5 Spearow, Lv3 Caterpie \\
+5 & Reach Mt.\ Moon   & 6h 51m  & Lv14 Bulbasaur, Lv11 Spearow, Lv10 Rattata, Lv6 Caterpie \\
+6 & Reach Cerulean    & 22h 26m & Lv24 Ivysaur, Lv16 Spearow, Lv16 Rattata, Lv11 Geodude, Lv11 Butterfree, Lv4 Pikachu \\
+7 & Defeat Misty      & 22h 46m & Lv25 Ivysaur, Lv17 Spearow, Lv17 Rattata, Lv11 Geodude, Lv11 Butterfree, Lv4 Pikachu \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Qwen 3.6 Plus --- checkpoint progression.}
+\label{tab:cp-36plus}
+\begin{tabular}{rlrl}
+\toprule
+\# & Checkpoint & Time & Party \\
+\midrule
+1 & Obtain starter    & 0h 15m  & Lv5 Bulbasaur \\
+2 & Deliver Parcel    & 0h 28m  & Lv5 Bulbasaur \\
+3 & Viridian Forest   & 0h 50m  & Lv6 Bulbasaur, Lv4 Pidgey \\
+4 & Defeat Brock      & 17h 57m & Lv16 Pikachu, Lv14 Bulbasaur, Lv13 Pidgey, Lv7 Kakuna \\
+5 & Reach Mt.\ Moon   & 18h 56m & Lv17 Pikachu, Lv15 Pidgey, Lv14 Bulbasaur, Lv8 Kakuna \\
+6 & Reach Cerulean    & 28h 34m & Lv20 Pikachu, Lv18 Pidgeotto, Lv17 Ivysaur, Lv16 Geodude, Lv15 Beedrill \\
+7 & Defeat Misty      & 28h 53m & Lv20 Pikachu, Lv18 Pidgeotto, Lv17 Ivysaur, Lv16 Geodude, Lv16 Beedrill \\
+8 & Help Bill         & 34h 22m & Lv23 Pikachu, Lv22 Pidgeotto, Lv19 Geodude, Lv19 Ivysaur, Lv17 Beedrill \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% TODO: Add checkpoint tables for Qwen 3.5 35B-A3B, 122B-A10B, 397B-A17B
+
+\subsection{Per-Agent Statistics}
+
+Table~\ref{tab:agents} breaks down LLM invocations and key statistics per agent for each completed run.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Per-agent decision statistics for completed runs.}
+\label{tab:agents}
+\begin{tabular}{llrrrr}
+\toprule
+Agent & Metric & 9B & 27B & 3.6 Plus \\
+\midrule
+Overworld      & Decisions      &   6 & 790 &  894 \\
+               & Avg time (s)   & 32.7 & 8.3 & 19.2 \\
+Battle         & Decisions      & --- & 1167 & 1553 \\
+               & Avg time (s)   & --- & 24.6 & 27.3 \\
+               & Attacks        & --- &  976 & 1130 \\
+               & Switches       & --- &  124 &  318 \\
+Battle Reflect & Facts learned  & --- &   23 &   30 \\
+               & Incorrect      & --- &    3 &    5 \\
+               & Avg time (s)   & --- & 32.3 & 32.0 \\
+Scout          & Evaluated      & --- &  370 &  305 \\
+               & Catches        & --- &   16 &    4 \\
+               & Avg time (s)   & --- & 22.9 & 17.6 \\
+Lead           & Decisions      & --- &  410 &  365 \\
+               & Swaps          & --- &   30 &   34 \\
+               & Avg time (s)   & --- & 20.7 & 21.4 \\
+Shop           & Transactions   & --- &    3 &   10 \\
+               & Avg time (s)   & --- & 30.6 & 36.6 \\
+Naming         & Names          & --- &    6 &    5 \\
+               & Avg time (s)   & --- & 331.1 & 105.7 \\
+Move           & Decisions      & --- &    2 &  --- \\
+               & Avg time (s)   & --- & 39.9 &  --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Observations}
+\label{sec:obs}
+
+\textbf{Qwen 3.5 9B.} The smallest model failed immediately --- it produced 3 consecutive unparseable responses after only 6 overworld decisions and was unable to progress past the starting town. Thinking/reasoning mode did not compensate for the lack of capacity.
+
+\textbf{Qwen 3.5 27B.} Reached Misty (Badge 2) in 30 hours. The agent chose Bulbasaur as its starter, but this did not translate into an immediate type advantage against Brock: Bulbasaur does not learn Vine Whip (its first Grass-type move) until level 14, and the agent challenged the gym before reaching that level. The victory came instead through correct use of Leech Seed, a strategy the agent discovered on its own. Mt.\ Moon remained the major bottleneck, taking over 15 hours (6.9h to 22.4h). The agent never entered Bill's house --- it rarely explored building interiors throughout the run, suggesting that entering buildings is a navigation pattern the model struggles to prioritize.
+
+\textbf{Qwen 3.6 Plus.} Reached the furthest of all models tested so far, defeating Misty and completing Bill's quest (S.S.\ Ticket obtained) in 37 hours. The Brock bottleneck was severe: despite choosing Bulbasaur, the agent repeatedly challenged the gym but never managed to execute the Leech Seed strategy that the 27B model discovered. Instead, it spent nearly 18 hours grinding and retrying until Bulbasaur learned Vine Whip at level 14, brute-forcing the badge through raw stats rather than strategic play. Mt.\ Moon took approximately 10 hours (18.9h to 28.6h). The run terminated after 2.5 hours without progress past Cerulean City --- the exit to Route 5 requires passing through a building interior, a non-obvious navigation pattern the model could not infer.
+
+\textbf{Mt.\ Moon as a universal bottleneck.} Across all models that reached Mt.\ Moon, the cave represented the single largest time sink. This is driven by two compounding factors. First, the cave has an extremely high wild encounter rate, and the agents rarely choose to run from battles unless the situation is clearly unfavorable. The cumulative effect of dozens of unplanned battles drains the party's HP and move PP, eventually forcing the agent to leave the cave to heal at a Pok\'{e}mon Center --- losing all navigation progress in the process. Second, upon re-entering, the agent has no memory of how far it previously progressed, and the cave's internal sections share similar names, causing confusion. In practice, all models required significant leveling before the party could survive the full cave traversal in a single attempt.
+
+% TODO: Add observations for Qwen 3.5 35B-A3B, 122B-A10B, 397B-A17B
 
 % --------------------------------------------------------------------------- %
 

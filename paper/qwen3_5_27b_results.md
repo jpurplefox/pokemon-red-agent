@@ -36,7 +36,7 @@
 | 2 | Deliver Oak's Parcel | 1h 03m | Lv7 CHLOROPHYL (Bulbasaur) |
 | 3 | Reach Viridian Forest | 2h 26m | Lv4 NIBBLER (Rattata), Lv3 SPEARHEAD (Spearow), Lv9 CHLOROPHYL (Bulbasaur) |
 | 4 | Defeat Brock (Badge 1) | 5h 02m | Lv5 SPEARHEAD (Spearow), Lv13 CHLOROPHYL (Bulbasaur), Lv9 NIBBLER (Rattata), Lv3 METAMORPH (Caterpie) |
-| 5 | Reach Mt. Moon | 6h 51m | Lv6 METAMORPH (Caterpie), Lv11 SPEARHEAD (Spearow), Lv10 NIBBLER (Rattata), Lv14 CHLOROPHYL (Ivysaur) |
+| 5 | Reach Mt. Moon | 6h 51m | Lv6 METAMORPH (Caterpie), Lv11 SPEARHEAD (Spearow), Lv10 NIBBLER (Rattata), Lv14 CHLOROPHYL (Bulbasaur) |
 | 6 | Reach Cerulean City | 22h 26m | Lv16 SPEARHEAD (Spearow), Lv11 STONEHENGE (Geodude), Lv11 METAMORPH (Butterfree), Lv16 NIBBLER (Rattata), Lv4 VOLTAGE (Pikachu), Lv24 CHLOROPHYL (Ivysaur) |
 | 7 | Defeat Misty (Badge 2) | 22h 46m | Lv17 NIBBLER (Rattata), Lv11 STONEHENGE (Geodude), Lv11 METAMORPH (Butterfree), Lv17 SPEARHEAD (Spearow), Lv4 VOLTAGE (Pikachu), Lv25 CHLOROPHYL (Ivysaur) |
 
