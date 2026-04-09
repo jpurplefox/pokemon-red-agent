@@ -27,7 +27,7 @@ We present an autonomous agent capable of playing Pok\'{e}mon Red, a classic rol
 
 The system is built around seven specialized LLM-based agents --- overworld navigation, battle strategy, catch-or-defeat evaluation, move learning, shop optimization, party lead selection, and nickname generation --- each operating on prompts constructed from direct memory reads of the emulator's working RAM. A minimal layer of mechanical automation handles low-level execution (menu traversal, pathfinding, dialogue advancement), while a feedback-based validation mechanism allows the LLM to self-correct when it attempts invalid actions. This separation between strategic reasoning and mechanical execution allows us to study which decisions an LLM can reliably make and how effectively it recovers from errors through feedback.
 
-We evaluate the system across six open-weight models from the Qwen family, ranging from 9B to 397B parameters --- Qwen 3.5 9B, 27B, 35B-A3B, 122B-A10B, 397B-A17B, and Qwen 3.6 Plus --- all served via cloud inference through OpenRouter, to study how model scale affects gameplay quality. We discuss the design trade-offs involved in building a viable LLM-based game agent, the failure modes we observe, and the minimal set of interventions needed to keep the agent on track.
+We evaluate the system across five open-weight models and one managed endpoint from the Qwen family, ranging from 9B to 397B parameters --- Qwen 3.5 9B, 27B, 35B-A3B, 122B-A10B, 397B-A17B, and Qwen 3.6 Plus --- all served via cloud inference through OpenRouter, to study how model scale affects gameplay quality. We discuss the design trade-offs involved in building a viable LLM-based game agent, the failure modes we observe, and the minimal set of interventions needed to keep the agent on track.
 \end{abstract}
 
 % --------------------------------------------------------------------------- %
@@ -51,7 +51,7 @@ We evaluate models at multiple scales, from 9B to 397B parameters, to identify t
 
 Our contributions are as follows:
 \begin{itemize}
-  \item We present, to our knowledge, the first LLM-based agent that plays a retro RPG end-to-end through natural language reasoning --- including exploration, combat, resource management, and quest tracking --- rather than isolated game mechanics. Our current evaluation covers the game up to the S.S.\ Anne, with full-game completion left as future work.
+  \item We present a multi-agent system that addresses all facets of a retro RPG simultaneously --- exploration, combat, team building, resource management, and quest tracking --- through natural language reasoning, with each aspect handled by a specialized agent operating on structured game state. Our current evaluation covers the game up to the S.S.\ Anne, with full-game completion left as future work.
   \item We propose a multi-agent architecture with explicit separation between strategic LLM reasoning and mechanical game execution, using feedback-based validation that allows the LLM to self-correct.
   \item We evaluate models at multiple scales (9B to 397B parameters) and identify the minimum model size required for coherent gameplay in each agent role, demonstrating that complex RPG behavior is achievable through prompting alone, without reinforcement learning or fine-tuning.
   \item We provide an analysis of the decision boundaries between LLM reasoning and mechanical automation, contributing to the broader understanding of where LLM agents succeed and fail in complex interactive environments.
@@ -72,15 +72,25 @@ Reinforcement learning has been the dominant paradigm for building game-playing 
 
 A growing body of work explores LLMs as decision-making engines in interactive environments. Voyager \citep{wang2023voyager} deployed GPT-4 as a lifelong learning agent in Minecraft, using an automatic curriculum, a skill library of executable code, and iterative prompting with environment feedback. While Voyager demonstrates impressive open-ended exploration, Minecraft's sandbox nature differs fundamentally from the structured, narrative-driven progression of an RPG.
 
+GITM \citep{zhu2023gitm} also targets Minecraft but takes a different approach from Voyager: it uses an LLM to decompose complex goals into sub-goals hierarchically, then executes each sub-goal with low-level action controllers. This separation between high-level reasoning and low-level execution parallels our own architecture, though GITM operates in a sandbox environment without narrative progression. Our system faces the additional challenge of pursuing a fixed storyline with specific quest objectives rather than open-ended goals.
+
 Closest to our work is Pok\'{e}LLMon \citep{hu2024pokellmon}, which achieves human-parity performance in competitive Pok\'{e}mon battles on Showdown. Pok\'{e}LLMon introduces in-context reinforcement learning from battle feedback, knowledge-augmented generation to reduce hallucination, and consistent action generation to prevent panic switching. However, Pok\'{e}LLMon operates exclusively in the competitive battling domain --- a turn-based strategy game with complete information about available moves and types. It does not address overworld navigation, resource management, team building through wild encounters, or any of the other RPG mechanics that constitute the full game experience. Our agent attempts to play the complete RPG, coordinating across all these interleaved skills simultaneously.
 
 CRADLE \citep{tan2024cradle} takes a different approach by targeting General Computer Control: a multimodal agent that interacts with software through screenshots and keyboard/mouse actions. CRADLE has been applied to complex games including Red Dead Redemption 2 and Stardew Valley, demonstrating broad applicability. Our approach differs in using direct memory reads instead of visual input, which eliminates perception errors and provides access to game state not visible on screen.
 
+\subsection{LLM Agents for Pok\'{e}mon Red}
+
+Concurrently with our work, two major AI labs have used Pok\'{e}mon Red as a testbed for their flagship models. Google reported that Gemini 2.5 Pro completed the entire game in approximately 400~hours across two runs, with full milestone tracking from the first rival battle through the Elite Four \citep{gemini25}. Anthropic demonstrated Claude 3.7 Sonnet defeating three Gym Leaders as part of their extended thinking announcement \citep{anthropic2025pokemon}, and subsequent iterations (Opus 4.5) obtained all eight badges but remained unable to complete Victory Road's boulder puzzles.
+
+Both efforts use vision-based multimodal approaches with proprietary frontier models. Our work differs in three key respects: (1)~we use \emph{direct memory reads} instead of visual input, eliminating perception errors entirely; (2)~we employ \emph{open-weight models} (Qwen 3.5/3.6, 9B--397B parameters) rather than closed-source frontier systems; and (3)~our \emph{multi-agent architecture} decomposes the problem into seven specialized agents rather than relying on a single monolithic model. These design choices target a different research question: while the concurrent work demonstrates impressive game completion with frontier models, we study how a structured agent architecture can enable coherent gameplay with smaller, openly available models.
+
 \subsection{Structured Reasoning for LLM Agents}
 
-Our agent's output format draws on the ReAct framework \citep{yao2023react}, which interleaves reasoning traces with actions in a synergistic loop. Our agents follow a similar structure: each produces a \texttt{THINK:} line followed by an \texttt{ACTION:} directive. However, because we use models with native thinking/reasoning mode, the bulk of the reasoning occurs internally within the model's chain-of-thought before generating the response. The explicit \texttt{THINK:} line functions primarily as an observable justification rather than the mechanism through which the model reasons.
+Our agent's output format draws on the ReAct framework \citep{yao2023react}, which interleaves reasoning traces with actions in a synergistic loop. Our agents follow a similar structure: each produces a \texttt{THINK:} line followed by an \texttt{ACTION:} directive. However, because we use models with native thinking/reasoning mode \citep{wei2022chain}, the bulk of the reasoning occurs internally within the model's chain-of-thought before generating the response. The explicit \texttt{THINK:} line functions primarily as an observable justification rather than the mechanism through which the model reasons.
 
-Several works have explored reflection in LLM agents. Reflexion \citep{shinn2023reflexion} introduces verbal reinforcement learning, where an agent reflects on failed attempts to improve on subsequent trials of the same task. Agent-Pro \citep{zhang2024agentpro} extends this with policy-level reflection to evolve agent behavior over time. Our battle reflection mechanism extracts type effectiveness facts from combat experience and persists them across battles (Section~\ref{sec:reflection}). This is related to Pok\'{e}LLMon's in-context reinforcement learning from battle feedback \citep{hu2024pokellmon}, but differs in that the learned knowledge is stored as persistent memory rather than maintained within a single context window, allowing it to accumulate across the entire playthrough.
+LLM+P \citep{liu2023llmp} demonstrates that LLMs perform poorly at low-level spatial planning but excel at translating high-level intentions into formal problem specifications that classical planners can solve. This finding directly motivates our architecture's core design: the LLM decides \emph{where to go} while A* handles \emph{how to get there}, delegating spatial planning to an algorithm purpose-built for it.
+
+Several works have explored reflection in LLM agents. Reflexion \citep{shinn2023reflexion} introduces verbal reinforcement learning, where an agent reflects on failed attempts to improve on subsequent trials of the same task. Agent-Pro \citep{zhang2024agentpro} extends this with policy-level reflection to evolve agent behavior over time. Park et al.\ \citep{park2023generative} introduce a memory architecture for generative agents where observations are stored in a memory stream, periodically synthesized into higher-level reflections, and retrieved to inform future decisions. Our battle reflection mechanism follows a similar observe--reflect--store pattern applied to combat: the agent observes damage outcomes, extracts type effectiveness facts, and persists them for retrieval in future battles (Section~\ref{sec:reflection}). This is related to Pok\'{e}LLMon's in-context reinforcement learning from battle feedback \citep{hu2024pokellmon}, but differs in that the learned knowledge is stored as persistent memory rather than maintained within a single context window, allowing it to accumulate across the entire playthrough.
 
 \subsection{Multi-Agent LLM Architectures}
 
@@ -97,7 +107,7 @@ Our system connects a large language model to a Game Boy emulator, enabling the 
 
 \subsection{Emulator Interface}
 
-We use PyBoy, an open-source Game Boy emulator written in Python, as our execution environment. Rather than interpreting the game visually through screen captures, we read game state directly from the emulator's working RAM (WRAM) at documented memory addresses. The Pok\'{e}mon Red fan community has produced comprehensive maps of the game's memory layout, providing access to player position, map identity, party composition, battle state, inventory contents, and active dialogue --- all as structured numerical data.
+We use PyBoy \citep{pyboy}, an open-source Game Boy emulator written in Python, as our execution environment. Rather than interpreting the game visually through screen captures, we read game state directly from the emulator's working RAM (WRAM) at documented memory addresses. The Pok\'{e}mon Red fan community has produced comprehensive maps of the game's memory layout, providing access to player position, map identity, party composition, battle state, inventory contents, and active dialogue --- all as structured numerical data.
 
 This approach offers two advantages over vision-based alternatives. First, it eliminates the need for an image recognition pipeline, removing an entire class of perception errors. Second, it provides access to information that is not always visible on screen, such as exact HP values, move power points, or the species of a wild Pok\'{e}mon before the battle animation completes.
 
@@ -279,7 +289,7 @@ When the naming agent produces a nickname, a name entry module translates the st
 
 \subsection{Design Rationale}
 
-Every component in this layer shares a common property: given the same input, it will always produce the same output. There is no decision to be made about \emph{how} to walk from tile A to tile B, or \emph{how} to press down twice to reach the third move in a menu. Automating these tasks is not an assistance to the LLM --- it is the removal of noise that would otherwise consume tokens on trivially deterministic problems, freeing the model's limited context window for decisions that genuinely benefit from reasoning.
+Every component in this layer shares a common property: given the same input, it will always produce the same output. There is no decision to be made about \emph{how} to walk from tile A to tile B, or \emph{how} to press down twice to reach the third move in a menu. Automating these tasks is not an assistance to the LLM --- it is the removal of noise that would otherwise consume tokens on trivially deterministic problems, freeing the model's limited context window for decisions that genuinely benefit from reasoning. This division follows the principle established by LLM+P \citep{liu2023llmp}: LLMs are effective at formulating intentions but unreliable at low-level spatial planning, which is better delegated to classical algorithms.
 
 % --------------------------------------------------------------------------- %
 
@@ -290,7 +300,7 @@ Every component in this layer shares a common property: given the same input, it
 
 All experiments are conducted on a MacBook Pro 14-inch (November 2024) with an Apple M4 Pro chip and 24~GB of unified memory. The game runs on PyBoy, an open-source Game Boy emulator written in Python, at normal emulation speed. Each run starts from the beginning of the game (New Game) with no prior state. The only human inputs are the player and rival names, entered manually before the agent takes control; all decisions from the player's bedroom onward are made entirely by the LLM. All models are served via cloud inference through OpenRouter, with thinking/reasoning mode enabled.
 
-We evaluate six models from the Qwen family, spanning dense and mixture-of-experts architectures:
+We evaluate six models from the Qwen family \citep{qwen3}, spanning dense and mixture-of-experts architectures:
 
 \begin{itemize}
   \item \textbf{Qwen 3.5 9B} --- dense, 9B parameters.
@@ -475,29 +485,123 @@ Move           & Decisions      & --- &    2 &  --- \\
 \section{Discussion}
 \label{sec:discussion}
 
-% TODO: Key insights
-% - What decisions can the LLM reliably make?
-% - Where does it consistently fail?
-% - Minimal guardrails needed
-% - Small model (14B) vs frontier model trade-offs
+\subsection{Where the LLM Succeeds}
+
+The results reveal several decision domains where the LLM performs reliably well, even at moderate model sizes.
+
+\textbf{Tactical battle decisions.} The battle agent consistently selects appropriate moves given type matchup information and move stats. The Qwen 3.5 27B run provides a striking example: the agent independently discovered that Leech Seed could defeat Brock's Rock-type team despite having no super-effective damage moves available, demonstrating genuine tactical reasoning rather than pattern matching. Across all runs, the battle agent maintained low unparseable response rates relative to the number of decisions made.
+
+\textbf{Team composition.} The scout agent maintains type diversity effectively, avoiding duplicate evolution lines and favoring Pok\'{e}mon that add new type coverage. The pre-computed signals in the prompt (type overlap warnings, new type highlights) reduce the reasoning burden, but the catch-or-defeat decision itself remains with the agent and is generally sound.
+
+\textbf{Learning from experience.} The battle reflection mechanism successfully extracts type effectiveness facts from combat, building a persistent knowledge base that improves future decisions. Across the 27B and 3.6 Plus runs, the agent learned 23 and 30 facts respectively, with relatively low error rates (3 and 5 incorrect facts). This demonstrates that an LLM can incrementally learn game mechanics through observation and apply that knowledge in subsequent encounters.
+
+\textbf{Decisions over explicit option sets.} A common pattern emerges: the LLM excels when presented with a closed list of options and sufficient context to evaluate them. Choosing a move from four options, selecting a party lead from six members, or deciding between catch and defeat --- these are decisions where the action space is small, fully enumerated, and accompanied by relevant information. The structured prompt format plays a key role here: by presenting options as numbered lists with associated data, we reduce the task to selection rather than generation.
+
+\subsection{Where the LLM Fails}
+
+Several failure modes recur across models and runs, pointing to fundamental limitations of stateless LLM decision-making in extended gameplay.
+
+\textbf{Spatial navigation without persistent memory.} The Mt.\ Moon bottleneck illustrates the core problem: the agent cannot maintain a navigation plan across multiple LLM calls. Each decision is made independently, with only a rolling history of recent actions and the previous reasoning trace as context. When the agent exits the cave to heal and re-enters, it has no record of how far it previously progressed. The result is repeated partial traversals of the same sections, with progress gated by the party's ability to survive the entire cave in a single attempt rather than by navigation skill.
+
+\textbf{Inferring non-obvious routes.} The Cerulean City blocker reveals a harder problem: the exit to Route 5 requires entering a building and walking through to the other side. This navigation pattern is never presented as an explicit option --- the agent sees a building entrance as a warp like any other, with no indication that it leads to a different route. Inferring this requires world knowledge about Pok\'{e}mon Red's map layout that is not available in the prompt, and the agent cannot discover it through exploration alone because it has no reason to enter an arbitrary building and walk to its far exit.
+
+\textbf{Under-exploration of building interiors.} Related to the above, the 27B agent rarely entered buildings throughout its run --- most notably, it never visited Bill's house despite reaching Cerulean City. Warp options to building interiors compete with warps to new routes, and the agent systematically prefers the latter. This suggests that the overworld prompt's framing, which encourages forward progression, may inadvertently discourage the exploratory behavior needed to discover quest-relevant interiors.
+
+\textbf{Short-term navigation loops.} Agents occasionally cycle between the same warps, which unlike interactable POIs do not carry a visit counter. However, these loops are typically short-lived: the rolling action history provides enough context for the model to recognize the repetition and break out after a few iterations.
+
+\subsection{Effect of Model Scale}
+
+The three completed runs suggest a non-linear relationship between model size and gameplay quality.
+
+At the smallest scale, Qwen 3.5 9B could not reliably produce parseable output, failing after only 6 overworld decisions. This establishes a clear minimum threshold: models below approximately 10B parameters lack the capacity to follow the structured output format consistently, regardless of the quality of their reasoning.
+
+Qwen 3.5 27B and Qwen 3.6 Plus both reached Badge 2, but through qualitatively different play styles. The 27B model defeated Brock in 5 hours through a creative strategy (Leech Seed), while the larger 3.6 Plus model spent 18 hours brute-forcing the same gym through grinding. This counterintuitive result --- a smaller model solving a problem more elegantly --- suggests that model scale does not uniformly improve strategic reasoning. The 3.6 Plus model did ultimately progress further (completing Bill's quest), indicating that scale may matter more for sustained coherence over long runs than for individual tactical decisions.
+
+The pending runs on Qwen 3.5 35B-A3B, 122B-A10B, and 397B-A17B will provide additional data points to characterize this relationship more precisely, particularly regarding whether mixture-of-experts architectures with fewer active parameters behave more like their total or active parameter count.
+
+\subsection{Boundaries of the Decision/Execution Separation}
+
+Our architecture draws a strict line between LLM reasoning and mechanical execution. The results validate this separation in most cases: pathfinding, menu navigation, dialogue advancement, and name entry all function reliably as deterministic translations of high-level intentions into button presses. The LLM never needs to reason about \emph{how} to walk to a tile or \emph{how} to select a menu option, and this frees its context window for genuinely strategic decisions.
+
+However, the separation has limits. The execution layer filters the decision space presented to the LLM: only POIs reachable by A* appear as options, and only moves with remaining PP are shown. This filtering is generally beneficial --- it prevents the agent from attempting impossible actions --- but it also means the agent never sees what it \emph{cannot} do. In many cases this mirrors the human experience: a player in Cerulean City also cannot see the exit to Route 5 until they discover the building that connects to it. But in other cases the gap is meaningful: a human player can visually spot an item behind a cuttable tree and reason that they need HM Cut to reach it, while our agent has no awareness that the item exists at all. The Cerulean City blocker is a direct consequence of this design: the exit to Route 5 is not reachable by A* unless the agent first passes through a building that unblocks the path, so the warp never appears in the option list. The agent cannot reason about a destination it has never been shown.
+
+\subsection{Comparison with Concurrent Work}
+
+Concurrently with our work, two major AI labs have demonstrated frontier models playing Pok\'{e}mon Red. Gemini 2.5 Pro completed the entire game in approximately 400~hours \citep{gemini25}, and Claude progressed from three gym badges (3.7 Sonnet) to all eight badges (Opus 4.5), though it was unable to complete Victory Road \citep{anthropic2025pokemon}. Both efforts use vision-based multimodal approaches with proprietary models whose parameter counts and architectures are undisclosed.
+
+These results establish that sufficiently powerful frontier models can complete the game when given enough time and multimodal perception. Our work asks a complementary question: \emph{can a structured multi-agent architecture achieve coherent RPG gameplay with open-weight models at a fraction of the scale?} The answer, based on our experiments, is a qualified yes --- a 27B-parameter model reaches Badge~2 in under 30~hours.
+
+Three properties distinguish our approach from the frontier model demonstrations. First, \textbf{openness}: our system uses open-weight models, documented WRAM addresses, and an open-source emulator --- every component can be inspected, modified, and fine-tuned by third parties. The Gemini and Claude runs use proprietary models accessible only through APIs, limiting the ability to adapt or build upon their approach. Second, \textbf{interpretability}: because each decision is made by a specialized agent with a domain-specific prompt, the reasoning behind any individual choice can be traced to its agent, its input state, and its output format. The vision-based approaches prioritize generality --- requiring no game-specific memory reads --- but offer less granular insight into individual decisions. Third, \textbf{efficiency}: while direct comparison is imperfect given the differences in game progress, our 27B model reaches Badge~2 in 23~hours --- suggesting that structured architecture can compensate for raw model scale when the decision space is well-decomposed.
 
 % --------------------------------------------------------------------------- %
 
 \section{Limitations and Future Work}
 \label{sec:limitations}
 
-% TODO:
-% - Current game progression limits
-% - Model size experiments
-% - Generalization to other games
-% - Vision-based state reading vs WRAM
+\subsection{Manual Interventions}
+
+During the experimental runs, two edge cases in the mechanical execution layer required brief human intervention. Neither situation affected gameplay progress or the LLM's decision quality --- both are straightforward to patch in the execution layer and reflect gaps in edge case coverage rather than limitations of the agent architecture.
+
+\begin{enumerate}
+  \item The multi-turn trapping moves Wrap (Ekans) and Bind (Onix) lock both combatants for several turns during which no action can be taken. The battle menu driver was not designed for this state and in one instance navigated into the item menu, requiring manual recovery.
+  \item After helping Bill, interacting with his PC opens a Pok\'{e}dex entry screen that was not handled by the event processor, requiring the menu to be dismissed manually.
+\end{enumerate}
+
+\subsection{Building Interior Exploration}
+
+The most immediate barrier to further progress is the agent's tendency to avoid building interiors. The exit from Cerulean City to Route 5 --- the next step in the game's narrative --- requires entering a building and walking through to the other side, a pattern that no model discovered autonomously. More broadly, quest-relevant locations such as Bill's house are inside buildings that the agent rarely enters.
+
+Two complementary approaches could address this. First, prompt-level changes could encourage interior exploration more explicitly --- for instance, by highlighting warps that have never been taken, giving the agent a signal that unexplored interiors may contain something valuable. Second, a richer warp annotation system could provide the agent with information about what lies behind each warp: whether the destination has been visited before, and if so, what POIs and exits it contains. This would allow the agent to reason about whether entering a building is worthwhile without having to explore it blindly. Such annotations could also improve Mt.\ Moon navigation, where the agent currently has no way to distinguish between cave exits it has already explored and those that lead to new areas.
+
+\subsection{Fixed Party of Six}
+
+The current system has no mechanism for managing the PC storage system. Once the party reaches six members, any additional captures are sent to the PC box and become inaccessible. This means the agent's team composition is effectively locked after the sixth catch --- it cannot swap in a stronger Pok\'{e}mon caught later or retrieve a specialist for a difficult gym. A natural extension would be a dedicated \emph{PC Agent} that manages team composition by depositing and withdrawing Pok\'{e}mon from storage, activated when the overworld agent interacts with the PC in a Pok\'{e}mon Center, following the same delegation pattern used for the shop agent when the player interacts with a mart clerk.
+
+\subsection{Single Run per Model}
+
+Each model is evaluated with a single run, which limits our ability to measure variance. The agent's trajectory is highly sensitive to early decisions --- choosing Charmander instead of Bulbasaur as a starter, for instance, drastically changes the Brock gym difficulty. A single run cannot distinguish between a model's general capability and a lucky or unlucky sequence of choices. Future work should include multiple independent runs per model to establish confidence intervals on progression speed and narrative reach.
+
+\subsection{No Overworld HM Usage}
+
+Pok\'{e}mon Red requires Hidden Machine (HM) moves --- Cut, Surf, Strength, and Fly --- to access areas blocked by trees, water, or boulders, and to fast-travel between cities. The current system has no mechanism for using moves outside of battle, which places a hard ceiling on how far the agent can progress. (Flash, the fifth HM, is not a blocker: it only reduces screen visibility in certain caves, but since our agent reads game state from WRAM rather than from the screen, darkness has no effect on its perception or navigation.)
+
+Implementing HM support involves two shared challenges and four HM-specific designs. The shared challenges are: (1)~deciding which party member should learn the HM move, which could be triggered by the overworld agent recognizing the relevant key item and delegating to the existing move learning agent; and (2)~invoking the move through the overworld menu rather than in battle. The HM-specific designs vary in complexity:
+
+\begin{itemize}
+  \item \textbf{Cut}: Cuttable trees can be marked as interactable POIs; when the agent selects one, the execution layer opens the party menu and uses Cut automatically.
+  \item \textbf{Fly}: The overworld agent receives a list of previously visited cities as fly destinations, choosing one like any other navigation target.
+  \item \textbf{Surf}: Water tiles are reclassified as walkable when a party member knows Surf, making coastal POIs and warps reachable by A*. The execution layer detects the water boundary and triggers Surf at the appropriate moment.
+  \item \textbf{Strength}: This is the most challenging HM to support, as it requires solving boulder puzzles --- pushing rocks in specific sequences to clear a path. Unlike the other HMs, this demands spatial reasoning over multiple steps and would require a dedicated approach to represent the puzzle state and guide the agent through the solution.
+\end{itemize}
+
+\subsection{Dependence on Documented Memory Layout}
+
+Our entire perception layer relies on WRAM addresses mapped by the Pok\'{e}mon Red fan community. This provides precise, noise-free access to game state but does not generalize to other games without equivalent documentation. Extending the system to other retro RPGs would require a comparable reverse-engineering effort for each title's memory layout.
+
+\subsection{Fine-Tuning Smaller Models}
+
+Our evaluation uses general-purpose models with no task-specific training. The structured logs produced by each run --- thousands of (game state, reasoning trace, action) tuples per agent --- constitute a natural fine-tuning dataset. Training a smaller model on successful decisions from a larger model's run could yield an agent that matches the larger model's gameplay quality at a fraction of the inference cost and latency. This distillation approach is particularly promising for agents with highly repetitive decision patterns, such as battle and lead selection, where the action space is small and the correct decisions are well-represented in the logs.
+
+\subsection{Single Model for All Agents}
+
+In our experiments, all seven agents use the same model. However, agents differ dramatically in complexity: the naming agent generates a creative string from a short prompt, while the overworld agent reasons over maps, history, and party state. Using a smaller, faster model for simpler agents (naming, shop, move learning) and reserving a larger model for the overworld and battle agents could significantly reduce inference cost and latency without sacrificing decision quality. This heterogeneous configuration is straightforward to implement --- the architecture already treats each agent as an independent consumer of an LLM interface --- but remains unexplored in our current evaluation.
 
 % --------------------------------------------------------------------------- %
 
 \section{Conclusion}
 \label{sec:conclusion}
 
-% TODO: Summarize contributions
+We presented an autonomous agent that plays Pok\'{e}mon Red using a large language model as its sole decision-making engine, with no reinforcement learning, fine-tuning, or task-specific training. The system decomposes gameplay into seven specialized agents --- overworld navigation, battle strategy, catch-or-defeat evaluation, move learning, shop optimization, party lead selection, and nickname generation --- each operating on structured prompts constructed from emulator memory reads, with a battle reflection mechanism that builds persistent type effectiveness knowledge from combat experience.
+
+Our experiments across models ranging from 9B to 397B parameters reveal that a 27B-parameter model is sufficient to play the game's opening act coherently, defeating two gym leaders and managing a diverse team of six Pok\'{e}mon. The results highlight a clear separation between decision types: the LLM excels at choices presented as selection over explicit, well-annotated options --- picking a move in battle, evaluating whether to catch a wild Pok\'{e}mon, choosing a party lead --- but struggles with spatial navigation that requires persistent memory across stateless calls and with discovering non-obvious routes through building interiors.
+
+A notable finding is that larger models do not uniformly produce better gameplay. Qwen 3.5 27B defeated Brock through a creative Leech Seed strategy, while the larger Qwen 3.6 Plus spent 18 hours brute-forcing the same gym through grinding. Scale appears to matter more for sustained coherence over long runs than for individual tactical decisions.
+
+The architecture's strict separation between strategic reasoning and mechanical execution proved effective: deterministic modules for pathfinding, menu navigation, and dialogue advancement eliminated an entire class of errors while freeing the LLM's context window for decisions that genuinely benefit from reasoning. The remaining barriers to further progression --- building interior exploration, HM usage, and PC-based team management --- are all addressable through extensions to the existing architecture rather than fundamental redesigns.
+
+Recent demonstrations by Google and Anthropic --- completing or nearly completing Pok\'{e}mon Red with Gemini 2.5 Pro and Claude Opus 4.5 respectively --- validate the game as a meaningful benchmark for LLM agents. Our work complements these efforts by showing that structured agent architecture can enable coherent gameplay with open-weight models at a fraction of the scale. Where these demonstrations showcase the capabilities of frontier models, our system provides an interpretable framework for studying how each gameplay decision is made, built entirely on open-weight models and open-source tools.
+
+The agent's structured decision logs provide a natural foundation for future fine-tuning efforts, and the modular architecture supports incremental extension to cover the full game.
 
 % --------------------------------------------------------------------------- %
 
