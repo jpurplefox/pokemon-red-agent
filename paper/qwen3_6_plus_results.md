@@ -43,6 +43,6 @@
 Run terminated at 37h due to no further progress.
 
 ## Notable Observations
-- **Brock bottleneck (17h):** Despite having Bulbasaur (type advantage vs Rock), it doesn't learn Vine Whip until Lv14. The agent's strategy was to grind and retry Brock repeatedly, but without an effective move the team couldn't damage him. This accounted for most of the first 18 hours.
+- **Brock bottleneck (17h):** Despite having Bulbasaur (type advantage vs Rock), it doesn't learn Vine Whip until Lv13. The agent's strategy was to grind and retry Brock repeatedly, but without an effective move the team couldn't damage him. This accounted for most of the first 18 hours.
 - **Cerulean exit blocker:** Agent got stuck exiting Cerulean City — the path to Route 5 requires entering a building and exiting through the other side, a navigation pattern the model cannot deduce without explicit guidance.
 - **Run termination:** Execution cut at 37h after 2h 38m without progress past Bill's quest.

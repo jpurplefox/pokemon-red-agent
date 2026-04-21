@@ -373,7 +373,9 @@ Table~\ref{tab:summary} presents a high-level comparison of all evaluated models
 Model & Time & OW & Battle & Wins & Losses & Catches & Unparse. & Outcome \\
 \midrule
 Qwen 3.5 9B       & 0.1h &   6 &   --- & --- & --- & --- &  3 & Failed (unparseable) \\
-Qwen 3.5 27B      &  30h & 790 & 1167  & 413 &   2 &  16 & 32 & Badge 2 (Misty) \\
+Qwen 3.5 27B (R1) &  30h & 790 & 1167  & 413 &   2 &  16 & 32 & Badge 2 (Misty) \\
+Qwen 3.5 27B (R2) &  41h & 1078 & 1053 & 500 &   5 &   9 & 70 & Badge 2 (Misty) \\
+Qwen 3.5 27B (R3) &  34h & 800 & 1209  & 405 &   6 &   6 & 27 & Badge 2 (Misty) \\
 Qwen 3.5 35B-A3B  & 0.4h &  27 &   --- & --- & --- & --- & 15 & Failed (unparseable) \\
 Qwen 3.5 122B-A10B &  41h & 814 &  927  & 186 &  11 &  12 &  1 & Badge 2 (Misty) \\
 Qwen 3.5 397B-A17B &  34h & 597 &  767  & 180 &   7 &   6 & 85 & Badge 2 + Bill \\
@@ -384,13 +386,13 @@ Qwen 3.6 Plus     &  37h & 894 & 1553  & 351 &  15 &   4 &  9 & Badge 2 + Bill \
 
 \subsection{Narrative Progression}
 
-Tables~\ref{tab:cp-27b},~\ref{tab:cp-122b},~\ref{tab:cp-397b},~and~\ref{tab:cp-36plus} show the wall-clock time and party composition at each narrative checkpoint for the four models that achieved meaningful progress. Qwen 3.5 9B and 35B-A3B failed before reaching any checkpoint (Section~\ref{sec:obs}).
+Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:cp-122b},~\ref{tab:cp-397b},~and~\ref{tab:cp-36plus} show the wall-clock time and party composition at each narrative checkpoint for the models that achieved meaningful progress. We evaluated Qwen 3.5 27B three times to characterize run-to-run variance for the smallest model that reliably completes the early game. Qwen 3.5 9B and 35B-A3B failed before reaching any checkpoint (Section~\ref{sec:obs}).
 
 \begin{table}[h]
 \centering
 \small
-\caption{Qwen 3.5 27B --- checkpoint progression.}
-\label{tab:cp-27b}
+\caption{Qwen 3.5 27B (Run 1) --- checkpoint progression.}
+\label{tab:cp-27b-r1}
 \begin{tabular}{rlrl}
 \toprule
 \# & Checkpoint & Time & Party \\
@@ -409,6 +411,46 @@ Tables~\ref{tab:cp-27b},~\ref{tab:cp-122b},~\ref{tab:cp-397b},~and~\ref{tab:cp-3
 \begin{table}[h]
 \centering
 \small
+\caption{Qwen 3.5 27B (Run 2) --- checkpoint progression.}
+\label{tab:cp-27b-r2}
+\begin{tabular}{rlrl}
+\toprule
+\# & Checkpoint & Time & Party \\
+\midrule
+1 & Obtain starter    & 1h 34m  & Lv5 Charmander \\
+2 & Deliver Parcel    & 2h 08m  & Lv8 Charmander \\
+3 & Viridian Forest   & 3h 31m  & Lv10 Charmander, Lv5 Weedle, Lv4 Pidgey, Lv3 Rattata \\
+4 & Defeat Brock      & 7h 51m  & Lv17 Charmeleon, Lv9 Pidgey, Lv5 Weedle, Lv3 Rattata \\
+5 & Reach Mt.\ Moon   & 10h 04m & Lv21 Charmeleon, Lv10 Pidgey, Lv5 Weedle, Lv3 Rattata, Lv3 Pikachu \\
+6 & Reach Cerulean    & 31h 06m & Lv30 Charmeleon, Lv10 Geodude, Lv10 Pidgey, Lv5 Weedle, Lv4 Pikachu, Lv3 Rattata \\
+7 & Defeat Misty      & 31h 21m & Lv31 Charmeleon, Lv10 Geodude, Lv10 Pidgey, Lv5 Weedle, Lv4 Pikachu, Lv3 Rattata \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\small
+\caption{Qwen 3.5 27B (Run 3) --- checkpoint progression.}
+\label{tab:cp-27b-r3}
+\begin{tabular}{rlrl}
+\toprule
+\# & Checkpoint & Time & Party \\
+\midrule
+1 & Obtain starter    & 0h 45m  & Lv5 Bulbasaur \\
+2 & Deliver Parcel    & 1h 13m  & Lv8 Bulbasaur \\
+3 & Viridian Forest   & 2h 22m  & Lv9 Bulbasaur, Lv4 Rattata, Lv3 Pidgey \\
+4 & Defeat Brock      & 5h 33m  & Lv14 Bulbasaur, Lv7 Pidgey, Lv5 Rattata \\
+5 & Reach Mt.\ Moon   & 7h 07m  & Lv18 Ivysaur, Lv9 Pidgey, Lv5 Rattata \\
+6 & Reach Cerulean    & 26h 32m & Lv24 Ivysaur, Lv19 Geodude, Lv15 Butterfree, Lv11 Pidgey, Lv11 Rattata, Lv5 Magikarp \\
+7 & Defeat Misty      & 26h 58m & Lv25 Ivysaur, Lv20 Geodude, Lv15 Butterfree, Lv11 Pidgey, Lv11 Rattata, Lv5 Magikarp \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[h]
+\centering
+\small
 \caption{Qwen 3.5 122B-A10B --- checkpoint progression.}
 \label{tab:cp-122b}
 \begin{tabular}{rlrl}
@@ -417,11 +459,11 @@ Tables~\ref{tab:cp-27b},~\ref{tab:cp-122b},~\ref{tab:cp-397b},~and~\ref{tab:cp-3
 \midrule
 1 & Obtain starter    & 0h 31m  & Lv5 Charmander \\
 2 & Deliver Parcel    & 1h 30m  & Lv8 Charmander \\
-3 & Viridian Forest   & 2h 54m  & Lv9 Charmander, Lv3 Rattata, Lv3 Nidoran\male{}, Lv3 Pidgey \\
-4 & Defeat Brock      & 6h 36m  & Lv15 Charmander, Lv8 Pidgey, Lv5 Nidoran\male{}, Lv4 Pikachu, Lv5 Kakuna, Lv3 Rattata \\
-5 & Reach Mt.\ Moon   & 10h 05m & Lv18 Charmeleon, Lv9 Kakuna, Lv8 Pidgey, Lv5 Nidoran\male{}, Lv4 Pikachu, Lv3 Rattata \\
-6 & Reach Cerulean    & 21h 52m & Lv22 Charmeleon, Lv12 Beedrill, Lv11 Pidgey, Lv10 Nidoran\male{}, Lv9 Pikachu, Lv8 Rattata \\
-7 & Defeat Misty      & 31h 37m & Lv27 Charmeleon, Lv16 Pidgey, Lv14 Beedrill, Lv13 Pikachu, Lv12 Nidoran\male{}, Lv12 Rattata \\
+3 & Viridian Forest   & 2h 54m  & Lv9 Charmander, Lv3 Rattata, Lv3 Nidoran (M), Lv3 Pidgey \\
+4 & Defeat Brock      & 6h 36m  & Lv15 Charmander, Lv8 Pidgey, Lv5 Nidoran (M), Lv4 Pikachu, Lv5 Kakuna, Lv3 Rattata \\
+5 & Reach Mt.\ Moon   & 10h 05m & Lv18 Charmeleon, Lv9 Kakuna, Lv8 Pidgey, Lv5 Nidoran (M), Lv4 Pikachu, Lv3 Rattata \\
+6 & Reach Cerulean    & 21h 52m & Lv22 Charmeleon, Lv12 Beedrill, Lv11 Pidgey, Lv10 Nidoran (M), Lv9 Pikachu, Lv8 Rattata \\
+7 & Defeat Misty      & 31h 37m & Lv27 Charmeleon, Lv16 Pidgey, Lv14 Beedrill, Lv13 Pikachu, Lv12 Nidoran (M), Lv12 Rattata \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -477,31 +519,31 @@ Table~\ref{tab:agents} breaks down LLM invocations and key statistics per agent 
 \small
 \caption{Per-agent decision statistics for completed runs.}
 \label{tab:agents}
-\begin{tabular}{llrrrrrr}
+\begin{tabular}{llrrrrrrrr}
 \toprule
-Agent & Metric & 9B & 35B-A3B & 27B & 122B-A10B & 397B-A17B & 3.6 Plus \\
+Agent & Metric & 9B & 27B R1 & 27B R2 & 27B R3 & 35B-A3B & 122B-A10B & 397B-A17B & 3.6 Plus \\
 \midrule
-Overworld      & Decisions      &   6 &  27 & 790 &  814 &  597 &  894 \\
-               & Avg time (s)   & 32.7 & 53.5 & 8.3 & 56.4 & 66.3 & 19.2 \\
-Battle         & Decisions      & --- & --- & 1167 &  927 &  767 & 1553 \\
-               & Avg time (s)   & --- & --- & 24.6 & 39.3 & 38.6 & 27.3 \\
-               & Attacks        & --- & --- &  976 &  646 &  564 & 1130 \\
-               & Switches       & --- & --- &  124 &  140 &  110 &  318 \\
-Battle Reflect & Facts learned  & --- & --- &   23 &   20 &   25 &   30 \\
-               & Incorrect      & --- & --- &    3 &    4 &    1 &    5 \\
-               & Avg time (s)   & --- & --- & 32.3 & 35.0 & 43.4 & 32.0 \\
-Scout          & Evaluated      & --- & --- &  370 &  145 &  138 &  305 \\
-               & Catches        & --- & --- &   16 &   18 &   12 &    4 \\
-               & Avg time (s)   & --- & --- & 22.9 & 17.3 & 20.3 & 17.6 \\
-Lead           & Decisions      & --- & --- &  410 &  202 &  189 &  365 \\
-               & Swaps          & --- & --- &   30 &   39 &   31 &   34 \\
-               & Avg time (s)   & --- & --- & 20.7 & 34.4 & 39.0 & 21.4 \\
-Shop           & Transactions   & --- & --- &    3 &   14 &    6 &   10 \\
-               & Avg time (s)   & --- & --- & 30.6 & 75.3 & 61.0 & 36.6 \\
-Naming         & Names          & --- & --- &    6 &   13 &    7 &    5 \\
-               & Avg time (s)   & --- & --- & 331.1 & 170.8 & 151.5 & 105.7 \\
-Move           & Decisions      & --- & --- &    2 &    1 &    1 &  --- \\
-               & Avg time (s)   & --- & --- & 39.9 & 20.6 & 15.9 &  --- \\
+Overworld      & Decisions      &   6 & 790 & 1078 &  800 &  27 &  814 &  597 &  894 \\
+               & Avg time (s)   & 32.7 & 8.3 & 9.6 & 8.1 & 53.5 & 56.4 & 66.3 & 19.2 \\
+Battle         & Decisions      & --- & 1167 & 1053 & 1209 & --- &  927 &  767 & 1553 \\
+               & Avg time (s)   & --- & 24.6 & 32.3 & 28.2 & --- & 39.3 & 38.6 & 27.3 \\
+               & Attacks        & --- &  976 &  789 &  956 & --- &  646 &  564 & 1130 \\
+               & Switches       & --- &  124 &  175 &  176 & --- &  140 &  110 &  318 \\
+Battle Reflect & Facts learned  & --- &   23 &   15 &   24 & --- &   20 &   25 &   30 \\
+               & Incorrect      & --- &    3 &    1 &    6 & --- &    4 &    1 &    5 \\
+               & Avg time (s)   & --- & 32.3 & 41.8 & 45.0 & --- & 35.0 & 43.4 & 32.0 \\
+Scout          & Evaluated      & --- &  370 &  461 &  363 & --- &  145 &  138 &  305 \\
+               & Catches        & --- &   16 &   17 &   11 & --- &   18 &   12 &    4 \\
+               & Avg time (s)   & --- & 22.9 & 27.9 & 22.4 & --- & 17.3 & 20.3 & 17.6 \\
+Lead           & Decisions      & --- &  410 &  507 &  407 & --- &  202 &  189 &  365 \\
+               & Swaps          & --- &   30 &   14 &   27 & --- &   39 &   31 &   34 \\
+               & Avg time (s)   & --- & 20.7 & 24.3 & 25.8 & --- & 34.4 & 39.0 & 21.4 \\
+Shop           & Transactions   & --- &    3 &   11 &    7 & --- &   14 &    6 &   10 \\
+               & Avg time (s)   & --- & 30.6 & 58.7 & 175.6 & --- & 75.3 & 61.0 & 36.6 \\
+Naming         & Names          & --- &    6 &   10 &    8 & --- &   13 &    7 &    5 \\
+               & Avg time (s)   & --- & 331.1 & 304.3 & 398.2 & --- & 170.8 & 151.5 & 105.7 \\
+Move           & Decisions      & --- &    2 &    2 &    2 & --- &    1 &    1 &  --- \\
+               & Avg time (s)   & --- & 39.9 & 20.4 & 34.5 & --- & 20.6 & 15.9 &  --- \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -511,7 +553,15 @@ Move           & Decisions      & --- & --- &    2 &    1 &    1 &  --- \\
 
 \textbf{Qwen 3.5 9B.} The smallest model failed immediately --- it produced 3 consecutive unparseable responses after only 6 overworld decisions and was unable to progress past the starting town. Thinking/reasoning mode did not compensate for the lack of capacity.
 
-\textbf{Qwen 3.5 27B.} Defeated Misty (Badge 2) at 22h 46m, after which the agent spent the remaining time without further progress, totaling 30 hours. The agent chose Bulbasaur as its starter, but this did not translate into an immediate type advantage against Brock: Bulbasaur does not learn Vine Whip (its first Grass-type move) until level 14, and the agent challenged the gym before reaching that level. The victory came instead through correct use of Leech Seed, a strategy the agent discovered on its own. Mt.\ Moon remained the major bottleneck, taking over 15 hours (6.9h to 22.4h). The agent never entered Bill's house --- it rarely explored building interiors throughout the run, suggesting that entering buildings is a navigation pattern the model struggles to prioritize.
+\textbf{Qwen 3.5 27B.} We ran this model three times to characterize run-to-run variance. All three runs reached Badge 2, demonstrating that the 27B model consistently completes the early game despite different starter choices, strategies, and eventualities encountered.
+
+In \emph{Run 1} (30h, Bulbasaur), the agent defeated Misty at 22h 46m. The Bulbasaur choice did not translate into an immediate type advantage against Brock: Bulbasaur does not learn Vine Whip until level 13, and the agent challenged the gym before reaching that level. The victory came instead through correct use of Leech Seed. Mt.\ Moon was the major bottleneck (6.9h to 22.4h, $\sim$15h). The agent never entered Bill's house, rarely exploring building interiors throughout the run.
+
+In \emph{Run 2} (40h 48m, Charmander), the agent defeated Misty at 31h 21m. The starter choice led to type disadvantages against both Brock and Misty. More notably, this run exhibited extreme starter over-leveling (Charmeleon Lv31 vs next highest Lv10 at Misty), producing a novel failure mode: because the over-leveled starter could battle indefinitely without taking damage, the agent never switched or healed, eventually exhausting all PP of its damaging moves. With no usable moves, the agent failed to recover, producing two extended wild battles --- a 2.5-hour encounter with a Zubat that ended in a successful run, and a 2-hour encounter with a Geodude that ended in defeat.
+
+In \emph{Run 3} (33h 37m, Bulbasaur), the agent defeated Misty at 26h 58m. Bulbasaur reached level 13 before the Brock challenge, so Vine Whip was available during the gym battle. The Misty battle was trivial thanks to Ivysaur's Grass-type advantage. Team training was also notably more balanced than Run 2.
+
+Across all three runs the agent never advanced past Misty's gym, being unable to complete Bill's quest in any case.
 
 \textbf{Qwen 3.5 35B-A3B.} Despite a total parameter count of 35B, this mixture-of-experts model activates only 3B parameters per token. The result mirrors the 9B dense model: 15 unparseable responses out of 27 overworld decisions, with no meaningful gameplay progress. In our experiments, total parameter count alone did not predict capability --- the 35B-A3B model failed despite exceeding the successful 27B model in total size.
 
@@ -519,11 +569,11 @@ Move           & Decisions      & --- & --- &    2 &    1 &    1 &  --- \\
 
 \textbf{Qwen 3.5 397B-A17B.} Defeated Misty (Badge 2) at 28h 33m and completed Bill's quest at 30h 23m, matching the 3.6 Plus model's narrative reach. Like the 122B-A10B model, it chose Charmander. The Misty battle again proved difficult with the Fire-type starter, taking nearly 10 hours (18.7h to 28.5h). While the over-leveled Charmeleon contributed, the key to the victory was a recently caught Oddish, whose Grass-type moves were super-effective against Misty's Water-type team. This model took the fewest overworld decisions of all successful runs (597 vs 790--894 for the others), suggesting higher per-decision efficiency, but this was offset by the slowest per-decision latency (66.3s avg) and the highest unparseable response rate (41 overworld retries, 38 battle retries). Notably, the agent explored building interiors more extensively than other models and entered the house containing the Route 5 exit, but did not walk through to the other side --- it recognized the building as explorable but failed to identify the passage as a route exit. This was the first model to produce duplicate facts in battle reflect (4 duplicates out of 25).
 
-\textbf{Qwen 3.6 Plus.} Defeated Misty and completed Bill's quest (S.S.\ Ticket obtained) in 37 hours, matching the 397B-A17B model's narrative reach. The Brock bottleneck was severe: despite choosing Bulbasaur, the agent repeatedly challenged the gym but never managed to execute the Leech Seed strategy that the 27B model discovered. Instead, it spent nearly 18 hours grinding and retrying until Bulbasaur learned Vine Whip at level 14, brute-forcing the badge through raw stats rather than strategic play. Mt.\ Moon took approximately 10 hours (18.9h to 28.6h). The run terminated after 2.5 hours without progress past Cerulean City --- the exit to Route 5 requires passing through a building interior, a non-obvious navigation pattern the model could not infer.
+\textbf{Qwen 3.6 Plus.} Defeated Misty and completed Bill's quest (S.S.\ Ticket obtained) in 37 hours, matching the 397B-A17B model's narrative reach. The Brock bottleneck was severe: despite choosing Bulbasaur, the agent repeatedly challenged the gym but never managed to execute the Leech Seed strategy that the 27B model discovered. Instead, it spent nearly 18 hours grinding and retrying until Bulbasaur learned Vine Whip at level 13, brute-forcing the badge through raw stats rather than strategic play. Mt.\ Moon took approximately 10 hours (18.9h to 28.6h). The run terminated after 2.5 hours without progress past Cerulean City --- the exit to Route 5 requires passing through a building interior, a non-obvious navigation pattern the model could not infer.
 
 \textbf{Mt.\ Moon as a universal bottleneck.} Across all models that reached Mt.\ Moon, the cave represented the single largest time sink. This is driven by two compounding factors. First, the cave has an extremely high wild encounter rate, and the agents rarely choose to run from battles unless the situation is clearly unfavorable. The cumulative effect of dozens of unplanned battles drains the party's HP and move PP, eventually forcing the agent to leave the cave to heal at a Pok\'{e}mon Center --- losing all navigation progress in the process. Second, upon re-entering, the agent has no memory of how far it previously progressed, and the cave's internal sections share similar names, causing confusion. In practice, all models required significant leveling before the party could survive the full cave traversal in a single attempt.
 
-\textbf{Starter over-leveling.} A consistent pattern across models is the tendency to disproportionately level the starter Pok\'{e}mon while the rest of the party falls behind. At the time of defeating Misty, the 27B model's Ivysaur was 8 levels above its next strongest team member, the 122B-A10B model's Charmeleon led by 11 levels, and the 397B-A17B model's Charmeleon led by 13 levels. The only exception was Qwen 3.6 Plus, which maintained a more balanced party with a maximum level gap of 4 at the same checkpoint. This imbalance has strategic consequences: an over-leveled starter can carry early battles but becomes a liability when it faces a type disadvantage, as the 122B-A10B model experienced against Misty's Water-type team with its Fire-type Charmeleon.
+\textbf{Starter over-leveling.} A consistent pattern across models is the tendency to disproportionately level the starter Pok\'{e}mon while the rest of the party falls behind. At the time of defeating Misty, the 27B Run 1 model's Ivysaur was 8 levels above its next strongest team member, the 27B Run 2 model's Charmeleon led by 21 levels (the most extreme of any run), the 27B Run 3 model's Ivysaur led by 5 levels (the narrowest 27B gap), the 122B-A10B model's Charmeleon led by 11 levels, and the 397B-A17B model's Charmeleon led by 13 levels. The only exception was Qwen 3.6 Plus, which maintained a more balanced party with a maximum level gap of 4 at the same checkpoint. This imbalance has strategic consequences: an over-leveled starter can carry early battles but becomes a liability when it faces a type disadvantage, as the 122B-A10B model experienced against Misty's Water-type team with its Fire-type Charmeleon.
 
 % --------------------------------------------------------------------------- %
 
@@ -534,11 +584,11 @@ Move           & Decisions      & --- & --- &    2 &    1 &    1 &  --- \\
 
 The results reveal several decision domains where the LLM performs reliably well, even at moderate model sizes.
 
-\textbf{Tactical battle decisions.} The battle agent consistently selects appropriate moves given type matchup information and move stats. The Qwen 3.5 27B run provides a striking example: the agent independently identified that Leech Seed could defeat Brock's Rock-type team despite having no super-effective damage moves available, demonstrating effective use of available resources. Across all runs, the battle agent maintained low unparseable response rates relative to the number of decisions made.
+\textbf{Tactical battle decisions.} The battle agent consistently selects appropriate moves given type matchup information and move stats. The Qwen 3.5 27B Run 1 provides a striking example: the agent independently identified that Leech Seed could defeat Brock's Rock-type team despite having no super-effective damage moves available, demonstrating effective use of available resources. Across all runs, the battle agent maintained low unparseable response rates relative to the number of decisions made.
 
 \textbf{Team composition.} The scout agent maintains type diversity effectively, avoiding duplicate evolution lines and favoring Pok\'{e}mon that add new type coverage. The pre-computed signals in the prompt (type overlap warnings, new type highlights) reduce the reasoning burden, but the catch-or-defeat decision itself remains with the agent and is generally sound.
 
-\textbf{Learning from experience.} The battle reflection mechanism successfully extracts type effectiveness facts from combat, building a persistent knowledge base that improves future decisions. Across all successful runs, the agent learned between 20 and 30 facts, with low error rates (1 to 5 incorrect facts per run). This demonstrates that an LLM can incrementally learn game mechanics through observation and apply that knowledge in subsequent encounters.
+\textbf{Learning from experience.} The battle reflection mechanism successfully extracts type effectiveness facts from combat, building a persistent knowledge base that improves future decisions. Across all successful runs, the agent learned between 15 and 30 facts, with low error rates (1 to 6 incorrect facts per run). This demonstrates that an LLM can incrementally learn game mechanics through observation and apply that knowledge in subsequent encounters.
 
 \textbf{Decisions over explicit option sets.} A common pattern emerges: the LLM excels when presented with a closed list of options and sufficient context to evaluate them. Choosing a move from four options, selecting a party lead from six members, or deciding between catch and defeat --- these are decisions where the action space is small, fully enumerated, and accompanied by relevant information. The structured prompt format plays a key role here: by presenting options as numbered lists with associated data, we reduce the task to selection rather than generation.
 
@@ -556,11 +606,11 @@ Several failure modes recur across models and runs, pointing to fundamental limi
 
 \subsection{Effect of Model Scale}
 
-The six completed runs suggest a non-linear relationship between model size and gameplay quality.
+The eight completed runs (three for 27B, one for each other model) suggest a non-linear relationship between model size and gameplay quality.
 
 At the smallest scale, both Qwen 3.5 9B (dense) and Qwen 3.5 35B-A3B (MoE, 3B active) could not reliably produce parseable output, failing within minutes. The 35B-A3B result is notable: despite a total parameter count exceeding the successful 27B model, it failed in the same way as the 9B.
 
-Four models reached Badge 2 --- Qwen 3.5 27B, Qwen 3.5 122B-A10B, Qwen 3.5 397B-A17B, and Qwen 3.6 Plus --- but through qualitatively different play styles. The 27B model defeated Brock in 5 hours through an effective strategy (Leech Seed), while the larger 3.6 Plus model spent 18 hours brute-forcing the same gym through grinding. The 122B-A10B model chose Charmander (type disadvantage against Brock) yet defeated the gym in 6.5 hours, suggesting competent tactical play despite the suboptimal starter choice. This counterintuitive pattern --- smaller or disadvantaged models sometimes solving problems more elegantly --- suggests that model scale does not uniformly improve strategic reasoning. The 3.6 Plus model did ultimately progress furthest (completing Bill's quest), indicating that scale may matter more for sustained coherence over long runs than for individual tactical decisions.
+Four models reached Badge 2 --- Qwen 3.5 27B (three runs), Qwen 3.5 122B-A10B, Qwen 3.5 397B-A17B, and Qwen 3.6 Plus --- but through qualitatively different play styles. The 27B model consistently reached Badge 2 across all three runs, despite making different starter choices and encountering different eventualities. In Run 1 it defeated Brock in 5 hours through an effective strategy (Leech Seed), while the larger 3.6 Plus model spent 18 hours brute-forcing the same gym through grinding. The 122B-A10B model chose Charmander (type disadvantage against Brock) yet defeated the gym in 6.5 hours, suggesting competent tactical play despite the suboptimal starter choice. This counterintuitive pattern --- smaller or disadvantaged models sometimes solving problems more elegantly --- suggests that model scale does not uniformly improve strategic reasoning. The 397B-A17B and 3.6 Plus models progressed furthest (completing Bill's quest), indicating that scale may matter more for sustained coherence over long runs than for individual tactical decisions.
 
 The 122B-A10B model averaged 56.4 seconds per overworld decision --- seven times slower than the 27B model's 8.3 seconds --- yet reached the same narrative checkpoint (Badge 2) without progressing further. The additional inference cost yielded no measurable gameplay benefit.
 
@@ -602,9 +652,9 @@ Two complementary approaches could address this. First, prompt-level changes cou
 
 The current system has no mechanism for managing the PC storage system. Once the party reaches six members, any additional captures are sent to the PC box and become inaccessible. This means the agent's team composition is effectively locked after the sixth catch --- it cannot swap in a stronger Pok\'{e}mon caught later or retrieve a specialist for a difficult gym. A natural extension would be a dedicated \emph{PC Agent} that manages team composition by depositing and withdrawing Pok\'{e}mon from storage, activated when the overworld agent interacts with the PC in a Pok\'{e}mon Center, following the same delegation pattern used for the shop agent when the player interacts with a mart clerk.
 
-\subsection{Single Run per Model}
+\subsection{Limited Runs per Model}
 
-Each model is evaluated with a single run, which limits our ability to measure variance. The agent's trajectory is highly sensitive to early decisions --- the 122B-A10B model chose Charmander while the 27B and 3.6 Plus chose Bulbasaur, fundamentally changing the Brock gym difficulty. A single run cannot distinguish between a model's general capability and a lucky or unlucky sequence of choices. Future work should include multiple independent runs per model to establish confidence intervals on progression speed and narrative reach.
+With the exception of the 27B model, which we evaluated three times, each model is evaluated with a single run. This limits our ability to measure run-to-run variance across the full range of scales tested. The agent's trajectory is highly sensitive to early decisions --- for example, the 122B-A10B model chose Charmander while the 397B-A17B chose the same starter, yet the 27B runs split between Bulbasaur (Runs 1 and 3) and Charmander (Run 2), fundamentally changing gym difficulty in each case. The three 27B runs demonstrate that the model reliably reaches Badge 2 despite different starter choices and in-game eventualities (including a novel PP-exhaustion failure mode in Run 2), but also show significant variance in time-to-checkpoint. Future work should include multiple independent runs per model across the full range of scales to establish confidence intervals on progression speed and narrative reach.
 
 \subsection{No Overworld HM Usage}
 
@@ -638,7 +688,7 @@ In our experiments, all seven agents use the same model. However, agents differ 
 
 We presented an autonomous agent that plays Pok\'{e}mon Red using a large language model as its sole decision-making engine, with no reinforcement learning, fine-tuning, or task-specific training. The system decomposes gameplay into seven specialized agents --- overworld navigation, battle strategy, catch-or-defeat evaluation, move learning, shop optimization, party lead selection, and nickname generation --- each operating on structured prompts constructed from emulator memory reads, with a battle reflection mechanism that builds persistent type effectiveness knowledge from combat experience.
 
-Our experiments across models ranging from 9B to 397B parameters reveal that a 27B dense parameter model is sufficient to play the game's opening act coherently, defeating two gym leaders and managing a diverse team of six Pok\'{e}mon. Mixture-of-experts models with fewer than 10B active parameters failed entirely in our experiments, though we cannot conclusively attribute this to active parameter count alone. The results highlight a clear separation between decision types: the LLM excels at choices presented as selection over explicit, well-annotated options --- picking a move in battle, evaluating whether to catch a wild Pok\'{e}mon, choosing a party lead --- but struggles with spatial navigation that requires persistent memory across stateless calls and with discovering non-obvious routes through building interiors.
+Our experiments across models ranging from 9B to 397B parameters reveal that a 27B dense parameter model is sufficient to play the game's opening act coherently, defeating two gym leaders and managing a diverse team of six Pok\'{e}mon. Three independent runs of the 27B model all reached Badge 2 despite different starter choices and in-game eventualities, indicating that this capability is reproducible rather than a one-time result. Mixture-of-experts models with fewer than 10B active parameters failed entirely in our experiments, though we cannot conclusively attribute this to active parameter count alone. The results highlight a clear separation between decision types: the LLM excels at choices presented as selection over explicit, well-annotated options --- picking a move in battle, evaluating whether to catch a wild Pok\'{e}mon, choosing a party lead --- but struggles with spatial navigation that requires persistent memory across stateless calls and with discovering non-obvious routes through building interiors.
 
 A notable finding is that larger models do not uniformly produce better gameplay. Qwen 3.5 27B defeated Brock through an effective Leech Seed strategy, while the larger Qwen 3.6 Plus spent 18 hours brute-forcing the same gym through grinding. The 122B-A10B model defeated Brock with a type-disadvantaged starter (Charmander) faster than the 3.6 Plus model with an advantaged one (Bulbasaur). Scale appears to matter more for sustained coherence over long runs than for individual tactical decisions.
 
