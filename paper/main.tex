@@ -8,6 +8,8 @@
 \usepackage{booktabs}
 \usepackage{natbib}
 \usepackage[margin=1in]{geometry}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
 
 \title{Playing Pok\'{e}mon Red with a Language Model: An Autonomous LLM Agent for Retro RPG Gameplay}
 
@@ -361,7 +363,55 @@ We record the wall-clock time at which the agent reaches each story milestone, a
 
 \subsection{Summary}
 
-Table~\ref{tab:summary} presents a high-level comparison of all evaluated models. For each run, we report the furthest narrative checkpoint reached, total wall-clock time, and key decision statistics across agents.
+Figure~\ref{fig:progression} shows the wall-clock progression across narrative checkpoints for every successful run. Table~\ref{tab:summary} presents a high-level comparison of all evaluated models. For each run, we report the furthest narrative checkpoint reached, total wall-clock time, and key decision statistics across agents.
+
+\begin{figure}[h]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+    width=0.85\linewidth,
+    height=8cm,
+    xlabel={Wall-clock time (hours)},
+    ylabel={Checkpoint},
+    ytick={1,2,3,4,5,6,7,8},
+    yticklabels={Starter, Parcel, Viridian Forest, Brock, Mt.\ Moon, Cerulean, Misty, Bill},
+    xmin=0, xmax=42,
+    ymin=0.5, ymax=8.5,
+    grid=both,
+    grid style={dashed, gray!30},
+    legend pos=south east,
+    legend style={font=\small, cells={anchor=west}},
+    mark size=2pt,
+]
+\addplot[color=blue!70, mark=*, thick] coordinates {
+    (0.23,1) (1.05,2) (2.43,3) (5.03,4) (6.85,5) (22.43,6) (22.77,7)
+};
+\addlegendentry{27B Run 1}
+\addplot[color=blue!70, mark=square*, thick, dashed] coordinates {
+    (1.57,1) (2.13,2) (3.52,3) (7.85,4) (10.07,5) (31.10,6) (31.35,7)
+};
+\addlegendentry{27B Run 2}
+\addplot[color=blue!70, mark=triangle*, thick, dotted] coordinates {
+    (0.75,1) (1.22,2) (2.37,3) (5.55,4) (7.12,5) (26.53,6) (26.97,7)
+};
+\addlegendentry{27B Run 3}
+\addplot[color=orange, mark=*, thick] coordinates {
+    (0.52,1) (1.50,2) (2.90,3) (6.60,4) (10.08,5) (21.87,6) (31.62,7)
+};
+\addlegendentry{122B-A10B}
+\addplot[color=red, mark=*, thick] coordinates {
+    (0.68,1) (1.32,2) (1.70,3) (7.55,4) (8.90,5) (18.72,6) (28.55,7) (30.38,8)
+};
+\addlegendentry{397B-A17B}
+\addplot[color=green!50!black, mark=*, thick] coordinates {
+    (0.25,1) (0.47,2) (0.83,3) (17.95,4) (18.93,5) (28.57,6) (28.88,7) (34.37,8)
+};
+\addlegendentry{3.6 Plus}
+\end{axis}
+\end{tikzpicture}
+\caption{Narrative checkpoint progression by model. Each point marks when the agent reached a given checkpoint; horizontal stretches indicate time spent stuck before progressing. The 27B model is shown across three independent runs (solid, dashed, dotted) to illustrate run-to-run variance.}
+\label{fig:progression}
+\end{figure}
 
 \begin{table}[h]
 \centering
@@ -384,6 +434,31 @@ Qwen 3.6 Plus     &  37h & 894 & 1553  & 351 &  15 &   4 &  9 & Badge 2 + Bill \
 \end{tabular}
 \end{table}
 
+\subsection{Inference Cost}
+
+Table~\ref{tab:cost} reports the OpenRouter inference cost and token consumption per run, broken down by token type. The 27B model averages USD~13.92 per run across its three Badge 2 runs, demonstrating that the architecture is reproducible at modest cost. Larger MoE models (122B-A10B, 397B-A17B) cost two to three times more per run without reaching further checkpoints. Qwen 3.6 Plus was offered free during our evaluation period; cost data for it is therefore not available.
+
+\begin{table}[h]
+\centering
+\small
+\caption{Inference cost and token consumption per run, broken down by token type (OpenRouter pricing at evaluation time).}
+\label{tab:cost}
+\begin{tabular}{lrrrrr}
+\toprule
+Model & Cost (USD) & Input & Reasoning & Output & Total \\
+\midrule
+Qwen 3.5 9B          &  0.01 &  8.5K &   36K &   3K &   47K \\
+Qwen 3.5 27B (Run 1) & 11.55 &  3.0M &  5.3M & 364K &  8.6M \\
+Qwen 3.5 27B (Run 2) & 17.64 &  3.9M &  7.0M & 900K & 11.9M \\
+Qwen 3.5 27B (Run 3) & 12.58 &  3.0M &  5.8M & 350K &  9.3M \\
+Qwen 3.5 35B-A3B     &  0.32 &   30K &  231K &   6K &  268K \\
+Qwen 3.5 122B-A10B   & 31.00 &  2.4M & 12.1M & 300K & 14.7M \\
+Qwen 3.5 397B-A17B   & 18.59 &  3.2M &  5.2M & 380K &  8.8M \\
+Qwen 3.6 Plus        &  --- &  5.0M &  5.9M & 250K & 11.2M \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \subsection{Narrative Progression}
 
 Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:cp-122b},~\ref{tab:cp-397b},~and~\ref{tab:cp-36plus} show the wall-clock time and party composition at each narrative checkpoint for the models that achieved meaningful progress. We evaluated Qwen 3.5 27B three times to characterize run-to-run variance for the smallest model that reliably completes the early game. Qwen 3.5 9B and 35B-A3B failed before reaching any checkpoint (Section~\ref{sec:obs}).
@@ -393,6 +468,7 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 \small
 \caption{Qwen 3.5 27B (Run 1) --- checkpoint progression.}
 \label{tab:cp-27b-r1}
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{rlrl}
 \toprule
 \# & Checkpoint & Time & Party \\
@@ -405,7 +481,8 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 6 & Reach Cerulean    & 22h 26m & Lv24 Ivysaur, Lv16 Spearow, Lv16 Rattata, Lv11 Geodude, Lv11 Butterfree, Lv4 Pikachu \\
 7 & Defeat Misty      & 22h 46m & Lv25 Ivysaur, Lv17 Spearow, Lv17 Rattata, Lv11 Geodude, Lv11 Butterfree, Lv4 Pikachu \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \begin{table}[h]
@@ -413,6 +490,7 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 \small
 \caption{Qwen 3.5 27B (Run 2) --- checkpoint progression.}
 \label{tab:cp-27b-r2}
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{rlrl}
 \toprule
 \# & Checkpoint & Time & Party \\
@@ -425,7 +503,8 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 6 & Reach Cerulean    & 31h 06m & Lv30 Charmeleon, Lv10 Geodude, Lv10 Pidgey, Lv5 Weedle, Lv4 Pikachu, Lv3 Rattata \\
 7 & Defeat Misty      & 31h 21m & Lv31 Charmeleon, Lv10 Geodude, Lv10 Pidgey, Lv5 Weedle, Lv4 Pikachu, Lv3 Rattata \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \begin{table}[h]
@@ -433,6 +512,7 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 \small
 \caption{Qwen 3.5 27B (Run 3) --- checkpoint progression.}
 \label{tab:cp-27b-r3}
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{rlrl}
 \toprule
 \# & Checkpoint & Time & Party \\
@@ -445,7 +525,8 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 6 & Reach Cerulean    & 26h 32m & Lv24 Ivysaur, Lv19 Geodude, Lv15 Butterfree, Lv11 Pidgey, Lv11 Rattata, Lv5 Magikarp \\
 7 & Defeat Misty      & 26h 58m & Lv25 Ivysaur, Lv20 Geodude, Lv15 Butterfree, Lv11 Pidgey, Lv11 Rattata, Lv5 Magikarp \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \begin{table}[h]
@@ -453,6 +534,7 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 \small
 \caption{Qwen 3.5 122B-A10B --- checkpoint progression.}
 \label{tab:cp-122b}
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{rlrl}
 \toprule
 \# & Checkpoint & Time & Party \\
@@ -465,7 +547,8 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 6 & Reach Cerulean    & 21h 52m & Lv22 Charmeleon, Lv12 Beedrill, Lv11 Pidgey, Lv10 Nidoran (M), Lv9 Pikachu, Lv8 Rattata \\
 7 & Defeat Misty      & 31h 37m & Lv27 Charmeleon, Lv16 Pidgey, Lv14 Beedrill, Lv13 Pikachu, Lv12 Nidoran (M), Lv12 Rattata \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \begin{table}[h]
@@ -473,6 +556,7 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 \small
 \caption{Qwen 3.5 397B-A17B --- checkpoint progression.}
 \label{tab:cp-397b}
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{rlrl}
 \toprule
 \# & Checkpoint & Time & Party \\
@@ -486,7 +570,8 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 7 & Defeat Misty      & 28h 33m & Lv29 Charmeleon, Lv16 Pidgey, Lv15 Oddish, Lv13 Beedrill, Lv13 Geodude, Lv12 Rattata \\
 8 & Help Bill         & 30h 23m & Lv29 Charmeleon, Lv16 Pidgey, Lv15 Oddish, Lv13 Beedrill, Lv13 Geodude, Lv12 Rattata \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \begin{table}[h]
@@ -494,6 +579,7 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 \small
 \caption{Qwen 3.6 Plus --- checkpoint progression.}
 \label{tab:cp-36plus}
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{rlrl}
 \toprule
 \# & Checkpoint & Time & Party \\
@@ -507,7 +593,8 @@ Tables~\ref{tab:cp-27b-r1},~\ref{tab:cp-27b-r2},~\ref{tab:cp-27b-r3},~\ref{tab:c
 7 & Defeat Misty      & 28h 53m & Lv20 Pikachu, Lv18 Pidgeotto, Lv17 Ivysaur, Lv16 Geodude, Lv16 Beedrill \\
 8 & Help Bill         & 34h 22m & Lv23 Pikachu, Lv22 Pidgeotto, Lv19 Geodude, Lv19 Ivysaur, Lv17 Beedrill \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \subsection{Per-Agent Statistics}
@@ -519,6 +606,7 @@ Table~\ref{tab:agents} breaks down LLM invocations and key statistics per agent 
 \small
 \caption{Per-agent decision statistics for completed runs.}
 \label{tab:agents}
+\resizebox{\linewidth}{!}{%
 \begin{tabular}{llrrrrrrrr}
 \toprule
 Agent & Metric & 9B & 27B R1 & 27B R2 & 27B R3 & 35B-A3B & 122B-A10B & 397B-A17B & 3.6 Plus \\
@@ -545,7 +633,8 @@ Naming         & Names          & --- &    6 &   10 &    8 & --- &   13 &    7 &
 Move           & Decisions      & --- &    2 &    2 &    2 & --- &    1 &    1 &  --- \\
                & Avg time (s)   & --- & 39.9 & 20.4 & 34.5 & --- & 20.6 & 15.9 &  --- \\
 \bottomrule
-\end{tabular}
+\end{tabular}%
+}
 \end{table}
 
 \subsection{Observations}
@@ -699,6 +788,10 @@ Recent demonstrations by Google and Anthropic --- completing or nearly completin
 The agent's structured decision logs provide a natural foundation for future fine-tuning efforts, and the modular architecture supports incremental extension to cover the full game.
 
 % --------------------------------------------------------------------------- %
+
+\section*{Code and Data Availability}
+
+The complete source code, run logs, and reproduction instructions are available at \url{https://github.com/jpurplefox/pokemon-red-agent/tree/paper-v1}.
 
 \section*{Acknowledgments}
 
