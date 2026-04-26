@@ -21,14 +21,14 @@ from orchestration.game import Game
 
 ROM = "rom.gb"
 
-# OpenRouter model presets (--model <name>)
+# OpenRouter model presets (--model <name>) — models evaluated in the paper
 CLOUD_MODELS = {
-    "qwen3.5-27b": "qwen/qwen3.5-27b",
-    "qwen3-30b":  "qwen/qwen3-30b-a3b",
-    "qwen3-235b": "qwen/qwen3-235b-a22b",
-    "gemini-flash": "google/gemini-2.5-flash",
-    "deepseek-v3": "deepseek/deepseek-chat-v3-0324:free",
-    "llama4-maverick": "meta-llama/llama-4-maverick:free",
+    "qwen3.5-9b":        "qwen/qwen3.5-9b",
+    "qwen3.5-27b":       "qwen/qwen3.5-27b",
+    "qwen3.5-35b-a3b":   "qwen/qwen3.5-35b-a3b",
+    "qwen3.5-122b-a10b": "qwen/qwen3.5-122b-a10b",
+    "qwen3.5-397b-a17b": "qwen/qwen3.5-397b-a17b",
+    "qwen3.6-plus":      "qwen/qwen3.6-plus",
 }
 
 

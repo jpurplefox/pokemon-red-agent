@@ -12,6 +12,7 @@ The agent reads the game's memory to understand the world, reasons about what to
 - **Tracks quests** — detects side-quests from dialogue and prioritizes them
 - **Names Pokemon** — generates creative nicknames for caught Pokemon
 - **Decides what to catch** — evaluates wild Pokemon against current team composition
+- **Learns new moves** — decides whether to teach a new move on level-up and which old one to replace
 
 ## How it works
 
@@ -21,68 +22,6 @@ The agent reads Pokemon Red's WRAM (working RAM) to extract game state: map posi
 Game Boy (PyBoy)  -->  State Readers  -->  Domain Objects  -->  LLM Agent  -->  Menu Driver  -->  Game Boy
      WRAM               (adapters)        (dataclasses)      (reasoning)      (adapters)       button presses
 ```
-
-## Architecture
-
-Hexagonal architecture with clear port/adapter boundaries:
-
-```
-pokemon-red/
-├── domain/              # Models + Protocol definitions (ports)
-│   └── models.py        #   PartyMember, BattleMon, Move, LLMPort, GameStatePort, etc.
-│
-├── agents/              # AI decision-makers (use LLMPort)
-│   ├── battle_ai.py     #   Combat strategy via LLM
-│   ├── overworld_ai.py  #   Exploration decisions + sub-goal tracking
-│   ├── shop_ai.py       #   Purchase optimization
-│   ├── scout_ai.py      #   Catch-or-defeat evaluation
-│   ├── naming_ai.py     #   Pokemon nickname generation
-│   └── templates/       #   Jinja2 prompt templates
-│
-├── adapters/
-│   ├── state/           # Read game state from WRAM (driven adapters)
-│   │   ├── battle_state_reader.py
-│   │   ├── bag_reader.py
-│   │   ├── overworld.py
-│   │   ├── screen.py
-│   │   └── menu.py
-│   ├── input/           # Execute actions via button presses (driven adapters)
-│   │   ├── battle_menu_driver.py
-│   │   ├── navigator.py     # A* pathfinding + walking
-│   │   ├── pathfinder.py
-│   │   └── naming.py
-│   └── display/         # Output to user (driven adapters)
-│       ├── ai_logger.py     # Unified colored console output
-│       ├── ai_log_window.py # Pygame window showing AI thoughts
-│       └── console.py       # ASCII map rendering, prompts
-│
-├── orchestration/       # Game flow control
-│   ├── game.py              # Main game loop + state dispatch
-│   ├── battle.py            # Battle turn sequencing
-│   ├── overworld_controller.py  # Overworld AI coordinator
-│   └── event_processor.py   # Dialogue, menus, mart interaction
-│
-├── data/                # Static data + constants
-│   ├── constants.py         # WRAM addresses, map names, items
-│   └── pokemon_data.py      # Types, moves, species data
-│
-├── tools/                  # Dev utilities (memory inspector)
-├── main.py                 # Entry point + dependency wiring
-└── pyproject.toml
-```
-
-## Ports (interfaces)
-
-Defined as Python Protocols in `domain/models.py`:
-
-| Port | Purpose | Adapter |
-|------|---------|---------|
-| `LLMPort` | Send prompts, get responses | `OpenAILLM` (cloud via OpenRouter) or `MLXLLM` (local on Apple Silicon) |
-| `GameStatePort` | Read battle/party state | `BattleStateReader` |
-| `GameInputPort` | Press buttons in menus | `BattleMenuDriver` |
-| `BagPort` | Read inventory and money | `BagReader` |
-| `DisplayPort` | Show AI reasoning | `AILogger` + pygame window |
-| `BattleStrategy` | Choose battle actions | `BattleAI` or `ManualStrategy` |
 
 ## Setup
 
@@ -123,15 +62,9 @@ python main.py --ai --model qwen3.5-27b
 
 # Full AI mode with a local MLX model (Apple Silicon)
 python main.py --ai --local qwen2.5-14b
-
-# Shop AI only (you explore, AI buys at marts)
-python main.py --shop
-
-# Naming AI only (you play, AI names caught Pokemon)
-python main.py --naming
 ```
 
-Available cloud model presets: `qwen3.5-27b`, `qwen3-30b`, `qwen3-235b`, `gemini-flash`, `deepseek-v3`, `llama4-maverick`. Pass any other OpenRouter model ID directly. See `main.py` for the full list of local MLX presets.
+Cloud model presets (the six Qwen models evaluated in the paper): `qwen3.5-9b`, `qwen3.5-27b`, `qwen3.5-35b-a3b`, `qwen3.5-122b-a10b`, `qwen3.5-397b-a17b`, `qwen3.6-plus`. You can also pass any other OpenRouter model ID directly, but only these have been tested. See `main.py` for the full list of local MLX presets.
 
 ### Controls (manual mode)
 
@@ -146,28 +79,6 @@ Available cloud model presets: `qwen3.5-27b`, `qwen3-30b`, `qwen3-235b`, `gemini
 | `quit` | Exit |
 
 During AI mode, press **Enter** to pause the AI and take manual control.
-
-## AI Features
-
-### Overworld Agent
-- ASCII map with spatial awareness (`@` = player, `#` = wall, numbers = POIs)
-- Sub-goal system: detects side-quests from NPC dialogue, prioritizes them
-- Visit tracking: avoids repeating actions
-- Auto-heals at Pokemon Centers when HP is low
-- Auto-buys Poke Balls when stock is low
-- Goal detection: returns control to user when objective is reached
-
-### Battle Agent
-- Type advantage reasoning with STAB awareness
-- Turn history tracking for context
-- Retry with error feedback on parse failures
-- LLM-based Pokemon switching after faints
-- Post-battle reflection for learning
-
-### Shop Agent
-- Evaluates inventory needs vs budget
-- Keeps money reserves (30% rule)
-- Prioritizes Poke Balls
 
 ## Tech Stack
 
