@@ -9,6 +9,10 @@ overworld_subgoals.json
 battle_memory.json
 .DS_Store
 
+# Python build artifacts
+build/
+*.egg-info/
+
 # LaTeX build artifacts
 paper/*.aux
 paper/*.bbl
