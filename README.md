@@ -87,3 +87,23 @@ During AI mode, press **Enter** to pause the AI and take manual control.
 - **[MLX-LM](https://github.com/ml-explore/mlx-lm)** — Local LLM inference on Apple Silicon
 - **[Jinja2](https://jinja.palletsprojects.com)** — Prompt templating
 - **[Pygame](https://pygame.org)** — AI thoughts display window
+
+## Reproducing the paper
+
+Each model in the paper was evaluated with the same invocation, varying only the `--model` preset:
+
+```bash
+python main.py --ai --model qwen3.5-27b --thinking --mute
+```
+
+A run terminates when one of three conditions is met:
+
+1. **Completion** — the agent reaches the S.S. Anne.
+2. **Retry exhaustion** — an agent cannot produce a valid action after its maximum retries, requiring human intervention.
+3. **Unrecoverable loop** — the agent fills its entire action history with repeated actions and no progress.
+
+Per-model results, including checkpoint times and decision metrics, are in [paper/](paper/) (one `*_results.md` file per run).
+
+## License
+
+Released under the Apache 2.0 License — see [LICENSE](LICENSE).
