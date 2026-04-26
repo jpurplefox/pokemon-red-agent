@@ -8,7 +8,7 @@ from data.constants import (
     ADDR_MAP_N, ADDR_Y_COORD, ADDR_X_COORD,
     ADDR_MAX_MENU, ADDR_IS_IN_BATTLE,
 )
-from dialogue import DialogueAdvancer
+from adapters.dialogue import DialogueAdvancer
 from adapters.display.console import prompt_menu, prompt_name
 
 

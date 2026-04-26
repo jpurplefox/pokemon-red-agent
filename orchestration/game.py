@@ -16,7 +16,7 @@ from adapters.state.screen import ScreenReader
 from adapters.state.menu import MenuReader
 from adapters.display.ai_log_window import ai_update_hud
 from agents.overworld_ai import _log as ow_logger
-from dialogue import DialogueAdvancer
+from adapters.dialogue import DialogueAdvancer
 from adapters.input.naming import NameEntry
 from adapters.state.overworld import OverworldScanner
 from orchestration.event_processor import EventProcessor
@@ -24,7 +24,7 @@ from orchestration.mart_handler import MartHandler
 from adapters.input.navigator import Navigator
 from orchestration.battle import BattleHandler
 from adapters.state.bag_reader import BagReader
-from debug_scanner import DebugScanner
+from tools.debug_scanner import DebugScanner
 from orchestration.overworld_controller import OverworldAIController
 from adapters.display.console import (
     prompt_menu, prompt_name, prompt_command, print_map, render_map, BUTTONS,

@@ -1,0 +1,28 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pokemon-red-agent"
+version = "0.1.0"
+description = "Autonomous LLM agent that plays Pokemon Red on a Game Boy emulator"
+readme = "README.md"
+requires-python = ">=3.11"
+license = { file = "LICENSE" }
+authors = [{ name = "Jesica Collado" }]
+dependencies = [
+    "pyboy==2.7.0",
+    "jinja2==3.1.6",
+    "langchain-core==1.2.19",
+    "pygame==2.6.1",
+    "httpx==0.28.1",
+    "python-dotenv==1.2.2",
+]
+
+[project.optional-dependencies]
+local = [
+    "mlx-lm==0.31.1; sys_platform == 'darwin' and platform_machine == 'arm64'",
+]
+
+[tool.setuptools.packages.find]
+include = ["adapters*", "agents*", "data*", "domain*", "orchestration*", "tools*"]

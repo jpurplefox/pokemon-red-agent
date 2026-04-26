@@ -5,8 +5,6 @@ Satisfies the LLMPort Protocol: invoke(messages) → response with .content
 
 import re
 from dataclasses import dataclass
-from mlx_lm import load, generate
-from mlx_lm.sample_utils import make_sampler, make_logits_processors
 
 _THINK_CLOSED_RE = re.compile(r"<think>.*?</think>\s*", re.DOTALL)
 _THINK_UNCLOSED_RE = re.compile(r"<think>.*", re.DOTALL)
@@ -24,6 +22,7 @@ class MLXLLM:
 
     def __init__(self, model_name: str = "mlx-community/Qwen3.5-9B-4bit",
                  max_tokens: int = 512, temperature: float = 0.3):
+        from mlx_lm import load
         self._model, self._tokenizer = load(model_name)  # type: ignore[misc]
         # Qwen models always produce <think> blocks regardless of config,
         # so always allocate extra tokens for the thinking budget.
@@ -31,6 +30,8 @@ class MLXLLM:
 
     def invoke(self, messages: list) -> _Response:  # type: ignore[type-arg]
         """Send messages to the local MLX model and return a response."""
+        from mlx_lm import generate
+        from mlx_lm.sample_utils import make_sampler, make_logits_processors
         # Convert LangChain-style messages to chat format
         chat_messages: list[dict[str, str]] = []
         for msg in messages:
