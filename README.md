@@ -1,6 +1,6 @@
 # Pokemon Red AI Agent
 
-An autonomous AI agent that plays Pokemon Red on a Game Boy emulator, making real-time decisions using a local LLM.
+An autonomous AI agent that plays Pokemon Red on a Game Boy emulator, making real-time decisions using an LLM (cloud or local).
 
 The agent reads the game's memory to understand the world, reasons about what to do next, and presses buttons to execute its decisions — no scripting, no hardcoded paths.
 
@@ -15,7 +15,7 @@ The agent reads the game's memory to understand the world, reasons about what to
 
 ## How it works
 
-The agent reads Pokemon Red's WRAM (working RAM) to extract game state: map position, nearby points of interest, party HP, battle stats, inventory. This state is rendered into text prompts via Jinja2 templates and sent to a local LLM (Qwen via Ollama). The LLM responds with a structured action (`GO:3`, `MOVE:TACKLE`, `BUY: 1 x3`), which is parsed and translated into button presses on the emulator.
+The agent reads Pokemon Red's WRAM (working RAM) to extract game state: map position, nearby points of interest, party HP, battle stats, inventory. This state is rendered into text prompts via Jinja2 templates and sent to an LLM — either a cloud model via the OpenRouter API or a local model running on Apple Silicon via MLX. The LLM responds with a structured action (`GO:3`, `MOVE:TACKLE`, `BUY: 1 x3`), which is parsed and translated into button presses on the emulator.
 
 ```
 Game Boy (PyBoy)  -->  State Readers  -->  Domain Objects  -->  LLM Agent  -->  Menu Driver  -->  Game Boy
@@ -66,9 +66,9 @@ pokemon-red/
 │   ├── constants.py         # WRAM addresses, map names, items
 │   └── pokemon_data.py      # Types, moves, species data
 │
-├── main.py              # Entry point + dependency wiring
-├── docker-compose.yml   # Ollama container config
-└── requirements.txt
+├── tools/                  # Dev utilities (memory inspector)
+├── main.py                 # Entry point + dependency wiring
+└── pyproject.toml
 ```
 
 ## Ports (interfaces)
@@ -77,7 +77,7 @@ Defined as Python Protocols in `domain/models.py`:
 
 | Port | Purpose | Adapter |
 |------|---------|---------|
-| `LLMPort` | Send prompts, get responses | `ChatOllama` (Qwen 14B) |
+| `LLMPort` | Send prompts, get responses | `OpenAILLM` (cloud via OpenRouter) or `MLXLLM` (local on Apple Silicon) |
 | `GameStatePort` | Read battle/party state | `BattleStateReader` |
 | `GameInputPort` | Press buttons in menus | `BattleMenuDriver` |
 | `BagPort` | Read inventory and money | `BagReader` |
@@ -89,20 +89,27 @@ Defined as Python Protocols in `domain/models.py`:
 ### Requirements
 
 - Python 3.11+
-- Docker (for Ollama)
-- A Pokemon Red ROM file (`rom.gb`)
+- A Pokemon Red ROM file named `rom.gb` in the repo root. ROMs are copyrighted; obtain one by dumping the cartridge you own. None is provided here.
+- For cloud inference: an [OpenRouter](https://openrouter.ai) API key
+- For local inference (optional): an Apple Silicon Mac (MLX requirement)
 
 ### Install
 
 ```bash
-pip install -r requirements.txt
+# Cloud-only setup (works on any platform)
+pip install .
+
+# With local inference support (Apple Silicon only)
+pip install '.[local]'
 ```
 
-### Start the LLM server
+### Configure
+
+Copy `.env.example` to `.env` and set your key:
 
 ```bash
-docker compose up -d
-docker exec pokemon-red-ollama-1 ollama pull qwen2.5:14b
+cp .env.example .env
+# Edit .env and set OPENROUTER_API_KEY
 ```
 
 ### Run
@@ -111,8 +118,11 @@ docker exec pokemon-red-ollama-1 ollama pull qwen2.5:14b
 # Manual mode (you control everything)
 python main.py
 
-# Full AI mode (AI controls overworld + battles + shopping)
-python main.py --ai
+# Full AI mode with a cloud model via OpenRouter
+python main.py --ai --model qwen3.5-27b
+
+# Full AI mode with a local MLX model (Apple Silicon)
+python main.py --ai --local qwen2.5-14b
 
 # Shop AI only (you explore, AI buys at marts)
 python main.py --shop
@@ -120,6 +130,8 @@ python main.py --shop
 # Naming AI only (you play, AI names caught Pokemon)
 python main.py --naming
 ```
+
+Available cloud model presets: `qwen3.5-27b`, `qwen3-30b`, `qwen3-235b`, `gemini-flash`, `deepseek-v3`, `llama4-maverick`. Pass any other OpenRouter model ID directly. See `main.py` for the full list of local MLX presets.
 
 ### Controls (manual mode)
 
@@ -160,7 +172,7 @@ During AI mode, press **Enter** to pause the AI and take manual control.
 ## Tech Stack
 
 - **[PyBoy](https://github.com/Baekalfen/PyBoy)** — Game Boy emulator with Python API
-- **[Ollama](https://ollama.ai)** — Local LLM inference server
-- **[LangChain](https://langchain.com)** — LLM orchestration
+- **[OpenRouter](https://openrouter.ai)** — Cloud LLM inference (any OpenAI-compatible model)
+- **[MLX-LM](https://github.com/ml-explore/mlx-lm)** — Local LLM inference on Apple Silicon
 - **[Jinja2](https://jinja.palletsprojects.com)** — Prompt templating
 - **[Pygame](https://pygame.org)** — AI thoughts display window
