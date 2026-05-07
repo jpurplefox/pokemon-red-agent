@@ -27,7 +27,8 @@ from adapters.state.bag_reader import BagReader
 from tools.debug_scanner import DebugScanner
 from orchestration.overworld_controller import OverworldAIController
 from adapters.display.console import (
-    prompt_menu, prompt_name, prompt_command, print_map, render_map, BUTTONS,
+    prompt_menu, prompt_name, prompt_command, prompt_action,
+    print_map, render_map, BUTTONS,
     set_input_fn,
 )
 
@@ -345,50 +346,85 @@ class Game:
         if not self._in_overworld:
             return False
 
-        if self._show_pois:
-            self._show_pois = False
-            self._print_surroundings()
-            mem = self._pyboy.memory
-            map_name = MAP_NAMES.get(mem[ADDR_MAP_N], f"Map {mem[ADDR_MAP_N]}")
-            self._update_hud(map_name)
-
         if self._ow_controller and not self._ow_controller.paused:
+            if self._show_pois:
+                self._show_pois = False
+                self._print_surroundings()
+                mem = self._pyboy.memory
+                map_name = MAP_NAMES.get(mem[ADDR_MAP_N], f"Map {mem[ADDR_MAP_N]}")
+                self._update_hud(map_name)
             return self._handle_overworld_ai()
 
-        cmd = prompt_command()
-        if cmd == "ai" and self._ow_controller:
-            self._ow_controller.resume()
-            self._show_pois = True
+        # Manual mode — show the same state the AI would see
+        mem = self._pyboy.memory
+        current_map = self._scanner.read_map()
+        pois = self._scanner.get_pois()  # legacy dicts for navigator
+        party = self._battle.read_party()
+
+        if self._show_pois:
+            self._show_pois = False
+            self._update_hud(current_map.name)
+
+        # Print map using domain __str__ (grid + numbered interactables/connections)
+        print(f"\n{current_map}")
+
+        print(f"\n--- Team ---")
+        for mon in party:
+            hp_warn = ""
+            if mon.hp == 0:
+                hp_warn = " FAINTED"
+            elif mon.hp < mon.max_hp // 4:
+                hp_warn = " CRITICAL"
+            print(f"  {mon.nickname} ({mon.name}) Lv{mon.level} -- {mon.hp}/{mon.max_hp} HP{hp_warn}")
+
+        result = prompt_action(current_map.interactables, current_map.connected_maps)
+        if result is None:
             return True
-        elif cmd == "speed":
-            self.set_speed(fast=not self._fast_mode)
-            mode = "fast ⚡" if self._fast_mode else "normal 🎮"
-            print(f"  Speed: {mode}")
-            return True
-        elif cmd == "quit":
-            self._running = False
-        elif cmd == "look":
-            self._print_surroundings()
-        elif cmd == "scan":
-            self._debug.dump()
-        elif cmd == "go":
-            result = self._navigator.go(self._print_surroundings)
-            # Always restore overworld state after navigation — handlers
-            # like _handle_name_menu may have cleared it during events.
+
+        action_type, detail = result
+
+        if action_type == "interact":
+            interactable = current_map.interactables[detail]
+            # Find matching legacy POI dict for navigator
+            poi = self._find_legacy_poi(pois, interactable.position)
+            if poi:
+                self._navigator.go_to(poi, self._print_surroundings,
+                                      all_pois=pois)
             self._in_overworld = True
-            if result.get("show_pois"):
-                self._show_pois = True
-        elif cmd == "lead":
-            self._change_lead()
-        elif cmd == "start":
+            self._show_pois = True
+        elif action_type == "go":
+            connection = current_map.connected_maps[detail]
+            poi = self._find_legacy_poi(pois, connection.position)
+            if poi:
+                self._navigator.go_to(poi, self._print_surroundings,
+                                      all_pois=pois)
+            self._in_overworld = True
+            self._show_pois = True
+        elif action_type == "move":
+            self._pyboy.button(detail, delay=8)
+            self._pyboy.tick(30)
+        elif action_type == "button":
+            self._pyboy.button(detail, delay=8)
+            self._pyboy.tick(30)
+        elif action_type == "start":
             self._pyboy.button("start", delay=8)
             self._pyboy.tick(30)
             self._handle_game_menu()
-        elif cmd in BUTTONS:
-            self._pyboy.button(cmd, delay=8)
-            self._pyboy.tick(30)
-            if cmd in {"up", "down", "left", "right"}:
-                self._print_surroundings()
+        elif action_type == "look":
+            pass
+        elif action_type == "quit":
+            self._running = False
+        elif action_type == "ai" and self._ow_controller:
+            self._ow_controller.resume()
+            self._show_pois = True
+        elif action_type == "speed":
+            self.set_speed(fast=not self._fast_mode)
+            mode = "fast" if self._fast_mode else "normal"
+            print(f"  Speed: {mode}")
+        elif action_type == "lead":
+            self._change_lead()
+        elif action_type == "scan":
+            self._debug.dump()
 
         return True
 
@@ -402,6 +438,15 @@ class Game:
             self._in_overworld = True
             self._show_pois = True
         return True
+
+    @staticmethod
+    def _find_legacy_poi(pois, position):
+        """Find a legacy POI dict matching a (y, x) position."""
+        ty, tx = position
+        for poi in pois:
+            if poi["ty"] == ty and poi["tx"] == tx:
+                return poi
+        return None
 
     def _change_lead(self):
         """Let the player choose a new lead Pokemon via the in-game party menu."""

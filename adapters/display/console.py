@@ -47,6 +47,79 @@ def prompt_command():
     return cmd
 
 
+def prompt_action(interactables, connections) -> tuple | None:
+    """Show action prompt and parse user input.
+
+    interactables: list of domain Interactable objects
+    connections: list of domain MapConnection objects
+
+    Accepts:
+      <n>           — interact with interactable n (number from map)
+      <letter>      — travel to connection (letter from map)
+      MOVE:<dir>    — walk one tile (up/down/left/right)
+      START / LOOK / QUIT
+
+    Returns (action_type, detail) or None on invalid input.
+    """
+    print("\n--- Actions ---")
+    print("  <number>  interact    <letter>  travel")
+    print("  MOVE:<dir>  walk (up/down/left/right)")
+    print("  START / LOOK / QUIT")
+
+    cmd = _input_fn("ACTION: ").strip()
+    if not cmd:
+        return None
+
+    upper = cmd.upper()
+
+    # Number → interact
+    if cmd.isdigit():
+        idx = int(cmd) - 1
+        if 0 <= idx < len(interactables):
+            return ("interact", idx)
+        print(f"  Interactable range: 1-{len(interactables)}")
+        return None
+
+    # Single letter → connection
+    if len(cmd) == 1 and cmd.isalpha() and cmd.lower() != cmd.upper():
+        idx = ord(cmd.lower()) - ord("a")
+        if 0 <= idx < len(connections):
+            return ("go", idx)
+        if connections:
+            last = chr(ord("a") + len(connections) - 1)
+            print(f"  Connection range: a-{last}")
+        return None
+
+    if upper.startswith("MOVE:"):
+        direction = upper[5:].strip().lower()
+        if direction in {"up", "down", "left", "right"}:
+            return ("move", direction)
+        print("  MOVE directions: up, down, left, right")
+        return None
+
+    if upper == "START":
+        return ("start", None)
+    if upper == "LOOK":
+        return ("look", None)
+    if upper == "QUIT":
+        return ("quit", None)
+
+    lower = cmd.lower()
+    if lower in BUTTONS:
+        return ("button", lower)
+    if lower == "ai":
+        return ("ai", None)
+    if lower == "speed":
+        return ("speed", None)
+    if lower == "lead":
+        return ("lead", None)
+    if lower == "scan":
+        return ("scan", None)
+
+    print("  Type a number, letter, MOVE:<dir>, START, LOOK, or QUIT")
+    return None
+
+
 def prompt_poi_selection(pois):
     """Show numbered POI list and return the selected POI dict, or None."""
     if not pois:

@@ -1,4 +1,4 @@
-"""Overworld scanner — reads WRAM to find nearby points of interest.
+"""Overworld scanner — reads WRAM to build domain Map objects.
 
 Orchestrates scanning of warps, blocks, signs, sprites, and connections.
 Delegates walkability grid building, label disambiguation, and sprite
@@ -14,6 +14,10 @@ from data.constants import (
     ADDR_TILESET, ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH,
     ADDR_OVERWORLD_MAP, MAP_BORDER, BLOCK_LABELS,
     BLOCK_DESCRIPTIONS, MAP_NAMES, ADDR_GRASS_TILE,
+)
+from domain.maps import (
+    Map, Interactable, MapConnection,
+    WalkabilityGrid as DomainGrid, PassableTile, LedgeTile, Direction,
 )
 from adapters.input.pathfinder import find_best_path
 from adapters.state.walkability import WalkabilityGrid
@@ -50,57 +54,103 @@ class OverworldScanner:
         self._walkability = WalkabilityGrid(pyboy, self._rom)
         self._sprite_resolver = SpriteResolver(pyboy, self._rom)
 
-    def get_pois(self):
-        """Return all nearby reachable points of interest as a list of dicts.
+    # ------------------------------------------------------------------
+    # Public API — returns domain objects
+    # ------------------------------------------------------------------
 
-        Each dict: {"label": str, "dir": str, "ty": int, "tx": int, "kind": str}
-        Unreachable POIs (no path via A*) are excluded.
-        """
-        py = self._pyboy.memory[ADDR_Y_COORD]
-        px = self._pyboy.memory[ADDR_X_COORD]
+    def read_map(self) -> Map:
+        """Read the current map from WRAM and return a domain Map object."""
+        mem = self._pyboy.memory
+        map_id = mem[ADDR_MAP_N]
+        map_name = MAP_NAMES.get(map_id, f"Map {map_id}")
+        py = mem[ADDR_Y_COORD]
+        px = mem[ADDR_X_COORD]
 
-        all_pois = []
-        all_pois.extend(self._scan_warps(py, px))
-        all_pois.extend(self._scan_blocks(py, px))
-        # Fixed POIs for maps with non-detectable interactables
-        map_id = self._pyboy.memory[ADDR_MAP_N]
-        for fp in _FIXED_POIS.get(map_id, []):
-            poi = dict(fp)
-            poi["dir"] = self._relative_dir(py, px, poi["ty"], poi["tx"])
-            all_pois.append(poi)
-        all_pois.extend(self._scan_sprites(py, px))
-        all_pois.extend(self._scan_connections(py, px))
+        # Build raw POI dicts (legacy format for dedup/disambiguate/pathfinder)
+        raw_pois = self._scan_all_raw(py, px)
+        raw_pois = dedup_warps(raw_pois, py, px)
+        raw_pois = disambiguate_labels(raw_pois, py, px)
 
-        # Deduplicate adjacent warps with the same label (keep closest)
-        all_pois = dedup_warps(all_pois, py, px)
-
-        # Disambiguate duplicate labels by compass direction
-        all_pois = disambiguate_labels(all_pois, py, px)
-
-        # Collect warp tiles to avoid walking through them accidentally
-        warp_tiles = {(p["ty"], p["tx"]) for p in all_pois if p["kind"] == "warp"}
-
-        # Filter out unreachable POIs
+        # Filter unreachable POIs
+        warp_tiles = {(p["ty"], p["tx"]) for p in raw_pois if p["kind"] == "warp"}
         grid, _, _, ledges = self.get_walkable_grid()
         npc_blocked = self.get_npc_tiles()
+
         reachable = []
-        for poi in all_pois:
-            # Exclude this POI's own warp from the avoid set (it's the goal)
+        for poi in raw_pois:
             avoid = warp_tiles - {(poi["ty"], poi["tx"])}
             path, _ = find_best_path(grid, (py, px), poi, blocked=npc_blocked,
                                      ledges=ledges, warps=avoid)
             if path is not None:
                 reachable.append(poi)
-            else:
-                pass
 
-        # Add a single grass POI if there's tall grass on this map
-        # Skip Pallet Town — no wild Pokémon spawn there
+        # Add grass POI if available
+        current_map_name = MAP_NAMES.get(mem[ADDR_MAP_N], "")
+        if current_map_name != "Pallet Town":
+            grass = self._find_nearest_grass_raw(py, px, grid)
+            if grass:
+                path, _ = find_best_path(grid, (py, px), grass,
+                                         blocked=npc_blocked, ledges=ledges,
+                                         warps=warp_tiles)
+                if path is not None:
+                    reachable.append(grass)
+
+        # Split into domain types
+        interactables = []
+        connections = []
+        for poi in reachable:
+            if poi["kind"] in ("exit", "warp", "connection"):
+                dest_map = Map(name=poi["label"])
+                connections.append(MapConnection(
+                    map=dest_map,
+                    position=(poi["ty"], poi["tx"]),
+                ))
+            else:
+                interactables.append(Interactable(
+                    name=poi["label"],
+                    position=(poi["ty"], poi["tx"]),
+                ))
+
+        # Build domain grid
+        domain_grid = self._build_domain_grid(grid, ledges)
+
+        return Map(
+            name=map_name,
+            grid=domain_grid,
+            connected_maps=connections,
+            interactables=interactables,
+        )
+
+    def get_pois(self):
+        """Return all nearby reachable POIs as dicts (legacy interface).
+
+        Used by overworld_ai, navigator, and console display.
+        """
+        py = self._pyboy.memory[ADDR_Y_COORD]
+        px = self._pyboy.memory[ADDR_X_COORD]
+
+        raw_pois = self._scan_all_raw(py, px)
+        raw_pois = dedup_warps(raw_pois, py, px)
+        raw_pois = disambiguate_labels(raw_pois, py, px)
+
+        warp_tiles = {(p["ty"], p["tx"]) for p in raw_pois if p["kind"] == "warp"}
+        grid, _, _, ledges = self.get_walkable_grid()
+        npc_blocked = self.get_npc_tiles()
+
+        reachable = []
+        for poi in raw_pois:
+            avoid = warp_tiles - {(poi["ty"], poi["tx"])}
+            path, _ = find_best_path(grid, (py, px), poi, blocked=npc_blocked,
+                                     ledges=ledges, warps=avoid)
+            if path is not None:
+                reachable.append(poi)
+
         current_map = MAP_NAMES.get(self._pyboy.memory[ADDR_MAP_N], "")
-        grass_poi = self._find_nearest_grass(py, px, grid) if current_map != "Pallet Town" else None
+        grass_poi = self._find_nearest_grass_raw(py, px, grid) if current_map != "Pallet Town" else None
         if grass_poi:
-            path, _ = find_best_path(grid, (py, px), grass_poi, blocked=npc_blocked,
-                                     ledges=ledges, warps=warp_tiles)
+            path, _ = find_best_path(grid, (py, px), grass_poi,
+                                     blocked=npc_blocked, ledges=ledges,
+                                     warps=warp_tiles)
             if path is not None:
                 reachable.append(grass_poi)
 
@@ -110,7 +160,6 @@ class OverworldScanner:
     # Delegated methods (kept for backward compatibility)
     # ------------------------------------------------------------------
 
-    # Expose WalkabilityGrid constants for backward compatibility
     _QUAD_INDICES = WalkabilityGrid._QUAD_INDICES
     _QUAD_REP_TILE = WalkabilityGrid._QUAD_REP_TILE
 
@@ -152,16 +201,76 @@ class OverworldScanner:
         return blocked
 
     # ------------------------------------------------------------------
+    # Internal: scan all raw POIs as dicts
+    # ------------------------------------------------------------------
+
+    def _scan_all_raw(self, py, px):
+        """Collect all POIs as dicts (warps, blocks, fixed, sprites, connections)."""
+        all_pois = []
+        all_pois.extend(self._scan_warps(py, px))
+        all_pois.extend(self._scan_blocks(py, px))
+        map_id = self._pyboy.memory[ADDR_MAP_N]
+        for fp in _FIXED_POIS.get(map_id, []):
+            poi = dict(fp)
+            poi["dir"] = self._relative_dir(py, px, poi["ty"], poi["tx"])
+            all_pois.append(poi)
+        all_pois.extend(self._scan_sprites(py, px))
+        all_pois.extend(self._scan_connections(py, px))
+        return all_pois
+
+    # ------------------------------------------------------------------
+    # Domain grid builder
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _build_domain_grid(bool_grid, ledges) -> DomainGrid:
+        """Convert a bool grid + ledge set into a domain WalkabilityGrid."""
+        h = len(bool_grid)
+        w = len(bool_grid[0]) if h else 0
+
+        ledge_lookup = {}
+        if ledges:
+            _DIR_MAP = {
+                "down": Direction.SOUTH,
+                "left": Direction.WEST,
+                "right": Direction.EAST,
+                "up": Direction.NORTH,
+            }
+            for entry in ledges:
+                ly, lx, direction = entry
+                ledge_lookup[(ly, lx)] = _DIR_MAP.get(direction, Direction.SOUTH)
+
+        tiles = []
+        for y in range(h):
+            row = []
+            for x in range(w):
+                if (y, x) in ledge_lookup:
+                    row.append(LedgeTile(jump_direction=ledge_lookup[(y, x)]))
+                elif bool_grid[y][x]:
+                    passable = Direction.NONE
+                    if y > 0 and bool_grid[y - 1][x]:
+                        passable |= Direction.NORTH
+                    if y < h - 1 and bool_grid[y + 1][x]:
+                        passable |= Direction.SOUTH
+                    if x > 0 and bool_grid[y][x - 1]:
+                        passable |= Direction.WEST
+                    if x < w - 1 and bool_grid[y][x + 1]:
+                        passable |= Direction.EAST
+                    if passable == Direction.NONE:
+                        passable = Direction.ALL
+                    row.append(PassableTile(passable=passable))
+                else:
+                    row.append(PassableTile(passable=Direction.NONE))
+            tiles.append(row)
+
+        return DomainGrid(tiles=tiles)
+
+    # ------------------------------------------------------------------
     # Grass scanning
     # ------------------------------------------------------------------
 
-    def _find_nearest_grass(self, py, px, grid):
-        """Find the nearest tall grass tile and return a single grass POI.
-
-        Uses wGrassTile (0xD535) to identify which tile triggers encounters,
-        then scans block data to find tiles matching that ID.
-        Returns a POI dict or None if no grass on this map.
-        """
+    def _find_nearest_grass_raw(self, py, px, grid):
+        """Find the nearest tall grass tile and return a POI dict or None."""
         mem = self._pyboy.memory
         grass_tile = mem[ADDR_GRASS_TILE]
         if grass_tile == 0:
@@ -174,7 +283,6 @@ class OverworldScanner:
         H = mem[ADDR_MAP_HEIGHT]
         row_width = W + 2 * MAP_BORDER
 
-        # Scan all blocks for grass tiles
         grass_tiles = []
         for row in range(H):
             for col in range(W):
@@ -183,7 +291,6 @@ class OverworldScanner:
                 bt = self.get_block_tiles(block_id)
                 if bt is None:
                     continue
-                # Each block has 4 tiles: TL, TR, BL, BR
                 positions = [
                     (row * 2, col * 2, bt[0]),
                     (row * 2, col * 2 + 1, bt[1]),
@@ -197,7 +304,6 @@ class OverworldScanner:
         if not grass_tiles:
             return None
 
-        # Find the nearest walkable grass tile
         best = None
         best_dist = float("inf")
         for ty, tx in grass_tiles:
@@ -211,25 +317,12 @@ class OverworldScanner:
         if best is None:
             return None
 
-        dy = best[0] - py
-        dx = best[1] - px
-        parts = []
-        if dy < 0:
-            parts.append(f"{-dy} north")
-        elif dy > 0:
-            parts.append(f"{dy} south")
-        if dx < 0:
-            parts.append(f"{-dx} west")
-        elif dx > 0:
-            parts.append(f"{dx} east")
-        dir_str = ", ".join(parts) if parts else "here"
-
         return {
             "kind": "grass",
             "label": "Wild Pokémon (tall grass)",
             "ty": best[0],
             "tx": best[1],
-            "dir": dir_str,
+            "dir": self._relative_dir(py, px, best[0], best[1]),
         }
 
     # ------------------------------------------------------------------
@@ -266,8 +359,6 @@ class OverworldScanner:
             })
         return results
 
-    # Tile descriptions → building label.
-    # Generic tiles (floor, door, fence, etc.) are skipped when identifying.
     _BUILDING_MAP = {
         "house": "House",
         "lab": "Lab",
@@ -275,7 +366,6 @@ class OverworldScanner:
     _GENERIC_TILES = {"floor", "door", "fence", "sign", "grass", "water",
                       "wall", "window"}
 
-    # Tile descriptions → sign/object label.
     _SIGN_MAP = {
         "sign": "Sign",
         "tv": "TV",
@@ -287,7 +377,6 @@ class OverworldScanner:
         "bed": "Bed",
     }
 
-    # Keywords in MAP_NAMES that identify building types for icons.
     _DEST_BUILDING_MAP = {
         "pokecenter": "Pokecenter",
         "mart": "Mart",
@@ -298,20 +387,11 @@ class OverworldScanner:
 
     @staticmethod
     def _warp_label(wy, wx, dest_map, descriptions, mem, row_width):
-        """Determine warp label and kind from destination map or block.
-
-        Priority:
-        1. Destination map name from MAP_NAMES (most reliable).
-        2. BLOCK_DESCRIPTIONS lookup (stairs / doormat / door).
-        3. Position heuristic: bottom-edge warps are exits.
-        """
-        # Use destination map name when available
-        # dest_map 0xFF means "return to last map" — read wLastMap
+        """Determine warp label and kind from destination map or block."""
         if dest_map == 0xFF:
             dest_map = mem[0xD365]
         dest_name = MAP_NAMES.get(dest_map)
         if dest_name:
-            # Determine kind: interior warps (stairs) vs building entries
             block_row = wy // 2
             block_col = wx // 2
             addr = ADDR_OVERWORLD_MAP + (block_row + MAP_BORDER) * row_width + (block_col + MAP_BORDER)
@@ -340,7 +420,6 @@ class OverworldScanner:
                 )
                 return building, "exit"
 
-        # Auto-detect: bottom-edge warps are building exits
         H = mem[ADDR_MAP_HEIGHT]
         if wy >= H * 2 - 2:
             return "Exit", "exit"
@@ -353,13 +432,11 @@ class OverworldScanner:
         bmap = OverworldScanner._BUILDING_MAP
         generic = OverworldScanner._GENERIC_TILES
 
-        # 1. Check the door's own block (non-generic tiles)
         for t in tiles:
             name = t.lower()
             if name not in generic and name in bmap:
                 return bmap[name]
 
-        # 2. Check neighbouring blocks (above, left, right, diagonals above)
         for dr, dc in [(-1, 0), (0, -1), (0, 1), (-1, -1), (-1, 1)]:
             nr, nc = block_row + dr, block_col + dc
             if nr < 0 or nc < 0:
@@ -397,7 +474,6 @@ class OverworldScanner:
                 block_id = mem[addr]
                 if block_id in labels:
                     label, dy, dx = labels[block_id]
-                    # Exact tile of the interactable within the 2x2 block
                     tile_ty = row * 2 + dy
                     tile_tx = col * 2 + dx
                     results.append({
@@ -405,7 +481,7 @@ class OverworldScanner:
                         "dir": self._relative_dir(py, px, tile_ty, tile_tx),
                         "ty": tile_ty,
                         "tx": tile_tx,
-                        "kind": "sign",  # single-tile target
+                        "kind": "sign",
                     })
         return results
 
@@ -447,7 +523,6 @@ class OverworldScanner:
         if block_id not in descriptions:
             return "Sign"
         tiles = descriptions[block_id]
-        # Which tile within the 2x2 block: TL=0, TR=1, BL=2, BR=3
         idx = (sy % 2) * 2 + (sx % 2)
         tile_name = tiles[idx].lower()
         return OverworldScanner._SIGN_MAP.get(tile_name, "Sign")
@@ -456,21 +531,14 @@ class OverworldScanner:
     # Sprite / NPC scanning
     # ------------------------------------------------------------------
 
-    # Sprite map coordinates in wSpriteStateData2 are stored with a +4
-    # offset (pokered map object format: Y+4, X+4 for scroll border).
     _SPRITE_COORD_OFFSET = 4
 
     def _get_hidden_sprites(self):
-        """Return set of sprite indices hidden by game-event flags.
-
-        Reads wMissableObjectList ($D5CE): pairs of (sprite_index, flag_bit),
-        terminated by $FF.  Then checks wMissableObjectFlags ($D5A6) bit array:
-        if the bit is set the sprite is currently hidden.
-        """
+        """Return set of sprite indices hidden by game-event flags."""
         mem = self._pyboy.memory
         hidden = set()
         addr = ADDR_MISSABLE_LIST
-        for _ in range(16):  # max 16 sprites per map
+        for _ in range(16):
             sprite_idx = mem[addr]
             if sprite_idx == 0xFF:
                 break
@@ -483,36 +551,26 @@ class OverworldScanner:
         return hidden
 
     def _scan_sprites(self, py, px):
-        """Read NPC sprites from WRAM (people, trainers, items, objects).
-
-        Uses wSpriteStateData2 ($C200) for map coordinates instead of
-        screen pixel positions ($C100), which are unreliable for off-screen sprites.
-        Picture ID from wSpriteStateData1 byte 0 determines the sprite label.
-        Sprites hidden by game-event flags (missable objects) are excluded.
-        """
+        """Read NPC sprites from WRAM."""
         mem = self._pyboy.memory
         count = mem[ADDR_NUM_SPRITES]
         off = self._SPRITE_COORD_OFFSET
         hidden = self._get_hidden_sprites()
 
         results = []
-        for i in range(1, count + 1):  # skip sprite 0 (player)
+        for i in range(1, count + 1):
             if i in hidden:
-                continue  # hidden by game-event flag
+                continue
 
-            # Picture ID and movement status from wSpriteStateData1
             base1 = ADDR_SPRITE_DATA + i * 0x10
             pic_id = mem[base1]
             if pic_id == 0 or mem[base1 + 1] == 0:
-                continue  # empty slot or uninitialized
+                continue
 
-            # Map coordinates from wSpriteStateData2 (+4 = Y, +5 = X)
-            # Subtract offset to get tile coordinates matching wYCoord/wXCoord
             base2 = ADDR_SPRITE_DATA2 + i * 0x10
             sy = mem[base2 + 4] - off
             sx = mem[base2 + 5] - off
 
-            # Skip uninitialized or same-as-player sprites
             if sy < 0 or sx < 0 or (sy == py and sx == px):
                 continue
 
@@ -531,15 +589,10 @@ class OverworldScanner:
     # Map connection scanning (adjacent maps via edge walking)
     # ------------------------------------------------------------------
 
-    # Connection flag bits in ROM header byte 9 (order matters for parsing)
     _CONN_FLAGS = [(0x08, "up"), (0x04, "down"), (0x02, "left"), (0x01, "right")]
 
     def _scan_connections(self, py, px):
-        """Read map connections from the ROM header.
-
-        Returns POIs for adjacent maps reachable by walking off the edge.
-        Each connection has 11 bytes in the ROM: dest_map_id(1) + strip data(10).
-        """
+        """Read map connections from the ROM header."""
         header = self._sprite_resolver.find_map_header()
         if header is None:
             return []
@@ -550,27 +603,25 @@ class OverworldScanner:
         W = mem[ADDR_MAP_WIDTH]
         H = mem[ADDR_MAP_HEIGHT]
 
-        pos = header + 10  # connection data starts after the 10-byte header
+        pos = header + 10
         results = []
         for flag, btn in self._CONN_FLAGS:
             if not (conn_flags & flag):
                 continue
             dest_map_id = rom[pos]
-            pos += 11  # skip remaining 10 bytes of this connection
+            pos += 11
 
             map_name = MAP_NAMES.get(dest_map_id, f"Map {dest_map_id}")
 
-            # Place POI at the center of the corresponding edge (tile coords)
             if btn == "up":
                 ey, ex = 0, W
             elif btn == "down":
                 ey, ex = H * 2 - 1, W
             elif btn == "left":
                 ey, ex = H, 0
-            else:  # right
+            else:
                 ey, ex = H, W * 2 - 1
 
-            # Skip connections that require HMs not yet available
             current_map = mem[ADDR_MAP_N]
             if (current_map, map_name) in _BLOCKED_CONNECTIONS:
                 continue
