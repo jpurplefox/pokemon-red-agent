@@ -5,7 +5,6 @@ team nicknames to avoid duplicates.  Names are limited to 10 characters
 (Pokemon Red constraint).
 """
 
-import random
 import re
 
 from langchain_core.messages import SystemMessage, HumanMessage
@@ -99,24 +98,3 @@ class NamingAI:
                 name = "".join(c for c in name if c in allowed)
                 return name[:10].strip()
         return ""
-
-
-NICKNAMES = [
-    "SPARKY", "BLAZE", "BUBBLES", "THORN", "ZIGGY", "PEBBLES", "NOVA",
-    "BISCUIT", "RUSTY", "MOCHI", "COMET", "PICKLE", "SHADOW", "MAPLE",
-    "TURBO", "WAFFLES", "ECHO", "NACHO", "STORM", "PEANUT", "RIPLEY",
-    "GIZMO", "CINDER", "BEANS", "ORBIT", "TOFU", "BANDIT", "JUNIPER",
-    "FROSTY", "NOODLE", "RAVEN", "CHIP", "DUSTY", "LUNA", "TANGO",
-    "PIXEL", "SCOUT", "HONEY", "ROCKET", "KOBE",
-]
-
-
-class RandomNamingAI:
-    """Picks a random nickname from NICKNAMES, avoiding ones already on the team."""
-
-    def suggest_name(self, species, team_names=None):
-        used = {nick.upper() for _, nick in (team_names or [])}
-        available = [n for n in NICKNAMES if n not in used] or NICKNAMES
-        name = random.choice(available)
-        _log.log_think(f"Nickname → {name} (random)")
-        return name

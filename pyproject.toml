@@ -17,7 +17,6 @@ dependencies = [
     "pygame==2.6.1",
     "httpx==0.28.1",
     "python-dotenv==1.2.2",
-    "typesafe-sdk==0.7.2",
 ]
 
 [project.optional-dependencies]
