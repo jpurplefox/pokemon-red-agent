@@ -11,6 +11,7 @@ from data.constants import (
     BMON_PP, BMON_LEVEL, BMON_MAX_HP,
     ADDR_PARTY_COUNT, ADDR_PARTY_SPECIES, ADDR_PARTY_MONS,
     PARTY_MON_SIZE, PARTY_MON_LEVEL, PARTY_MON_HP, PARTY_MON_MAX_HP,
+    PARTY_MON_MOVES,
     PARTY_MON_STATUS, ADDR_PARTY_NICKS, PARTY_NICK_SIZE,
     POKEMON_CHARMAP,
 )
@@ -79,11 +80,15 @@ class BattleStateReader:
                 if tile == 0x50:
                     break
                 nickname += POKEMON_CHARMAP.get(tile, "")
+            moves = tuple(MOVE_NAMES.get(mem[base + PARTY_MON_MOVES + k], "")
+                          for k in range(4) if mem[base + PARTY_MON_MOVES + k])
             party.append(PartyMember(
                 name=name,
                 nickname=nickname.strip() or name,
                 level=level, hp=hp, max_hp=max_hp,
                 status=status,
+                species_id=species_id,
+                moves=moves,
             ))
         return party
 

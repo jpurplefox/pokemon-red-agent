@@ -5,6 +5,7 @@ Game dispatches to this controller; this controller drives the AI agent,
 navigator, and records results.
 """
 
+import re
 import sys
 import select
 
@@ -14,8 +15,12 @@ from data.constants import (
     ADDR_PLAY_SECONDS, MAP_NAMES, POKEMON_CHARMAP,
 )
 from adapters.display.ai_logger import AILogger, print_metrics
+from data.constants import BADGE_CASCADE, HM_ITEMS
+from data.pokemon_data import enrich_move
 from domain.maps import Interactable, MapConnection
 from domain.models import HUDState
+from domain.pathfinder import poi_reachable, reachable_tiles
+from domain.trash_puzzle import TrashCanPuzzle
 
 
 class OverworldAIController:
@@ -23,7 +28,8 @@ class OverworldAIController:
 
     def __init__(self, overworld_ai, pyboy, scanner, navigator, battle,
                  bag_reader, print_surroundings_fn, handle_game_menu_fn,
-                 logger: AILogger | None = None, world=None):
+                 logger: AILogger | None = None, world=None,
+                 move_ai=None, field_moves=None, hm_compat=None):
         self._ai = overworld_ai
         self._pyboy = pyboy
         self._scanner = scanner
@@ -34,6 +40,11 @@ class OverworldAIController:
         self._handle_game_menu = handle_game_menu_fn
         self._log = logger or AILogger("OW")
         self._world = world
+        self._move_ai = move_ai
+        self._field_moves = field_moves
+        self._hm_compat = hm_compat
+        self._puzzle = TrashCanPuzzle()
+        self._last_map = None
         self._paused = False
         self._pending_poi = None  # POI to resume after battle interrupt
         self._pending_map = None  # Map ID where the interrupt happened
@@ -96,6 +107,9 @@ class OverworldAIController:
         current_map = self._scanner.read_map()
         if self._world:
             self._world.visit(current_map)
+        if map_name == "Vermilion Gym" and self._last_map != map_name:
+            self._puzzle.reenter()  # the game hides the switches again
+        self._last_map = map_name
         grid, _, _, _ = self._scanner.get_walkable_grid()
         py, px = mem[ADDR_Y_COORD], mem[ADDR_X_COORD]
 
@@ -106,6 +120,17 @@ class OverworldAIController:
         all_pois = current_map.interactables + current_map.connected_maps
         # TODO: migrate overworld_ai.decide() to accept Map directly
         pois = [self._poi_dict(t, map_name, (py, px)) for t in targets]
+        for poi, d in zip(targets, pois):
+            if poi.kind == "cut_tree":
+                d["cut"] = self._cut_info(poi, current_map, (py, px), blocked, mem)
+            elif poi.kind == "trash_can":
+                row, col = _can_grid_pos(poi.name)
+                d["can"] = {"row": row, "col": col,
+                            "status": self._puzzle.can_status((row, col))}
+        puzzle = None
+        if any(p.kind == "trash_can" for p in targets):
+            puzzle = {"first_lock_open": self._puzzle.first_lock_open,
+                      "solved": self._puzzle.solved, "resets": self._puzzle.resets}
 
         party = self._battle.read_party()
         pokeballs = self._bag.count_pokeballs()
@@ -139,12 +164,14 @@ class OverworldAIController:
 
         money = self._bag.read_money()
         key_items = self._bag.get_key_items()
+        hm_options, hm_notes = self._hm_options(party)
         print_metrics()
         result = self._ai.decide(
             map_name, pois, grid=grid, player_y=py, player_x=px,
             party=party, pokeballs=pokeballs, has_pokedex=has_pokedex,
             money=money, badges=mem[ADDR_BADGES],
             player_name=player_name, key_items=key_items,
+            hm_options=hm_options, hm_notes=hm_notes, puzzle=puzzle,
         )
 
         # Update HUD again after decide (think time + action count updated)
@@ -165,6 +192,8 @@ class OverworldAIController:
         if action_type == "go":
             self._handle_go_with_poi(targets[detail], map_name, mem,
                                      all_pois=all_pois, action_label=action_label)
+        elif action_type == "teach":
+            self._handle_teach(hm_options[detail], map_name, action_label)
         elif action_type == "move":
             self._pyboy.button(detail, delay=8)
             self._pyboy.tick(30)
@@ -178,6 +207,80 @@ class OverworldAIController:
             self._handle_game_menu()
 
         return "acted"
+
+    # ------------------------------------------------------------------
+    # HMs and CUT
+    # ------------------------------------------------------------------
+
+    def _hm_options(self, party):
+        """HMs in the bag the team could learn, plus notes for the rest.
+
+        An HM someone already knows is left out. One nobody can learn shows
+        up as a note, so the agent knows why it isn't offered.
+        """
+        if not (self._hm_compat and self._field_moves and self._move_ai):
+            return [], []
+        options, notes = [], []
+        bag = self._bag.get_item_ids()
+        for item, move in HM_ITEMS.items():
+            if item not in bag or any(move in m.moves for m in party):
+                continue
+            hm = f"HM{item - 0xC3:02d}"
+            learners = [i for i, m in enumerate(party)
+                        if self._hm_compat.can_learn(m.species_id, move)]
+            if learners:
+                options.append({"item": item, "hm": hm, "move": move,
+                                "learners": [_mon_label(party[i]) for i in learners]})
+            else:
+                notes.append(f"{hm} {move}: no team member can learn it")
+        return options, notes
+
+    def _handle_teach(self, option, map_name, action_label):
+        """Teach an HM in two steps: who learns it, then what it replaces."""
+        move = option["move"]
+        party = self._battle.read_party()
+        candidates = [(i, m) for i, m in enumerate(party)
+                      if self._hm_compat.can_learn(m.species_id, move)
+                      and move not in m.moves]
+        action_desc = f"Considered teaching {option['hm']} {move}"
+        slot = self._move_ai.choose_hm_learner(move, candidates) if candidates else None
+        if slot is None:
+            self._ai.record_action(action_desc, map_name, "Decided not to teach it",
+                                   action_label=action_label)
+            return
+        mon = party[slot]
+        forget_index = None
+        if len(mon.moves) >= 4:
+            new_move = enrich_move(move)
+            new_move["desc"] = (new_move["desc"] + " HM move: it can never be "
+                                "forgotten once learned.").strip()
+            current = [enrich_move(name) for name in mon.moves]
+            forget = self._move_ai.decide(mon.name, new_move, current)
+            if not forget:
+                self._ai.record_action(action_desc, map_name,
+                                       f"Decided not to teach it to {_mon_label(mon)}",
+                                       action_label=action_label)
+                return
+            forget_index = [name.upper() for name in mon.moves].index(forget.upper())
+        text = self._field_moves.teach_hm(option["item"], slot, forget_index)
+        self._ai.record_action(f"Taught {option['hm']} {move} to {_mon_label(mon)}",
+                               map_name, text, action_label=action_label)
+
+    def _cut_info(self, tree, current_map, position, blocked, mem):
+        """Whether CUT can clear this tree now, and what it hides."""
+        if self._field_moves and self._field_moves.slot_knowing("CUT") is None:
+            reason = "nobody on the team knows CUT"
+        elif not mem[ADDR_BADGES] & BADGE_CASCADE:
+            reason = "needs the CASCADE BADGE to use CUT"
+        else:
+            reason = None
+        grid = current_map.grid
+        before = reachable_tiles(grid, position, blocked)
+        after = reachable_tiles(grid, position, blocked, open_tiles={tree.position})
+        hides = [_poi_name(p) for p in current_map.interactables + current_map.connected_maps
+                 if p is not tree and poi_reachable(grid, after, p)
+                 and not poi_reachable(grid, before, p)]
+        return {"available": reason is None, "reason": reason, "hides": hides}
 
     def _poi_dict(self, poi, map_name, position):
         """Prompt-facing dict for a domain POI (what decide() consumes).
@@ -265,6 +368,9 @@ class OverworldAIController:
             reason=getattr(self._ai, '_last_think', ''),
         )
 
+        if isinstance(poi, Interactable) and poi.kind == "trash_can" and not map_changed:
+            self._puzzle.record(_can_grid_pos(poi.name), dialogue or "")
+
         if (self._world and isinstance(poi, Interactable) and poi.kind != "grass"
                 and not map_changed and not result.get("blocked")):
             self._world.record_interaction(map_name, poi.name, dialogue or None,
@@ -306,3 +412,13 @@ def _exit_at(exits, tile, max_dist=2):
         if dist < best_dist:
             best, best_dist = conn, dist
     return best
+
+
+def _mon_label(mon) -> str:
+    return mon.nickname if mon.nickname == mon.name else f"{mon.nickname} ({mon.name})"
+
+
+def _can_grid_pos(label: str) -> tuple[int, int]:
+    """(row, col) from a "Trash can (row R, col C)" label."""
+    row, col = re.search(r"row (\d+), col (\d+)", label).groups()
+    return int(row), int(col)

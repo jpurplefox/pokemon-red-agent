@@ -71,6 +71,53 @@ def _format_node(node, indent, lines):
             _format_node(ex["leads_to"], indent + "    ", lines)
 
 
+_CAN_MARKS = {"unchecked": "?", "trash": "✗", "switch": "⚡"}
+
+
+def format_trash_grid(interact_data, puzzle):
+    """The Vermilion Gym trash cans as a 3x5 grid of INTERACT numbers.
+
+    The puzzle is spatial (the 2nd switch is next to the 1st), so the cans
+    are shown where they are rather than as a list.
+    """
+    cans = {(e["can"]["row"], e["can"]["col"]): (n, e["can"]["status"])
+            for n, e in enumerate(interact_data, 1) if e.get("can")}
+    if not cans:
+        return ""
+    rows = sorted({r for r, _ in cans})
+    cols = sorted({c for _, c in cans})
+    lines = ["--- Trash cans: switch puzzle (use INTERACT:<number>) ---",
+             "        " + "".join(f"col {c:<6}" for c in cols)]
+    for r in rows:
+        cells = []
+        for c in cols:
+            n, status = cans.get((r, c), (None, None))
+            cells.append(f"[{n}] {_CAN_MARKS[status]}".ljust(10) if n else " " * 10)
+        lines.append(f"row {r}   " + "".join(cells))
+    lines.append("Marks: ✗ only trash · ⚡ 1st switch · ? not checked")
+    switch = next((pos for pos, (_, s) in cans.items() if s == "switch"), None)
+    if puzzle.get("solved"):
+        lines.append("Both locks are open: the door to the GYM LEADER is open.")
+    elif puzzle.get("first_lock_open") and switch:
+        lines.append(f"1st lock: OPEN (switch in row {switch[0]}, col {switch[1]}). "
+                     "2nd lock: closed.")
+    elif puzzle.get("first_lock_open"):
+        lines.append("1st lock: OPEN (since before you left the gym; the switches "
+                     "have moved, so where the 2nd is is unknown). 2nd lock: closed.")
+    else:
+        lines.append("1st lock: closed. 2nd lock: closed.")
+    lines.append("Rule: one can hides the 1st switch; the 2nd is in a can right "
+                 "next to it (up, down, left or right in this grid). Before the "
+                 "1st is found every other can only has trash, so those marks "
+                 "are cleared when it's found. Checking a wrong can after that "
+                 "resets both locks and moves the 1st switch. Leaving the gym "
+                 "also moves the switches.")
+    if puzzle.get("resets"):
+        lines.append(f"The locks have been reset {puzzle['resets']} time(s) since "
+                     "you entered.")
+    return "\n".join(lines)
+
+
 def _build_badge_list(badges_byte):
     """Convert badge bitmask to list of dicts with obtained status."""
     return [
@@ -171,7 +218,8 @@ class OverworldAI:
 
     def decide(self, map_name, pois, grid=None, player_y=0, player_x=0,
                party=None, pokeballs=0, has_pokedex=False,
-               money=0, badges=0, player_name="", key_items=None):
+               money=0, badges=0, player_name="", key_items=None,
+               hm_options=None, hm_notes=None, puzzle=None):
         """Ask the LLM what to do next in the overworld."""
         self._iteration += 1
         _log._action_count = self._iteration
@@ -182,6 +230,7 @@ class OverworldAI:
         recent = self._history[-25:]
         interact_data = []
         warp_data = []
+        blocked_trees = []  # trees CUT can't clear yet: shown, not choosable
         for i, poi in enumerate(pois):
             times = sum(1 for e in recent
                         if e.get("map") == map_name
@@ -190,6 +239,11 @@ class OverworldAI:
             kind = poi["kind"]
             is_warp = kind in ("exit", "warp", "connection")
             dist = abs(poi["ty"] - player_y) + abs(poi["tx"] - player_x)
+            cut = poi.get("cut")
+            if cut and not cut["available"]:
+                blocked_trees.append({"label": label, "dist": dist,
+                                      "reason": cut["reason"], "hides": cut["hides"]})
+                continue
             entry = {
                 "icon": _poi_icon(poi),
                 "label": label,
@@ -201,6 +255,10 @@ class OverworldAI:
                 "visited": poi.get("visited"),
                 "leads_to_text": (format_leads_to(poi["leads_to"])
                                   if poi.get("leads_to") else ""),
+                "can": poi.get("can"),
+                "cut_text": ((f"✂️ uses CUT" + (f" — hides: {', '.join(cut['hides'])}"
+                                                if cut["hides"] else ""))
+                             if cut else ""),
                 "_orig_idx": i,
             }
             if is_warp:
@@ -233,6 +291,11 @@ class OverworldAI:
                               badge_list=_build_badge_list(badges),
                               badge_count=bin(badges).count("1"),
                               last_think=self._last_think,
+                              blocked_trees=blocked_trees,
+                              trash_grid=(format_trash_grid(interact_data, puzzle)
+                                          if puzzle else ""),
+                              hm_options=hm_options or [],
+                              hm_notes=hm_notes or [],
                               ascii_map=render_map(
                                   [pois[p["_orig_idx"]] for p in poi_data],
                                   player_y, player_x, grid,
@@ -257,7 +320,8 @@ class OverworldAI:
             ])
             text = response.content or ""
             _log.stop_thinking()
-            result = self._parse_response(text, interact_data, warp_data)
+            result = self._parse_response(text, interact_data, warp_data,
+                                          hm_options or [])
             if result is not None:
                 return result
             attempt += 1
@@ -281,6 +345,11 @@ class OverworldAI:
                               badge_list=_build_badge_list(badges),
                               badge_count=bin(badges).count("1"),
                               last_think=self._last_think,
+                              blocked_trees=blocked_trees,
+                              trash_grid=(format_trash_grid(interact_data, puzzle)
+                                          if puzzle else ""),
+                              hm_options=hm_options or [],
+                              hm_notes=hm_notes or [],
                               ascii_map=render_map(
                                   [pois[p["_orig_idx"]] for p in poi_data],
                                   player_y, player_x, grid,
@@ -288,15 +357,17 @@ class OverworldAI:
             retry_user_prompt += (
                 f"\n\nERROR: Invalid action. "
                 f"Use INTERACT:1-{len(interact_data)} for NPCs/signs/items, "
-                f"or GO:1-{len(warp_data)} for warps. "
-                f"Respond with exactly: ACTION: INTERACT:<number> or ACTION: GO:<number>"
+                f"or GO:1-{len(warp_data)} for warps"
+                + (f", or TEACH:1-{len(hm_options)} for HMs" if hm_options else "")
+                + ". Respond with exactly: ACTION: INTERACT:<number> or ACTION: GO:<number>"
+                + (" or ACTION: TEACH:<number>" if hm_options else "")
             )
 
         # Max retries exhausted — return None to signal control back to user
         _log.log_think("(max retries — returning control to user)")
         return None
 
-    def _parse_response(self, text, interact_data, warp_data):
+    def _parse_response(self, text, interact_data, warp_data, hm_options=()):
         """Parse LLM response into an action tuple.
 
         interact_data/warp_data contain _orig_idx for mapping
@@ -347,6 +418,21 @@ class OverworldAI:
                         return ("go", orig_idx, f"GO:{num}")
                 except ValueError:
                     pass
+
+            # TEACH:<n> — teach an HM from the bag
+            if action.startswith("TEACH:"):
+                try:
+                    idx = int(action[6:].strip()) - 1
+                except ValueError:
+                    idx = -1
+                if 0 <= idx < len(hm_options):
+                    option = hm_options[idx]
+                    if think:
+                        _log.log_think(think)
+                    _log.log_think(f"=> TEACH {option['hm']} {option['move']}")
+                    self._last_think = think
+                    _log.log_stat("teach")
+                    return ("teach", idx, f"TEACH:{idx + 1}")
 
             if action.startswith("MOVE:"):
                 direction = action[5:].strip().lower()

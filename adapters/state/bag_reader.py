@@ -38,6 +38,11 @@ class BagReader:
                 balls.append((BALL_ITEMS[item_id], count, i))
         return balls
 
+    def get_item_ids(self) -> list[int]:
+        """IDs of every item in the bag, in bag order."""
+        mem = self._pyboy.memory
+        return [mem[ADDR_BAG_ITEMS + i * 2] for i in range(mem[ADDR_NUM_BAG_ITEMS])]
+
     def get_key_items(self) -> list[str]:
         """Return list of key item names currently in the bag."""
         mem = self._pyboy.memory

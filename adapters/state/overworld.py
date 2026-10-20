@@ -15,7 +15,7 @@ from data.constants import (
     ADDR_OVERWORLD_MAP, MAP_BORDER, BLOCK_LABELS,
     BLOCK_DESCRIPTIONS, MAP_NAMES, ADDR_GRASS_TILE,
     LEDGE_TILES, LEDGE_STANDING_TILES, TILE_PAIR_COLLISIONS,
-    TILESET_OVERWORLD,
+    TILESET_OVERWORLD, CUT_TREE_TILES, TRASH_CAN_TILE, VERMILION_GYM,
 )
 from domain.maps import (
     Map, Interactable, MapConnection,
@@ -71,14 +71,17 @@ class OverworldScanner:
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
 
-        raw_pois = self._scan_all_raw(py, px)
+        tile_ids, walkable = self._walkability.get_tile_grid()
+        edge_neighbors = self._walkability.get_edge_neighbors()
+        tileset = mem[ADDR_TILESET]
+
+        raw_pois = (self._scan_all_raw(py, px)
+                    + self._find_cut_trees_raw(tile_ids, tileset)
+                    + self._find_trash_cans_raw(tile_ids, map_id))
         raw_pois = dedup_warps(raw_pois, py, px)
         raw_pois = disambiguate_labels(raw_pois, py, px)
 
         grid, _, _, _ = self.get_walkable_grid()
-        tile_ids, walkable = self._walkability.get_tile_grid()
-        edge_neighbors = self._walkability.get_edge_neighbors()
-        tileset = mem[ADDR_TILESET]
 
         # Add grass POI if available
         current_map_name = MAP_NAMES.get(map_id, "")
@@ -305,6 +308,40 @@ class OverworldScanner:
             tiles.append(row)
 
         return WalkabilityGrid(tiles=tiles)
+
+    # ------------------------------------------------------------------
+    # Cut trees
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _find_cut_trees_raw(tile_ids, tileset):
+        """Trees CUT can clear: steps whose tile is the tileset's cut tree."""
+        tree = CUT_TREE_TILES.get(tileset)
+        if tree is None:
+            return []
+        return [{"kind": "cut_tree", "label": "Cuttable tree", "ty": y, "tx": x}
+                for y, row in enumerate(tile_ids)
+                for x, tile in enumerate(row) if tile == tree]
+
+    @staticmethod
+    def _find_trash_cans_raw(tile_ids, map_id):
+        """Vermilion Gym's trash cans, labeled by their row and column in the
+        3x5 grid (unique labels, so disambiguation leaves them alone)."""
+        if map_id != VERMILION_GYM:
+            return []
+        tiles = [(y, x) for y, row in enumerate(tile_ids)
+                 for x, tile in enumerate(row) if tile == TRASH_CAN_TILE]
+        # The same tile shows up elsewhere in the gym; the cans are the ones
+        # forming the grid (rows and columns with several cans)
+        tiles = [(y, x) for y, x in tiles
+                 if sum(t[0] == y for t in tiles) >= 3
+                 and sum(t[1] == x for t in tiles) >= 2]
+        rows = sorted({y for y, _ in tiles})
+        cols = sorted({x for _, x in tiles})
+        return [{"kind": "trash_can", "ty": y, "tx": x,
+                 "label": f"Trash can (row {rows.index(y) + 1}, col {cols.index(x) + 1})",
+                 "grid_pos": (rows.index(y) + 1, cols.index(x) + 1)}
+                for y, x in tiles]
 
     # ------------------------------------------------------------------
     # Grass scanning
@@ -615,7 +652,8 @@ class OverworldScanner:
             if sy < 0 or sx < 0 or (sy == py and sx == px):
                 continue
 
-            label = self._sprite_resolver.resolve_label(pic_id, mem[ADDR_MAP_N], sx)
+            label = self._sprite_resolver.resolve_label(pic_id, mem[ADDR_MAP_N], sx,
+                                                        sprite_index=i)
             results.append({
                 "label": label,
                 "dir": self._relative_dir(py, px, sy, sx),

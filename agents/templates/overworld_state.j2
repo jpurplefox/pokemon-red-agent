@@ -48,9 +48,13 @@ Map: {{ map_name }}
 
 {%- if interactables %}
 --- Interactables (use INTERACT:<number>) ---
-{%- for poi in interactables %}
-[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away){% if poi.times_recent >= 3 %} 🚫 VISITED x{{ poi.times_recent }} — DO NOT interact again{% elif poi.times_recent > 0 %} ⚠️ VISITED x{{ poi.times_recent }}{% endif %}{% if poi.last_said %} — last said: "{{ poi.last_said }}"{% endif %}
+{%- for poi in interactables %}{% if not poi.can %}
+[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away){% if poi.times_recent >= 3 %} 🚫 VISITED x{{ poi.times_recent }} — DO NOT interact again{% elif poi.times_recent > 0 %} ⚠️ VISITED x{{ poi.times_recent }}{% endif %}{% if poi.last_said %} — last said: "{{ poi.last_said }}"{% endif %}{% if poi.cut_text %} {{ poi.cut_text }}{% endif %}{% endif %}
 {%- endfor %}
+{%- if trash_grid %}
+
+{{ trash_grid }}
+{%- endif %}
 {%- endif %}
 {%- if warps %}
 
@@ -58,6 +62,23 @@ Map: {{ map_name }}
 {%- for w in warps %}
 [{{ loop.index }}] {{ w.icon }} {{ w.label }} ({{ w.dist }} steps away){% if w.visited is sameas false %} 🆕 NOT VISITED{% endif %}{% if w.leads_to_text %}
 {{ w.leads_to_text }}{% endif %}
+{%- endfor %}
+{%- endif %}
+{%- if blocked_trees %}
+
+--- Trees CUT could clear (not available yet) ---
+{%- for t in blocked_trees %}
+• 🌳 {{ t.label }} ({{ t.dist }} steps away) — {{ t.reason }}{% if t.hides %}; hides: {{ t.hides | join(", ") }}{% endif %}
+{%- endfor %}
+{%- endif %}
+{%- if hm_options or hm_notes %}
+
+--- HMs (use TEACH:<number>) ---
+{%- for h in hm_options %}
+[{{ loop.index }}] {{ h.hm }} {{ h.move }} — can learn: {{ h.learners | join(", ") }}
+{%- endfor %}
+{%- for n in hm_notes %}
+• {{ n }}
 {%- endfor %}
 {%- endif %}
 {%- if not interactables and not warps %}

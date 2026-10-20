@@ -175,6 +175,8 @@ _POI_KIND_ICONS = {
     "exit": "🚪",
     "warp": "🚪",
     "grass": "🌿",
+    "cut_tree": "🌳",
+    "trash_can": "🗑️",
 }
 
 

@@ -22,6 +22,8 @@ from adapters.state.overworld import OverworldScanner
 from orchestration.event_processor import EventProcessor
 from orchestration.mart_handler import MartHandler
 from adapters.input.navigator import Navigator
+from adapters.input.field_moves import FieldMoves
+from adapters.state.hm_compat import HMCompatibility
 from orchestration.battle import BattleHandler
 from adapters.state.bag_reader import BagReader
 from tools.debug_scanner import DebugScanner
@@ -66,8 +68,10 @@ class Game:
                 return ""
             self._event_processor.auto_name_fn = _auto_name
             # auto_buy_fn set below after _overworld_ai is available
+        self._field_moves = FieldMoves(self._pyboy, self._screen, self._menu)
         self._navigator = Navigator(
             self._pyboy, self._screen, self._scanner, self._event_processor,
+            field_moves=self._field_moves,
         )
         self._battle = BattleHandler(
             self._pyboy, self._screen, self._menu, self._dialogue,
@@ -82,6 +86,9 @@ class Game:
                 overworld_ai, self._pyboy, self._scanner, self._navigator,
                 self._battle, self._bag, self._print_surroundings,
                 self._handle_game_menu, logger=ow_logger, world=world,
+                move_ai=move_ai, field_moves=self._field_moves,
+                hm_compat=(HMCompatibility(open(rom_path, "rb").read())
+                           if rom_path else None),
             )
         # Wire shop AI: prefer explicit shop_ai, fall back to overworld_ai's shop
         _shop = shop_ai or (overworld_ai.shop_ai if overworld_ai else None)

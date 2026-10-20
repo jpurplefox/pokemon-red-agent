@@ -36,6 +36,23 @@ THINK: <brief reasoning>
 ACTION: KEEP"""
 
 
+HM_LEARNER_PROMPT = """\
+You are a Pokemon Red team manager. The team can learn an HM move, which is \
+needed to get through the world (CUT clears small trees, SURF crosses water...). \
+Choose which Pokemon should learn it.
+
+In Pokemon Red an HM move can NEVER be forgotten once learned: it permanently \
+takes one of the four move slots. Consider:
+- A Pokemon with a free move slot loses nothing.
+- Otherwise prefer one whose weakest move matters least, or one that is not \
+your main battler.
+- Only one Pokemon needs to know it.
+
+Respond with EXACTLY this format:
+THINK: <brief reasoning>
+ACTION: TEACH <number> or ACTION: NONE"""
+
+
 class MoveAI:
     def __init__(self, llm):
         self._llm = llm
@@ -88,6 +105,57 @@ class MoveAI:
             ))
 
         _log.log_think("(couldn't decide — asking user)")
+        return None
+
+    def choose_hm_learner(self, move, candidates):
+        """Pick who learns an HM move.
+
+        Args:
+            move: HM move name (e.g. "CUT")
+            candidates: list of (party_index, PartyMember) able to learn it
+
+        Returns:
+            int party index, or None to not teach it
+        """
+        hm = enrich_move(move)
+        lines = [f"HM move: {format_move(hm)}", "", "Pokemon that can learn it:"]
+        for n, (_, mon) in enumerate(candidates, 1):
+            moves = ", ".join(mon.moves) or "none"
+            lines.append(f"  {n}. {mon.nickname} ({mon.name}) Lv{mon.level} — "
+                         f"moves ({len(mon.moves)}/4): {moves}")
+        prompt = "\n".join(lines)
+        messages = [SystemMessage(content=HM_LEARNER_PROMPT),
+                    HumanMessage(content=prompt)]
+        _log.log_prompt("HM", HM_LEARNER_PROMPT, prompt)
+        for _ in range(3):
+            _log.start_thinking()
+            response = self._llm.invoke(messages)
+            content = response.content or ""
+            _log.stop_thinking()
+            _log.log_response("HM", content)
+            for line in content.strip().split("\n"):
+                line = line.strip()
+                if line.startswith("THINK:"):
+                    _log.log_think(line[6:].strip())
+                if not line.startswith("ACTION:"):
+                    continue
+                action = line[7:].strip().upper()
+                if action == "NONE":
+                    _log.log_think(f"Don't teach {move}")
+                    return None
+                if action.startswith("TEACH"):
+                    try:
+                        n = int(action[5:].strip())
+                    except ValueError:
+                        continue
+                    if 1 <= n <= len(candidates):
+                        slot, mon = candidates[n - 1]
+                        _log.log_think(f"Teach {move} to {mon.nickname}")
+                        return slot
+            _log.log_retry()
+            messages.append(response)
+            messages.append(HumanMessage(
+                content=f"ERROR: Use ACTION: TEACH <1-{len(candidates)}> or ACTION: NONE"))
         return None
 
     def _parse_response(self, text, current_moves):

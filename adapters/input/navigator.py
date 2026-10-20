@@ -29,11 +29,13 @@ def _poi_sprite_index(poi: POI) -> int | None:
 
 
 class Navigator:
-    def __init__(self, pyboy, screen, scanner, event_processor):
+    def __init__(self, pyboy, screen, scanner, event_processor,
+                 field_moves=None):
         self._pyboy = pyboy
         self._screen = screen
         self._scanner = scanner
         self._event_processor = event_processor
+        self._field_moves = field_moves
 
     def go_to(self, poi: POI, print_surroundings, all_pois: list[POI] | None = None):
         """Navigate directly to a specific POI."""
@@ -238,6 +240,20 @@ class Navigator:
 
         if kind == "grass":
             self._walk_in_grass()
+        elif kind == "cut_tree":
+            # Gen 1 has no prompt at the tree: face it, then use CUT from the
+            # party menu
+            self._pyboy.button(face, delay=8)
+            self._pyboy.tick(20)
+            slot = self._field_moves.slot_knowing("CUT") if self._field_moves else None
+            if slot is None:
+                print("Nobody knows CUT.")
+                if result is not None:
+                    result["blocked"] = True
+            else:
+                text = self._field_moves.use_field_move(slot, "CUT")
+                if result is not None:
+                    result["dialogue"] = text
         elif face is None:
             self._pyboy.tick(100)
         elif kind == "connection":

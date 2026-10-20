@@ -41,6 +41,8 @@ class PartyMember:
     hp: int
     max_hp: int
     status: str = ""
+    species_id: int | None = None   # internal species index (WRAM/ROM)
+    moves: tuple[str, ...] = ()
 
 
 # -- Inventory --------------------------------------------------------------

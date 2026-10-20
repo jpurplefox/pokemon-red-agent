@@ -428,7 +428,7 @@ SPRITE_LABELS = {
     # Pokémon sprites
     0x05: "Pokémon",        # SPRITE_MONSTER (Slowbro)
     0x09: "Pokémon",        # SPRITE_BIRD (Pidgey)
-    0x21: "Pokémon",        # SPRITE_ROCKER (Clefairy)
+    0x21: "Rocker",         # SPRITE_ROCKER (LT. SURGE)
     0x38: "Pokémon",        # SPRITE_FAIRY (Clefairy)
     0x3C: "Pokémon",        # SPRITE_SEEL
     0x43: "Pokémon",        # SPRITE_SNORLAX
@@ -721,3 +721,40 @@ TILE_PAIR_COLLISIONS = {
     TILESET_FOREST: {(0x30, 0x2E), (0x52, 0x2E), (0x55, 0x2E), (0x56, 0x2E),
                      (0x20, 0x2E), (0x5E, 0x2E), (0x5F, 0x2E)},
 }
+
+
+# ---------------------------------------------------------------------------
+# HMs and field moves (pokered: constants/item_constants.asm,
+# engine/overworld/cut.asm)
+# ---------------------------------------------------------------------------
+
+PARTY_MON_MOVES = 0x08          # 4 move IDs in the party mon struct
+TILESET_GYM = 7
+
+# HM item -> move it teaches; the TM/HM bitfield in base stats has the 50 TMs
+# first, so HM n is bit 49 + n (0-based)
+HM_ITEMS = {
+    0xC4: "CUT",
+    0xC5: "FLY",
+    0xC6: "SURF",
+    0xC7: "STRENGTH",
+    0xC8: "FLASH",
+}
+HM_BITS = {move: 49 + n for n, move in enumerate(HM_ITEMS.values(), start=1)}
+
+# Tile in front of the player that CUT removes, per tileset
+CUT_TREE_TILES = {TILESET_OVERWORLD: 0x3D, TILESET_GYM: 0x50}
+BADGE_CASCADE = 1 << 1          # needed to use CUT outside battle
+
+# ROM tables: base stats (28 bytes per Pokédex entry, Mew apart) and
+# internal species ID -> Pokédex number
+ROM_BASE_STATS = 0x383DE
+ROM_MEW_BASE_STATS = 0x425B
+ROM_POKEDEX_ORDER = 0x41024
+BASE_STATS_SIZE = 28
+BASE_STATS_TMHM = 20            # offset of the 7-byte TM/HM bitfield
+
+# Vermilion Gym switch puzzle: 15 trash cans (3 rows x 5 columns), one hides
+# the 1st switch, a can next to it the 2nd
+VERMILION_GYM = 0x5C
+TRASH_CAN_TILE = 0x1B

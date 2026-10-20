@@ -7,7 +7,7 @@ from collections.abc import Iterable
 
 from domain.maps import (
     Coordinates, Direction, WalkabilityGrid,
-    Interactable, MapConnection, POI,
+    Interactable, LedgeTile, MapConnection, POI,
     _DIRECTION_OFFSETS,
 )
 
@@ -240,15 +240,20 @@ def reachable_tiles(
     grid: WalkabilityGrid,
     start: Coordinates | Iterable[Coordinates],
     blocked: set[Coordinates] | None = None,
+    open_tiles: set[Coordinates] | None = None,
 ) -> set[Coordinates]:
     """All tiles reachable from start (one tile or several), honoring ledges
     and tile-pair rules.
 
     A start tile may be impassable itself (e.g. arriving on a door tile),
     so leaving it only requires the neighbor to accept the entry.
+    `open_tiles` are treated as walkable, to ask what lies behind an
+    obstacle that can be removed (a tree CUT can clear).
     """
     if blocked is None:
         blocked = set()
+    if open_tiles is None:
+        open_tiles = set()
     starts = as_tiles(start)
     reached = set(starts)
     stack = list(starts)
@@ -260,7 +265,15 @@ def reachable_tiles(
                 continue
             if not (0 <= neighbor[0] < grid.height and 0 <= neighbor[1] < grid.width):
                 continue
-            if current in starts and not grid[current].can_exit(direction):
+            if neighbor in open_tiles:
+                pass
+            elif current in open_tiles:
+                # the grid was built with this tile as a wall, so neighbors
+                # lack the direction toward it: any walkable neighbor will do
+                if not _walkable_toward(grid[neighbor], direction):
+                    continue
+            elif current in starts:
+                # leaving a start tile only needs the neighbor's consent
                 if not grid[neighbor].can_enter(direction):
                     continue
             elif not grid.can_move(current, direction):
@@ -268,6 +281,14 @@ def reachable_tiles(
             reached.add(neighbor)
             stack.append(neighbor)
     return reached
+
+
+def _walkable_toward(tile, direction: Direction) -> bool:
+    """Whether a tile can be entered moving in direction, ignoring which
+    neighbors it was built to connect to."""
+    if isinstance(tile, LedgeTile):
+        return tile.jump_direction == direction
+    return tile.passable != Direction.NONE
 
 
 def interaction_tiles(grid: WalkabilityGrid, poi: POI) -> set[Coordinates]:

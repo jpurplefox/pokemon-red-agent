@@ -230,7 +230,7 @@ class World:
                 entry = {"name": it["name"]}
                 if it.get("last_interaction"):
                     entry["said"] = it["last_interaction"]
-                if it["kind"] != "grass":
+                if it["kind"] not in ("grass", "cut_tree"):
                     entry["interacted"] = bool(it.get("interacted"))
                 if blockers.get(tuple(it["pos"])):
                     entry["blocks_way_to"] = blockers[tuple(it["pos"])]
@@ -281,18 +281,24 @@ class World:
         return {tuple(it["pos"]) for it in self._maps[map_name]["interactables"]
                 if it["kind"] == "sprite"}
 
+    def _trees(self, map_name: str) -> set[Coordinates]:
+        return {tuple(it["pos"]) for it in self._maps[map_name]["interactables"]
+                if it["kind"] == "cut_tree"}
+
     def _reach(self, map_name: str, positions,
-               blocked: set[Coordinates] | None = None) -> set[Coordinates]:
+               blocked: set[Coordinates] | None = None,
+               open_tiles: set[Coordinates] | None = None) -> set[Coordinates]:
         """Tiles reachable from a position (or several), with NPCs and items
         (sprites, as last seen) blocking the way unless `blocked` says
-        otherwise."""
+        otherwise; `open_tiles` (cut trees) are treated as cleared."""
         starts = as_tiles(positions)
         rec = self._maps.get(map_name)
         if not rec or not rec["grid"]:
             return starts
         if blocked is None:
             blocked = self._sprites(map_name)
-        return reachable_tiles(self._grid(map_name), starts, blocked - starts)
+        return reachable_tiles(self._grid(map_name), starts, blocked - starts,
+                               open_tiles)
 
     def _landings(self, map_name: str, reached: set[Coordinates],
                   ex: dict) -> list[Coordinates]:
@@ -318,15 +324,18 @@ class World:
 
     def _blockers(self, map_name: str, arrival,
                   reached: set[Coordinates]) -> dict[Coordinates, list[str]]:
-        """Sprites at the edge of the reached area that hide something.
+        """Sprites and cut trees at the edge of the reached area that hide
+        something.
 
-        Maps each blocking sprite's tile to the names of the exits and
-        interactables it keeps out of reach. Sprites that only block together
-        (none frees the way alone) share whatever stays hidden.
+        Maps each blocker's tile to the names of the exits and interactables
+        it keeps out of reach (a sprite by standing there, a tree until CUT
+        clears it). Blockers that only work together (none frees the way
+        alone) share whatever stays hidden.
         """
         rec = self._maps[map_name]
         grid = self._grid(map_name)
         sprites = self._sprites(map_name)
+        trees = self._trees(map_name)
 
         def visible(reach):
             names = set()
@@ -341,16 +350,20 @@ class World:
             return names
 
         now = visible(reached)
-        hidden = visible(self._reach(map_name, arrival, blocked=set())) - now
+        hidden = visible(self._reach(map_name, arrival, blocked=set(),
+                                     open_tiles=trees)) - now
         if not hidden:
             return {}
-        frontier = [pos for pos in sprites
+        frontier = [pos for pos in sprites | trees
                     if any((pos[0] + dy, pos[1] + dx) in reached
                            for dy, dx in ((-1, 0), (1, 0), (0, -1), (0, 1)))]
         result, freed = {}, set()
         for pos in frontier:
-            opened = (visible(self._reach(map_name, arrival, sprites - {pos}))
-                      - now) & hidden
+            if pos in trees:
+                without = self._reach(map_name, arrival, sprites, open_tiles={pos})
+            else:
+                without = self._reach(map_name, arrival, sprites - {pos})
+            opened = (visible(without) - now) & hidden
             opened = {h for h in opened if h[2] != pos}  # not the sprite itself
             if opened:
                 result[pos] = opened
