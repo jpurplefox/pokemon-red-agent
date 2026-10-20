@@ -28,7 +28,7 @@ from tools.debug_scanner import DebugScanner
 from orchestration.overworld_controller import OverworldAIController
 from adapters.display.console import (
     prompt_menu, prompt_name, prompt_command, prompt_action,
-    print_map, render_map, BUTTONS,
+    BUTTONS,
     set_input_fn,
 )
 
@@ -36,7 +36,7 @@ from adapters.display.console import (
 class Game:
     def __init__(self, pyboy, rom_path=None, battle_strategy=None,
                  naming_ai=None, move_ai=None, overworld_ai=None,
-                 lead_ai=None, shop_ai=None):
+                 lead_ai=None, shop_ai=None, world=None):
         self._pyboy = pyboy
         self._lead_ai = lead_ai
         # All console input() calls will tick the emulator while waiting
@@ -81,7 +81,7 @@ class Game:
             self._ow_controller = OverworldAIController(
                 overworld_ai, self._pyboy, self._scanner, self._navigator,
                 self._battle, self._bag, self._print_surroundings,
-                self._handle_game_menu, logger=ow_logger,
+                self._handle_game_menu, logger=ow_logger, world=world,
             )
         # Wire shop AI: prefer explicit shop_ai, fall back to overworld_ai's shop
         _shop = shop_ai or (overworld_ai.shop_ai if overworld_ai else None)
@@ -119,13 +119,9 @@ class Game:
 
     def _print_surroundings(self):
         """Print map name and ASCII map of surroundings with numbered POIs."""
-        mem = self._pyboy.memory
-        map_id = mem[ADDR_MAP_N]
-        map_name = MAP_NAMES.get(map_id, f"Map {map_id}")
-        print(f"\n--- {map_name} ---")
-        pois = self._scanner.get_pois()
-        grid, _, _, ledges = self._scanner.get_walkable_grid()
-        print_map(pois, mem[ADDR_Y_COORD], mem[ADDR_X_COORD], grid, ledges=ledges)
+        current_map = self._scanner.read_map()
+        print(f"\n--- {current_map.name} ---")
+        print(current_map)
 
     def _update_hud(self, map_name=""):
         """Send current game state to the AI thoughts HUD."""
@@ -358,14 +354,13 @@ class Game:
         # Manual mode — show the same state the AI would see
         mem = self._pyboy.memory
         current_map = self._scanner.read_map()
-        pois = self._scanner.get_pois()  # legacy dicts for navigator
+        all_pois = current_map.interactables + current_map.connected_maps
         party = self._battle.read_party()
 
         if self._show_pois:
             self._show_pois = False
             self._update_hud(current_map.name)
 
-        # Print map using domain __str__ (grid + numbered interactables/connections)
         print(f"\n{current_map}")
 
         print(f"\n--- Team ---")
@@ -384,20 +379,15 @@ class Game:
         action_type, detail = result
 
         if action_type == "interact":
-            interactable = current_map.interactables[detail]
-            # Find matching legacy POI dict for navigator
-            poi = self._find_legacy_poi(pois, interactable.position)
-            if poi:
-                self._navigator.go_to(poi, self._print_surroundings,
-                                      all_pois=pois)
+            poi = current_map.interactables[detail]
+            self._navigator.go_to(poi, self._print_surroundings,
+                                  all_pois=all_pois)
             self._in_overworld = True
             self._show_pois = True
         elif action_type == "go":
-            connection = current_map.connected_maps[detail]
-            poi = self._find_legacy_poi(pois, connection.position)
-            if poi:
-                self._navigator.go_to(poi, self._print_surroundings,
-                                      all_pois=pois)
+            poi = current_map.connected_maps[detail]
+            self._navigator.go_to(poi, self._print_surroundings,
+                                  all_pois=all_pois)
             self._in_overworld = True
             self._show_pois = True
         elif action_type == "move":
@@ -439,14 +429,6 @@ class Game:
             self._show_pois = True
         return True
 
-    @staticmethod
-    def _find_legacy_poi(pois, position):
-        """Find a legacy POI dict matching a (y, x) position."""
-        ty, tx = position
-        for poi in pois:
-            if poi["ty"] == ty and poi["tx"] == tx:
-                return poi
-        return None
 
     def _change_lead(self):
         """Let the player choose a new lead Pokemon via the in-game party menu."""

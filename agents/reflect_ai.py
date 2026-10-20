@@ -103,6 +103,11 @@ class ReflectAI:
             elif line.startswith("GOAL:"):
                 subgoal_desc = line[5:].strip()
 
+        self._apply(subgoal_action, subgoal_desc)
+
+    def _apply(self, subgoal_action, subgoal_desc=""):
+        """Create, complete or ignore a sub-goal ("new" / "done" / other)."""
+        active = self.active_subgoal()
         if subgoal_action == "new" and subgoal_desc:
             if active and active["description"].lower() == subgoal_desc.lower():
                 return

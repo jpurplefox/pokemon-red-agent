@@ -494,9 +494,6 @@ BALL_ITEMS = {
 KEY_ITEMS = {
     0x05: "Town Map",
     0x06: "Bicycle",
-    0x0B: "Old Amber",
-    0x05: "Town Map",
-    0x06: "Bicycle",
     0x09: "Pokédex",
     0x1F: "Old Amber",
     0x29: "Dome Fossil",
@@ -693,4 +690,34 @@ EVOLUTION_LINES = {
     "DRATINI": ["DRATINI", "DRAGONAIR", "DRAGONITE"],
     "DRAGONAIR": ["DRATINI", "DRAGONAIR", "DRAGONITE"],
     "DRAGONITE": ["DRATINI", "DRAGONAIR", "DRAGONITE"],
+}
+
+
+# ---------------------------------------------------------------------------
+# Movement rules (pokered: data/tilesets/ledge_tiles.asm and
+# pair_collision_tile_ids.asm). Tile IDs are the bottom-left 8x8 tile of a
+# 16x16 step, the same tile WalkabilityGrid samples.
+# ---------------------------------------------------------------------------
+
+TILESET_OVERWORLD = 0
+TILESET_FOREST = 3
+TILESET_CAVERN = 17
+
+# Ledge tile -> jump direction (overworld tileset only). A ledge only works
+# when the player stands on one of LEDGE_STANDING_TILES on the approach side.
+LEDGE_STANDING_TILES = {0x2C, 0x39}
+LEDGE_TILES = {
+    0x36: "down",
+    0x37: "down",
+    0x27: "left",
+    0x0D: "right",
+    0x1D: "right",
+}
+
+# Tileset -> pairs of adjacent tiles the player can't step between (either
+# order), e.g. the elevation changes inside caves
+TILE_PAIR_COLLISIONS = {
+    TILESET_CAVERN: {(0x20, 0x05), (0x41, 0x05), (0x2A, 0x05), (0x05, 0x21)},
+    TILESET_FOREST: {(0x30, 0x2E), (0x52, 0x2E), (0x55, 0x2E), (0x56, 0x2E),
+                     (0x20, 0x2E), (0x5E, 0x2E), (0x5F, 0x2E)},
 }

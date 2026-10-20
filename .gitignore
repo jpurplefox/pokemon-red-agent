@@ -7,6 +7,7 @@ __pycache__/
 *.pyc
 overworld_subgoals.json
 battle_memory.json
+world_memory.json
 .DS_Store
 
 # Python build artifacts

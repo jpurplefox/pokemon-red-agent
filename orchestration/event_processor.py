@@ -166,10 +166,13 @@ class EventProcessor:
                 self._exiting_mart = True
             return
 
-        # Always dismiss PC menus with B — regardless of auto_accept
+        # Always dismiss with B — regardless of auto_accept: PC menus, and
+        # the badge-description menu (Cerulean Badge House), which asks again
+        # after every answer and would loop on the first option forever
         opts_text = " ".join(options).upper()
         if any(kw in opts_text for kw in ("LOG OFF", "WITHDRAW", "DEPOSIT",
-                                           "BILL", "SOMEONE", "PROF.OAK")):
+                                           "BILL", "SOMEONE", "PROF.OAK",
+                                           "BADGE")):
             print(f"  [AUTO] Closing menu: {options}")
             self._pyboy.button("b")
             self._pyboy.tick(30)

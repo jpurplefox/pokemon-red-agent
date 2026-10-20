@@ -14,13 +14,14 @@ from data.constants import (
     ADDR_TILESET, ADDR_MAP_HEIGHT, ADDR_MAP_WIDTH,
     ADDR_OVERWORLD_MAP, MAP_BORDER, BLOCK_LABELS,
     BLOCK_DESCRIPTIONS, MAP_NAMES, ADDR_GRASS_TILE,
+    LEDGE_TILES, LEDGE_STANDING_TILES, TILE_PAIR_COLLISIONS,
+    TILESET_OVERWORLD,
 )
 from domain.maps import (
     Map, Interactable, MapConnection,
-    WalkabilityGrid as DomainGrid, PassableTile, LedgeTile, Direction,
+    WalkabilityGrid, PassableTile, LedgeTile, Direction, _DIRECTION_OFFSETS,
 )
-from adapters.input.pathfinder import find_best_path
-from adapters.state.walkability import WalkabilityGrid
+from adapters.state.walkability import WalkabilityGrid as TilesetWalkability
 from adapters.state.poi_disambiguator import dedup_warps, disambiguate_labels
 from adapters.state.sprite_resolver import SpriteResolver
 
@@ -51,7 +52,7 @@ class OverworldScanner:
         if rom_path:
             with open(rom_path, 'rb') as f:
                 self._rom = f.read()
-        self._walkability = WalkabilityGrid(pyboy, self._rom)
+        self._walkability = TilesetWalkability(pyboy, self._rom)
         self._sprite_resolver = SpriteResolver(pyboy, self._rom)
 
     # ------------------------------------------------------------------
@@ -59,60 +60,58 @@ class OverworldScanner:
     # ------------------------------------------------------------------
 
     def read_map(self) -> Map:
-        """Read the current map from WRAM and return a domain Map object."""
+        """Read the current map from WRAM and return a domain Map object.
+
+        Returns all POIs (no reachability filter). Deduplication and label
+        disambiguation are applied to remove duplicates.
+        """
         mem = self._pyboy.memory
         map_id = mem[ADDR_MAP_N]
         map_name = MAP_NAMES.get(map_id, f"Map {map_id}")
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
 
-        # Build raw POI dicts (legacy format for dedup/disambiguate/pathfinder)
         raw_pois = self._scan_all_raw(py, px)
         raw_pois = dedup_warps(raw_pois, py, px)
         raw_pois = disambiguate_labels(raw_pois, py, px)
 
-        # Filter unreachable POIs
-        warp_tiles = {(p["ty"], p["tx"]) for p in raw_pois if p["kind"] == "warp"}
-        grid, _, _, ledges = self.get_walkable_grid()
-        npc_blocked = self.get_npc_tiles()
-
-        reachable = []
-        for poi in raw_pois:
-            avoid = warp_tiles - {(poi["ty"], poi["tx"])}
-            path, _ = find_best_path(grid, (py, px), poi, blocked=npc_blocked,
-                                     ledges=ledges, warps=avoid)
-            if path is not None:
-                reachable.append(poi)
+        grid, _, _, _ = self.get_walkable_grid()
+        tile_ids, walkable = self._walkability.get_tile_grid()
+        edge_neighbors = self._walkability.get_edge_neighbors()
+        tileset = mem[ADDR_TILESET]
 
         # Add grass POI if available
-        current_map_name = MAP_NAMES.get(mem[ADDR_MAP_N], "")
+        current_map_name = MAP_NAMES.get(map_id, "")
         if current_map_name != "Pallet Town":
             grass = self._find_nearest_grass_raw(py, px, grid)
             if grass:
-                path, _ = find_best_path(grid, (py, px), grass,
-                                         blocked=npc_blocked, ledges=ledges,
-                                         warps=warp_tiles)
-                if path is not None:
-                    reachable.append(grass)
+                raw_pois.append(grass)
 
         # Split into domain types
         interactables = []
         connections = []
-        for poi in reachable:
+        for poi in raw_pois:
             if poi["kind"] in ("exit", "warp", "connection"):
                 dest_map = Map(name=poi["label"])
+                conn_dir = poi.get("conn_dir")
                 connections.append(MapConnection(
                     map=dest_map,
                     position=(poi["ty"], poi["tx"]),
+                    kind=poi["kind"],
+                    conn_dir=conn_dir,
+                    crossable=(self._crossable_tiles(conn_dir, tile_ids, walkable,
+                                                     edge_neighbors[conn_dir], tileset)
+                               if conn_dir else None),
                 ))
             else:
                 interactables.append(Interactable(
                     name=poi["label"],
                     position=(poi["ty"], poi["tx"]),
+                    kind=poi["kind"],
+                    sprite_index=poi.get("sprite_index"),
                 ))
 
-        # Build domain grid
-        domain_grid = self._build_domain_grid(grid, ledges)
+        domain_grid = self._build_domain_grid(tile_ids, walkable, mem[ADDR_TILESET])
 
         return Map(
             name=map_name,
@@ -121,47 +120,13 @@ class OverworldScanner:
             interactables=interactables,
         )
 
-    def get_pois(self):
-        """Return all nearby reachable POIs as dicts (legacy interface).
-
-        Used by overworld_ai, navigator, and console display.
-        """
-        py = self._pyboy.memory[ADDR_Y_COORD]
-        px = self._pyboy.memory[ADDR_X_COORD]
-
-        raw_pois = self._scan_all_raw(py, px)
-        raw_pois = dedup_warps(raw_pois, py, px)
-        raw_pois = disambiguate_labels(raw_pois, py, px)
-
-        warp_tiles = {(p["ty"], p["tx"]) for p in raw_pois if p["kind"] == "warp"}
-        grid, _, _, ledges = self.get_walkable_grid()
-        npc_blocked = self.get_npc_tiles()
-
-        reachable = []
-        for poi in raw_pois:
-            avoid = warp_tiles - {(poi["ty"], poi["tx"])}
-            path, _ = find_best_path(grid, (py, px), poi, blocked=npc_blocked,
-                                     ledges=ledges, warps=avoid)
-            if path is not None:
-                reachable.append(poi)
-
-        current_map = MAP_NAMES.get(self._pyboy.memory[ADDR_MAP_N], "")
-        grass_poi = self._find_nearest_grass_raw(py, px, grid) if current_map != "Pallet Town" else None
-        if grass_poi:
-            path, _ = find_best_path(grid, (py, px), grass_poi,
-                                     blocked=npc_blocked, ledges=ledges,
-                                     warps=warp_tiles)
-            if path is not None:
-                reachable.append(grass_poi)
-
-        return reachable
 
     # ------------------------------------------------------------------
     # Delegated methods (kept for backward compatibility)
     # ------------------------------------------------------------------
 
-    _QUAD_INDICES = WalkabilityGrid._QUAD_INDICES
-    _QUAD_REP_TILE = WalkabilityGrid._QUAD_REP_TILE
+    _QUAD_INDICES = TilesetWalkability._QUAD_INDICES
+    _QUAD_REP_TILE = TilesetWalkability._QUAD_REP_TILE
 
     def get_walkable_grid(self):
         """Delegate to WalkabilityGrid."""
@@ -223,47 +188,123 @@ class OverworldScanner:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def _build_domain_grid(bool_grid, ledges) -> DomainGrid:
-        """Convert a bool grid + ledge set into a domain WalkabilityGrid."""
-        h = len(bool_grid)
-        w = len(bool_grid[0]) if h else 0
+    def _crossable_tiles(conn_dir, tile_ids, walkable, outside, tileset):
+        """Edge tiles from which the player can cross a map-edge connection.
 
-        ledge_lookup = {}
-        if ledges:
-            _DIR_MAP = {
-                "down": Direction.SOUTH,
-                "left": Direction.WEST,
-                "right": Direction.EAST,
-                "up": Direction.NORTH,
-            }
-            for entry in ledges:
-                ly, lx, direction = entry
-                ledge_lookup[(ly, lx)] = _DIR_MAP.get(direction, Direction.SOUTH)
+        `outside` lists (tile_id, walkable) for the tiles just across the
+        edge (see WalkabilityGrid.get_edge_neighbors). Crossing works when
+        the tile across is walkable, or a ledge jumping in the crossing
+        direction entered from a standing tile, and the two tiles aren't a
+        blocked pair. An edge tile that is itself a ledge jumping across
+        works too, if the landing tile across is walkable.
+        """
+        h = len(walkable)
+        w = len(walkable[0]) if h else 0
+        if conn_dir in ("up", "down"):
+            y = 0 if conn_dir == "up" else h - 1
+            edge = [(y, x) for x in range(w)]
+        else:
+            x = 0 if conn_dir == "left" else w - 1
+            edge = [(y, x) for y in range(h)]
+        pairs = TILE_PAIR_COLLISIONS.get(tileset, set())
+        step = {"up": (-1, 0), "down": (1, 0), "left": (0, -1), "right": (0, 1)}[conn_dir]
+        crossable = set()
+        for (y, x), (out_tile, out_walkable) in zip(edge, outside):
+            inside = tile_ids[y][x]
+            # A ledge on the edge itself, jumping across: the jump lands in
+            # the connected map.
+            ay, ax = y - step[0], x - step[1]
+            if (tileset == TILESET_OVERWORLD and LEDGE_TILES.get(inside) == conn_dir
+                    and 0 <= ay < h and 0 <= ax < w
+                    and tile_ids[ay][ax] in LEDGE_STANDING_TILES):
+                if out_walkable:
+                    crossable.add((y, x))
+                continue
+            if not walkable[y][x]:
+                continue
+            if (inside, out_tile) in pairs or (out_tile, inside) in pairs:
+                continue
+            # same rule as in-map ledges: only a ledge when approached from
+            # a standing tile, otherwise plain collision applies
+            ledge = (LEDGE_TILES.get(out_tile)
+                     if tileset == TILESET_OVERWORLD
+                     and inside in LEDGE_STANDING_TILES else None)
+            if ledge is not None:
+                if ledge == conn_dir:
+                    crossable.add((y, x))
+            elif out_walkable:
+                crossable.add((y, x))
+        return frozenset(crossable)
 
+    @staticmethod
+    def _build_domain_grid(tile_ids, walkable, tileset) -> WalkabilityGrid:
+        """Build the domain grid with per-direction movement rules.
+
+        - Ledges (overworld tileset only): a ledge tile entered from a
+          standing tile (grass/ground) on its approach side can only be
+          crossed in its jump direction.
+        - Walkable tiles allow moving toward a walkable neighbor, or into a
+          ledge along its jump direction, and accept landings from a ledge
+          above them, unless both tiles form a blocked pair (cave
+          elevation, forest edges). The ledge itself still refuses entry
+          against its jump direction, so it can't be climbed.
+        - Everything else is impassable.
+        """
+        h = len(walkable)
+        w = len(walkable[0]) if h else 0
+        pairs = TILE_PAIR_COLLISIONS.get(tileset, set())
+        ledge_dirs = {"down": Direction.SOUTH, "up": Direction.NORTH,
+                      "left": Direction.WEST, "right": Direction.EAST}
+
+        def in_bounds(y, x):
+            return 0 <= y < h and 0 <= x < w
+
+        # Pass 1: valid ledges
+        ledges = {}
+        if tileset == TILESET_OVERWORLD:
+            for y in range(h):
+                for x in range(w):
+                    jump = LEDGE_TILES.get(tile_ids[y][x])
+                    if jump is None:
+                        continue
+                    direction = ledge_dirs[jump]
+                    dy, dx = _DIRECTION_OFFSETS[direction]
+                    sy, sx = y - dy, x - dx
+                    if (in_bounds(sy, sx)
+                            and tile_ids[sy][sx] in LEDGE_STANDING_TILES):
+                        ledges[(y, x)] = direction
+
+        def pair_blocked(a, b):
+            return (a, b) in pairs or (b, a) in pairs
+
+        # Pass 2: tiles
         tiles = []
         for y in range(h):
             row = []
             for x in range(w):
-                if (y, x) in ledge_lookup:
-                    row.append(LedgeTile(jump_direction=ledge_lookup[(y, x)]))
-                elif bool_grid[y][x]:
-                    passable = Direction.NONE
-                    if y > 0 and bool_grid[y - 1][x]:
-                        passable |= Direction.NORTH
-                    if y < h - 1 and bool_grid[y + 1][x]:
-                        passable |= Direction.SOUTH
-                    if x > 0 and bool_grid[y][x - 1]:
-                        passable |= Direction.WEST
-                    if x < w - 1 and bool_grid[y][x + 1]:
-                        passable |= Direction.EAST
+                if (y, x) in ledges:
+                    row.append(LedgeTile(jump_direction=ledges[(y, x)]))
+                    continue
+                passable = Direction.NONE
+                if walkable[y][x]:
+                    for direction, (dy, dx) in _DIRECTION_OFFSETS.items():
+                        ny, nx = y + dy, x + dx
+                        if not in_bounds(ny, nx):
+                            continue
+                        if pair_blocked(tile_ids[y][x], tile_ids[ny][nx]):
+                            continue
+                        # A walkable neighbor; a ledge we can jump down into;
+                        # or a ledge that drops onto this tile (landing).
+                        if (walkable[ny][nx]
+                                or ledges.get((ny, nx)) == direction
+                                or ledges.get((ny, nx)) == direction.opposite):
+                            passable |= direction
                     if passable == Direction.NONE:
-                        passable = Direction.ALL
-                    row.append(PassableTile(passable=passable))
-                else:
-                    row.append(PassableTile(passable=Direction.NONE))
+                        passable = Direction.ALL  # isolated tile (e.g. player on a warp)
+                row.append(PassableTile(passable=passable))
             tiles.append(row)
 
-        return DomainGrid(tiles=tiles)
+        return WalkabilityGrid(tiles=tiles)
 
     # ------------------------------------------------------------------
     # Grass scanning

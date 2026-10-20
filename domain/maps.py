@@ -5,6 +5,7 @@ from enum import Flag, auto
 from typing import Protocol
 
 type Coordinates = tuple[int, int]
+type POI = Interactable | MapConnection
 
 
 class Direction(Flag):
@@ -128,10 +129,13 @@ class WalkabilityGrid:
         return self[origin].can_exit(direction) and self[ny, nx].can_enter(direction)
 
 
+
 @dataclass
 class Interactable:
     name: str
     position: Coordinates
+    kind: str = "sign"
+    sprite_index: int | None = None
     last_interaction: str | None = None
 
 
@@ -139,7 +143,12 @@ class Interactable:
 class MapConnection:
     map: Map
     position: Coordinates
+    kind: str = "exit"
+    conn_dir: str | None = None
     destination: Coordinates | None = None
+    # For map-edge connections: edge tiles from which crossing works (the
+    # tile across accepts the entry). None = unknown, any edge tile.
+    crossable: frozenset[Coordinates] | None = None
 
 
 @dataclass
@@ -148,6 +157,36 @@ class Map:
     grid: WalkabilityGrid | None = None
     connected_maps: list[MapConnection] = field(default_factory=list)
     interactables: list[Interactable] = field(default_factory=list)
+
+    def reachable_interactables(
+        self, position: Coordinates,
+        blocked: set[Coordinates] | None = None,
+    ) -> list[Interactable]:
+        from domain.pathfinder import find_path_to_poi
+
+        if self.grid is None:
+            return list(self.interactables)
+        all_pois: list[POI] = list(self.interactables) + list(self.connected_maps)
+        return [
+            it for it in self.interactables
+            if find_path_to_poi(self.grid, position, it,
+                                all_pois=all_pois, blocked=blocked) is not None
+        ]
+
+    def reachable_connections(
+        self, position: Coordinates,
+        blocked: set[Coordinates] | None = None,
+    ) -> list[MapConnection]:
+        from domain.pathfinder import find_path_to_poi
+
+        if self.grid is None:
+            return list(self.connected_maps)
+        all_pois: list[POI] = list(self.interactables) + list(self.connected_maps)
+        return [
+            c for c in self.connected_maps
+            if find_path_to_poi(self.grid, position, c,
+                                all_pois=all_pois, blocked=blocked) is not None
+        ]
 
     def __str__(self) -> str:
         # Render base grid

@@ -62,6 +62,10 @@ python main.py --ai --model qwen3.5-27b
 
 # Full AI mode with a local MLX model (Apple Silicon)
 python main.py --ai --local qwen2.5-14b
+
+# Closed decisions (overworld, battle, catch, move, lead, sub-goals) on TypeSafe
+# Jev via OpenRouter, random nicknames, no post-battle reflection; shop stays on --model
+python main.py --ai --model qwen3.5-27b --jev
 ```
 
 Cloud model presets (the six Qwen models evaluated in the paper): `qwen3.5-9b`, `qwen3.5-27b`, `qwen3.5-35b-a3b`, `qwen3.5-122b-a10b`, `qwen3.5-397b-a17b`, `qwen3.6-plus`. You can also pass any other OpenRouter model ID directly, but only these have been tested. See `main.py` for the full list of local MLX presets.

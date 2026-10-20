@@ -49,14 +49,15 @@ Map: {{ map_name }}
 {%- if interactables %}
 --- Interactables (use INTERACT:<number>) ---
 {%- for poi in interactables %}
-[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away){% if poi.times_recent >= 3 %} 🚫 VISITED x{{ poi.times_recent }} — DO NOT interact again{% elif poi.times_recent > 0 %} ⚠️ VISITED x{{ poi.times_recent }}{% endif %}
+[{{ loop.index }}] {{ poi.icon }} {{ poi.label }} ({{ poi.dist }} steps away){% if poi.times_recent >= 3 %} 🚫 VISITED x{{ poi.times_recent }} — DO NOT interact again{% elif poi.times_recent > 0 %} ⚠️ VISITED x{{ poi.times_recent }}{% endif %}{% if poi.last_said %} — last said: "{{ poi.last_said }}"{% endif %}
 {%- endfor %}
 {%- endif %}
 {%- if warps %}
 
 --- Warps (use GO:<number>) ---
 {%- for w in warps %}
-[{{ loop.index }}] {{ w.icon }} {{ w.label }} ({{ w.dist }} steps away)
+[{{ loop.index }}] {{ w.icon }} {{ w.label }} ({{ w.dist }} steps away){% if w.visited is sameas false %} 🆕 NOT VISITED{% endif %}{% if w.leads_to_text %}
+{{ w.leads_to_text }}{% endif %}
 {%- endfor %}
 {%- endif %}
 {%- if not interactables and not warps %}

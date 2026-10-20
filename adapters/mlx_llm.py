@@ -21,12 +21,13 @@ class MLXLLM:
     """Local LLM inference using MLX on Apple Silicon."""
 
     def __init__(self, model_name: str = "mlx-community/Qwen3.5-9B-4bit",
-                 max_tokens: int = 512, temperature: float = 0.3):
+                 max_tokens: int | None = None, temperature: float = 0.3):
         from mlx_lm import load
         self._model, self._tokenizer = load(model_name)  # type: ignore[misc]
         # Qwen models always produce <think> blocks regardless of config,
-        # so always allocate extra tokens for the thinking budget.
-        self._max_tokens = max_tokens + _THINKING_BUDGET
+        # so a set limit gets extra tokens for the thinking budget.
+        # None = no limit (-1 in mlx_lm): generate until end of sequence.
+        self._max_tokens = -1 if max_tokens is None else max_tokens + _THINKING_BUDGET
 
     def invoke(self, messages: list) -> _Response:  # type: ignore[type-arg]
         """Send messages to the local MLX model and return a response."""

@@ -28,7 +28,7 @@ class OpenAILLM:
     """LLM inference via any OpenAI-compatible endpoint."""
 
     def __init__(self, *, model: str, base_url: str, api_key_env: str,
-                 max_tokens: int = 512, temperature: float = 0.3,
+                 max_tokens: int | None = None, temperature: float = 0.3,
                  strip_thinking: bool = False,
                  enable_thinking: bool = False,
                  timeout: float = 120.0):
@@ -61,22 +61,18 @@ class OpenAILLM:
                 role = "user"
             chat_messages.append({"role": role, "content": msg.content})
 
+        payload = {
+            "model": self._model,
+            "messages": chat_messages,
+            "temperature": self._temperature,
+        }
         if self._enable_thinking:
-            payload = {
-                "model": self._model,
-                "messages": chat_messages,
-                "max_tokens": self._max_tokens + _THINKING_BUDGET,
-                "temperature": self._temperature,
-                "enable_thinking": True,
-                "thinking": {"budget_tokens": _THINKING_BUDGET},
-            }
-        else:
-            payload = {
-                "model": self._model,
-                "messages": chat_messages,
-                "max_tokens": self._max_tokens,
-                "temperature": self._temperature,
-            }
+            payload["enable_thinking"] = True
+            payload["thinking"] = {"budget_tokens": _THINKING_BUDGET}
+        # No max_tokens unless set: the provider's model maximum applies
+        if self._max_tokens is not None:
+            payload["max_tokens"] = self._max_tokens + (
+                _THINKING_BUDGET if self._enable_thinking else 0)
         headers = {
             "Authorization": f"Bearer {self._api_key}",
             "Content-Type": "application/json",

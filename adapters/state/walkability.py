@@ -77,10 +77,12 @@ class WalkabilityGrid:
     # Grid building
     # ------------------------------------------------------------------
 
-    def get_grid(self):
-        """Build a tile-level walkability grid from the block map.
+    def get_tile_grid(self):
+        """Per-tile (step) tile IDs and walkability, without ledge heuristics.
 
-        Returns (grid, h_tiles, w_tiles, ledges).
+        Returns (tile_ids, walkable): tile_ids[y][x] is the representative
+        tile ID of that step (None if unknown); walkable[y][x] is a bool from
+        ROM collision data, with manual block overrides taking priority.
         """
         mem = self._pyboy.memory
         W = mem[ADDR_MAP_WIDTH]
@@ -89,8 +91,8 @@ class WalkabilityGrid:
 
         h_tiles = H * 2
         w_tiles = W * 2
-        grid = [[False] * w_tiles for _ in range(h_tiles)]
-        ledges = set()
+        tile_ids = [[None] * w_tiles for _ in range(h_tiles)]
+        walkable = [[False] * w_tiles for _ in range(h_tiles)]
 
         # Try ROM auto-detection first, but manual overrides take priority
         coll = self.get_collision_tiles()
@@ -101,30 +103,92 @@ class WalkabilityGrid:
             for col in range(W):
                 addr = ADDR_OVERWORLD_MAP + (row + MAP_BORDER) * row_width + (col + MAP_BORDER)
                 block_id = mem[addr]
+                bt = self.get_block_tiles(block_id)
+                ty = row * 2
+                tx = col * 2
+                if bt is not None:
+                    for (dy, dx), rep in zip(((0, 0), (0, 1), (1, 0), (1, 1)),
+                                             self._QUAD_REP_TILE):
+                        tile_ids[ty + dy][tx + dx] = bt[rep]
 
                 # Manual overrides always take priority
                 if block_id in manual:
                     tl, tr, bl, br = manual[block_id]
-                elif use_rom:
-                    bt = self.get_block_tiles(block_id)
-                    if bt is None:
-                        continue
+                elif use_rom and bt is not None:
                     tl, tr, bl, br = self.block_walkability(bt, coll)
                 else:
                     continue
 
-                ty = row * 2
-                tx = col * 2
-                grid[ty][tx] = tl
-                grid[ty][tx + 1] = tr
-                grid[ty + 1][tx] = bl
-                grid[ty + 1][tx + 1] = br
+                walkable[ty][tx] = tl
+                walkable[ty][tx + 1] = tr
+                walkable[ty + 1][tx] = bl
+                walkable[ty + 1][tx + 1] = br
 
         # Player's current tile is always walkable
         py = mem[ADDR_Y_COORD]
         px = mem[ADDR_X_COORD]
         if 0 <= py < h_tiles and 0 <= px < w_tiles:
-            grid[py][px] = True
+            walkable[py][px] = True
+
+        return tile_ids, walkable
+
+    def get_edge_neighbors(self):
+        """Tiles just beyond each map edge, from wOverworldMap's border.
+
+        The game copies the connected maps' edge strips into the border of
+        the block buffer, so what lies across a connection is known before
+        crossing it. Assumes the neighbor uses the same tileset (outdoor
+        connections do).
+
+        Returns {"up"|"down"|"left"|"right": [(tile_id, walkable), ...]},
+        one entry per tile along that edge.
+        """
+        mem = self._pyboy.memory
+        W = mem[ADDR_MAP_WIDTH]
+        H = mem[ADDR_MAP_HEIGHT]
+        row_width = W + 2 * MAP_BORDER
+        coll = self.get_collision_tiles()
+        manual = WALKABLE_BLOCKS.get(mem[ADDR_TILESET], {})
+
+        def quadrant(block_row, block_col, quad):
+            addr = ADDR_OVERWORLD_MAP + (block_row + MAP_BORDER) * row_width + (block_col + MAP_BORDER)
+            block_id = mem[addr]
+            bt = self.get_block_tiles(block_id)
+            tile = bt[self._QUAD_REP_TILE[quad]] if bt is not None else None
+            if block_id in manual:
+                walkable = manual[block_id][quad]
+            else:
+                walkable = tile is not None and tile in coll
+            return tile, walkable
+
+        TL, TR, BL, BR = range(4)
+        edges = {"up": [], "down": [], "left": [], "right": []}
+        for col in range(W):
+            edges["up"] += [quadrant(-1, col, BL), quadrant(-1, col, BR)]
+            edges["down"] += [quadrant(H, col, TL), quadrant(H, col, TR)]
+        for row in range(H):
+            edges["left"] += [quadrant(row, -1, TR), quadrant(row, -1, BR)]
+            edges["right"] += [quadrant(row, W, TL), quadrant(row, W, BL)]
+        return edges
+
+    def get_grid(self):
+        """Build a tile-level walkability grid from the block map.
+
+        Legacy bool grid (grass scan, ASCII map): includes the heuristic
+        "down" ledges. The domain grid uses get_tile_grid() instead.
+
+        Returns (grid, h_tiles, w_tiles, ledges).
+        """
+        mem = self._pyboy.memory
+        W = mem[ADDR_MAP_WIDTH]
+        H = mem[ADDR_MAP_HEIGHT]
+        row_width = W + 2 * MAP_BORDER
+        h_tiles = H * 2
+        w_tiles = W * 2
+        _, grid = self.get_tile_grid()
+        ledges = set()
+        coll = self.get_collision_tiles()
+        use_rom = bool(coll)
 
         # Detect ledge tiles (tileset 0 only)
         tileset = mem[ADDR_TILESET]

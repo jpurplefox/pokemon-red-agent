@@ -7,16 +7,19 @@ from adapters.display.ai_log_window import start as start_ai_window
 from adapters.ticking_llm import TickingLLM
 from adapters.mlx_llm import MLXLLM
 from adapters.openai_llm import OpenAILLM
-from agents.naming_ai import NamingAI
+from agents.naming_ai import NamingAI, RandomNamingAI
 from agents.move_ai import MoveAI
 from agents.battle_ai import BattleAI
-from agents.battle_reflect_ai import BattleReflectAI
 from agents.scout_ai import ScoutAI
 from agents.overworld_ai import OverworldAI
 from agents.reflect_ai import ReflectAI
 from agents.lead_ai import LeadAI
 from agents.shop_ai import ShopAI
+from agents.jev_ai import (JevOverworldAI, JevScoutAI, JevMoveAI, JevLeadAI,
+                           JevReflectAI, JevBattleAI)
+from adapters.jev_client import make_jev_client, JEV_MODEL
 from adapters.persistence.json_store import FileJSONStore
+from domain.world import World
 from orchestration.game import Game
 
 ROM = "rom.gb"
@@ -70,6 +73,7 @@ if __name__ == "__main__":
     overworld_ai = None
     lead_ai = None
     shop_ai = None
+    world = None
     cloud_model, local_model, flags = _parse_flags(sys.argv[1:])
 
     raw_pyboy = PyBoy(ROM, sound_emulated="--mute" not in flags)
@@ -105,18 +109,37 @@ if __name__ == "__main__":
             naming_ai = NamingAI(llm=llm)
             move_ai = MoveAI(llm=llm)
             print(f"All agents: {model_id} (OpenRouter)")
-        scout = ScoutAI(llm=llm)
-        battle_memory_store = FileJSONStore("battle_memory.json")
-        battle_reflect = BattleReflectAI(llm=llm, store=battle_memory_store)
-        strategy = BattleAI(llm=llm, scout=scout, battle_reflect=battle_reflect)
+        # --jev: closed decisions (overworld, scout, move, lead, sub-goals)
+        # + battle turns go to TypeSafe Jev; nicknames are random; no
+        # post-battle reflection; only the shop stays on the chat LLM.
+        jev = make_jev_client() if "--jev" in flags else None
+        scout = JevScoutAI(jev) if jev else ScoutAI(llm=llm)
+        # Post-battle reflection (BattleReflectAI) is off in every mode
+        if jev:
+            strategy = JevBattleAI(jev, llm=llm, scout=scout)
+        else:
+            strategy = BattleAI(llm=llm, scout=scout)
         reflect_ai = None
         if "--subgoals" in flags:
             subgoal_store = FileJSONStore("overworld_subgoals.json")
-            reflect_ai = ReflectAI(llm=llm, store=subgoal_store)
+            if jev:
+                reflect_ai = JevReflectAI(jev, llm=llm, store=subgoal_store)
+            else:
+                reflect_ai = ReflectAI(llm=llm, store=subgoal_store)
         shop_ai = ShopAI(llm=llm)
-        overworld_ai = OverworldAI(llm=llm, reflect_ai=reflect_ai,
-                                   shop_ai=shop_ai)
-        lead_ai = LeadAI(llm=llm)
+        if jev:
+            overworld_ai = JevOverworldAI(jev, llm=llm, reflect_ai=reflect_ai,
+                                          shop_ai=shop_ai)
+            move_ai = JevMoveAI(jev)
+            naming_ai = RandomNamingAI()
+            lead_ai = JevLeadAI(jev)
+            print(f"Overworld + Battle + Scout + Move + Lead + Sub-goals: {JEV_MODEL} (OpenRouter)")
+            print("Naming: random from predefined list")
+        else:
+            overworld_ai = OverworldAI(llm=llm, reflect_ai=reflect_ai,
+                                       shop_ai=shop_ai)
+            lead_ai = LeadAI(llm=llm)
+        world = World(store=FileJSONStore("world_memory.json"))
         print("Battle AI + Scout AI + Overworld AI + Lead AI enabled")
     elif "--shop" in flags:
         shop_ai = ShopAI(llm=llm)
@@ -124,4 +147,4 @@ if __name__ == "__main__":
 
     Game(pyboy, rom_path=ROM, battle_strategy=strategy, naming_ai=naming_ai,
          move_ai=move_ai, overworld_ai=overworld_ai, lead_ai=lead_ai,
-         shop_ai=shop_ai).run()
+         shop_ai=shop_ai, world=world).run()

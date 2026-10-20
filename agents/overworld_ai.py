@@ -44,6 +44,33 @@ _BADGES = [
 ]
 
 
+def format_leads_to(node, indent="      "):
+    """Render a World.leads_to() tree as nested lines under an exit."""
+    lines = [f"{indent[:-2]}leads to {node['map']}:"]
+    _format_node(node, indent, lines)
+    return "\n".join(lines)
+
+
+def _format_node(node, indent, lines):
+    for it in node.get("interactables", []):
+        said = f': "{it["said"]}"' if it.get("said") else ""
+        new = " 🆕 NOT INTERACTED" if it.get("interacted") is False else ""
+        blocks = (f" 🚧 BLOCKS THE WAY to: {', '.join(it['blocks_way_to'])}"
+                  if it.get("blocks_way_to") else "")
+        lines.append(f"{indent}- {it['name']}{said}{new}{blocks}")
+    for ex in node.get("exits", []):
+        line = f"{indent}> exit {ex['exit']}"
+        if not ex["visited"]:
+            line += " 🆕 NOT VISITED"
+        elif "leads_to" in ex:
+            line += f" → {ex['leads_to']['map']}:"
+        else:
+            line += " (visited)"
+        lines.append(line)
+        if "leads_to" in ex:
+            _format_node(ex["leads_to"], indent + "    ", lines)
+
+
 def _build_badge_list(badges_byte):
     """Convert badge bitmask to list of dicts with obtained status."""
     return [
@@ -170,6 +197,10 @@ class OverworldAI:
                 "times_recent": times,
                 "is_warp": is_warp,
                 "kind": kind,
+                "last_said": poi.get("last_interaction"),
+                "visited": poi.get("visited"),
+                "leads_to_text": (format_leads_to(poi["leads_to"])
+                                  if poi.get("leads_to") else ""),
                 "_orig_idx": i,
             }
             if is_warp:
